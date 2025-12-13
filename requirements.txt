@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+langchain
+langchain-openai
+langchain-community
+faiss-cpu
+pypdf
+sqlalchemy
+mysql-connector-python
+python-dotenv
+tiktoken
+pymysql
