@@ -23,8 +23,16 @@ class Config:
     CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 
     # Model Settings
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower() # 'openai' or 'ollama'
+    
+    # OpenAI Settings
     EMBEDDING_MODEL = "text-embedding-3-large"
-    LLM_MODEL = "gpt-4-turbo-preview" # Or standard gpt-4 or gpt-3.5-turbo
+    LLM_MODEL = "gpt-4-turbo-preview"
 
-if not Config.OPENAI_API_KEY:
+    # Ollama Settings
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_EMBEDDING_MODEL = "llama3" # Or whatever model keeps dimensions compatible if needed, usually just use the LLM for both or a specific embedding model like 'nomic-embed-text'
+    OLLAMA_LLM_MODEL = "llama3"
+
+if Config.LLM_PROVIDER == "openai" and not Config.OPENAI_API_KEY:
     print("WARNING: OPENAI_API_KEY is not set.")

@@ -1,14 +1,22 @@
 import os
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
+from langchain_ollama import OllamaEmbeddings
 from app.config import Config
 
 class FAISSStore:
     def __init__(self):
-        self.embeddings = OpenAIEmbeddings(
-            model=Config.EMBEDDING_MODEL,
-            openai_api_key=Config.OPENAI_API_KEY
-        )
+        if Config.LLM_PROVIDER == "ollama":
+            self.embeddings = OllamaEmbeddings(
+                base_url=Config.OLLAMA_BASE_URL,
+                model=Config.OLLAMA_EMBEDDING_MODEL
+            )
+        else:
+            self.embeddings = OpenAIEmbeddings(
+                model=Config.EMBEDDING_MODEL,
+                openai_api_key=Config.OPENAI_API_KEY
+            )
+        
         self.vector_db_path = Config.VECTOR_DB_PATH
 
     def load_index(self):

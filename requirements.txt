@@ -10,3 +10,4 @@ mysql-connector-python
 python-dotenv
 tiktoken
 pymysql
+langchain-ollama

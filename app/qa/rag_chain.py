@@ -1,4 +1,5 @@
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
@@ -34,11 +35,18 @@ Context:
     ])
 
     # 3. Initialize LLM
-    llm = ChatOpenAI(
-        model=Config.LLM_MODEL,
-        temperature=0, # strict factual answers
-        openai_api_key=Config.OPENAI_API_KEY
-    )
+    if Config.LLM_PROVIDER == "ollama":
+        llm = ChatOllama(
+            base_url=Config.OLLAMA_BASE_URL,
+            model=Config.OLLAMA_LLM_MODEL,
+            temperature=0
+        )
+    else:
+        llm = ChatOpenAI(
+            model=Config.LLM_MODEL,
+            temperature=0, # strict factual answers
+            openai_api_key=Config.OPENAI_API_KEY
+        )
 
     # 4. Construct the Chain
     def format_docs(docs):
