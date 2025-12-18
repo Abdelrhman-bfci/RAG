@@ -17,7 +17,7 @@ def get_rag_chain():
     if not vectorstore:
         raise ValueError("Vector store not found. Please run ingestion first.")
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
     # 2. Define the Strict System Prompt
     system_prompt = """You are a factual assistant.
@@ -72,4 +72,7 @@ def answer_question(question: str):
     except ValueError as e:
         return f"Error: {e}"
     except Exception as e:
-        return f"An unexpected error occurred: {e}"
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"DEBUG ERROR: {error_msg}")
+        return f"An unexpected error occurred: {str(e) or 'Check server logs for traceback'}"

@@ -26,8 +26,29 @@ async def ask_question(request: QuestionRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
+    import json
+    import os
+    
+    # Check ingestion status
+    status_msg = ""
+    if os.path.exists("ingestion_status.json"):
+        try:
+            with open("ingestion_status.json", "r") as f:
+                status = json.load(f)
+                if status.get("status") == "running":
+                    current = status.get("current_batch", 0)
+                    total = status.get("total_batches", 1)
+                    eta = status.get("eta_seconds")
+                    
+                    percent = int((current / total) * 100) if total > 0 else 0
+                    eta_str = f"{eta}s" if eta else "calculating..."
+                    
+                    status_msg = f"\n\n[⚠️ Indexing in progress: {percent}% complete. ETA: {eta_str}. Answer may be incomplete.]"
+        except:
+            pass
+
     answer = answer_question(request.question)
-    return {"question": request.question, "answer": answer}
+    return {"question": request.question, "answer": answer + status_msg}
 
 @app.post("/ingest/pdf")
 async def trigger_pdf_ingestion(background_tasks: BackgroundTasks):

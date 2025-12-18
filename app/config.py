@@ -31,8 +31,8 @@ class Config:
 
     # Ollama Settings
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    OLLAMA_EMBEDDING_MODEL = "llama3.1" 
-    OLLAMA_LLM_MODEL = "llama3.1"
+    OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "llama3.2")
+    OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
 
 if Config.LLM_PROVIDER == "openai" and not Config.OPENAI_API_KEY:
     print("WARNING: OPENAI_API_KEY is not set.")

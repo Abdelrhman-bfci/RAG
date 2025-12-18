@@ -36,7 +36,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
 
 2. **Install Dependencies**:
    ```bash
-   pip install -r requirements.txt
+   pip3 install -r requirements.txt
    ```
 
 3. **Install Ollama (Optional)**:
@@ -70,7 +70,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
 
 1. **Start the Server**:
    ```bash
-   uvicorn app.main:app --reload
+   python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
 2. **Ingest Data**:
