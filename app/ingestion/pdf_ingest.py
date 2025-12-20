@@ -47,61 +47,69 @@ def update_status(status, current=0, total=0, message="", start_time=None):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
-def ingest_pdfs():
+def ingest_pdfs(force_fresh: bool = False):
     """
     Ingest PDF files from the configured RESOURCE directory.
-    Only processes files that have changed since the last run.
+    Only processes files that have changed since the last run unless force_fresh=True.
+    Yields progress updates as strings.
     """
+    if force_fresh:
+        yield "Fresh start requested. Clearing existing index...\n"
+        if os.path.exists(TRACKING_FILE):
+            os.remove(TRACKING_FILE)
+        faiss_store = FAISSStore()
+        if os.path.exists(faiss_store.vector_db_path):
+            import shutil
+            shutil.rmtree(faiss_store.vector_db_path)
+            yield "Old index deleted.\n"
+
+    yield "Scanning files...\n"
     update_status("running", message="Scanning files...")
     
     resource_dir = Config.RESOURCE_DIR
     if not os.path.exists(resource_dir):
         msg = f"Resource directory {resource_dir} does not exist."
-        print(msg)
         update_status("error", message=msg)
-        return {"status": "error", "message": "Resource directory not found"}
+        yield f"ERROR: {msg}\n"
+        return
 
     pdf_files = glob.glob(os.path.join(resource_dir, "*.pdf"))
     
     if not pdf_files:
         msg = "No PDF files found in resource directory."
-        print(msg)
         update_status("completed", message=msg)
-        return {"status": "warning", "message": "No PDFs found"}
+        yield "WARNING: No PDFs found.\n"
+        return
 
     tracking_data = load_tracking_data()
     new_documents = []
     processed_files_metadata = []
 
-    print(f"Scanning {len(pdf_files)} files...")
+    yield f"Found {len(pdf_files)} PDF files. Checking for updates...\n"
 
     for pdf_path in pdf_files:
         try:
-            # Create a unique ID based on file path, size, and modification time
             stats = os.stat(pdf_path)
             file_id = f"{pdf_path}_{stats.st_size}_{stats.st_mtime}"
             
-            # Check if file is already ingested and valid
-            if pdf_path in tracking_data and tracking_data[pdf_path] == file_id:
-                print(f"Skipping unmodified: {os.path.basename(pdf_path)}")
+            if not force_fresh and pdf_path in tracking_data and tracking_data[pdf_path] == file_id:
                 continue
 
-            print(f"Processing new/modified: {os.path.basename(pdf_path)}")
+            yield f"Reading: {os.path.basename(pdf_path)}\n"
             loader = PyMuPDFLoader(pdf_path)
             docs = loader.load()
             new_documents.extend(docs)
             processed_files_metadata.append((pdf_path, file_id))
 
         except Exception as e:
-            print(f"Failed to load {pdf_path}: {e}")
+            yield f"FAILED to load {os.path.basename(pdf_path)}: {e}\n"
 
     if not new_documents:
-        msg = "All files are up to date."
-        print(msg)
-        update_status("completed", message=msg)
-        return {"status": "success", "message": "All files up to date"}
+        yield "All files are already up to date.\n"
+        update_status("completed", message="All files are up to date.")
+        return
 
-    # Split documents
+    yield f"Splitting {len(new_documents)} pages into chunks...\n"
     update_status("running", message="Splitting documents...")
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHUNK_SIZE,
@@ -110,33 +118,27 @@ def ingest_pdfs():
     
     splitted_docs = text_splitter.split_documents(new_documents)
     total_chunks = len(splitted_docs)
-    print(f"Generated {total_chunks} new chunks.")
+    yield f"Generated {total_chunks} new chunks. Starting vectorization...\n"
 
-    # Store in FAISS in batches
     faiss_store = FAISSStore()
-    batch_size = 10  # Keeping small batch size for stability with Ollama
-    
+    batch_size = 10
     total_batches = (total_chunks + batch_size - 1) // batch_size
     start_time = time.time()
     
     for i in range(0, total_chunks, batch_size):
         current_batch_num = i // batch_size + 1
-        ensure_message = f"Processing batch {current_batch_num}/{total_batches}"
+        batch_msg = f"Ingesting batch {current_batch_num}/{total_batches} (Chunks {i+1}-{min(i+batch_size, total_chunks)})"
         
-        # Update status with ETA
-        update_status("running", current=current_batch_num, total=total_batches, message=ensure_message, start_time=start_time)
+        update_status("running", current=current_batch_num, total=total_batches, message=batch_msg, start_time=start_time)
+        yield f"{batch_msg}\n"
         
-        print(f"{ensure_message} (Chunks {i+1}-{min(i+batch_size, total_chunks)})")
         batch = splitted_docs[i:i + batch_size]
         faiss_store.add_documents(batch)
-        print(f"Saved batch {current_batch_num}")
 
-    # Update tracking data
     for pdf_path, file_id in processed_files_metadata:
         tracking_data[pdf_path] = file_id
     save_tracking_data(tracking_data)
 
-    success_msg = f"Ingested {total_chunks} new chunks from {len(processed_files_metadata)} files."
+    success_msg = f"SUCCESS: Ingested {total_chunks} chunks from {len(processed_files_metadata)} files."
     update_status("completed", message=success_msg)
-    
-    return {"status": "success", "message": success_msg}
+    yield f"{success_msg}\n"

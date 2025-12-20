@@ -18,7 +18,7 @@ class FAISSStore:
                 openai_api_key=Config.OPENAI_API_KEY
             )
         
-        self.vector_db_path = "faiss_index_v2" # Using a fresh path to be absolutely sure
+        self.vector_db_path = Config.VECTOR_DB_PATH
         print(f"DEBUG: Vector DB Path: {self.vector_db_path}")
 
     def load_index(self):

@@ -50,12 +50,27 @@ async def ask_question(request: QuestionRequest):
     answer = answer_question(request.question)
     return {"question": request.question, "answer": answer + status_msg}
 
+from fastapi.responses import StreamingResponse
+
+@app.get("/ingest/pdf/stream")
+async def stream_pdf_ingestion(fresh: bool = False):
+    """
+    Stream PDF ingestion progress in real-time.
+    - Set fresh=true to clear the index first.
+    """
+    return StreamingResponse(ingest_pdfs(force_fresh=fresh), media_type="text/plain")
+
 @app.post("/ingest/pdf")
 async def trigger_pdf_ingestion(background_tasks: BackgroundTasks):
     """
     Trigger PDF ingestion in the background.
     """
-    background_tasks.add_task(ingest_pdfs)
+    def run_ingest():
+        # Consume the generator in background
+        for _ in ingest_pdfs():
+            pass
+            
+    background_tasks.add_task(run_ingest)
     return {"status": "accepted", "message": "PDF ingestion started in background"}
 
 @app.post("/ingest/db")

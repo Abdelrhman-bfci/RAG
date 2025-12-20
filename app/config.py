@@ -19,8 +19,8 @@ class Config:
     DATABASE_URL = os.getenv("DATABASE_URL")
     
     # PDF Ingestion Settings
-    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
-    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
+    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "2000"))
+    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "500"))
 
     # Model Settings
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower() # 'openai' or 'ollama'
