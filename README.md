@@ -70,7 +70,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
 
 1. **Start the Server**:
    ```bash
-   python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
    ```
 
 2. **Ingest Data**:
@@ -86,7 +86,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
    ```
 
 4. **API Documentation**:
-   Visit `http://localhost:8000/docs` for interactive Swagger UI.
+   Visit `http://localhost:80/docs` for interactive Swagger UI.
 
 ## 📂 Project Structure
 

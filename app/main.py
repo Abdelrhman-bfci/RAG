@@ -74,4 +74,4 @@ def read_root():
     return {"message": "RAG System is running. Use /docs to see API."}
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=80, reload=True)
