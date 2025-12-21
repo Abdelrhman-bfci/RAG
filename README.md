@@ -102,3 +102,53 @@ requirements.txt        # Dependencies
 RESOURCE/               # PDF Directory
 README.md               # Documentation
 ```
+
+## Deployment (Always-on)
+
+To keep the server running even after you close the terminal, use one of the following methods:
+
+### Method 1: Systemd (Recommended for Linux)
+
+1.  **Copy the service file** to the system directory:
+    ```bash
+    sudo cp rag_server.service /etc/systemd/system/rag_server.service
+    ```
+2.  **Edit the file** to match your server's actual paths if they differ:
+    ```bash
+    sudo nano /etc/systemd/system/rag_server.service
+    ```
+3.  **Reload, start, and enable** it to run on boot:
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl start rag_server
+    sudo systemctl enable rag_server
+    ```
+4.  **Check status**:
+    ```bash
+    sudo systemctl status rag_server
+    ```
+
+### Method 2: PM2 (Easiest)
+
+If you have Node.js installed, you can use PM2:
+
+1.  **Install PM2**:
+    ```bash
+    npm install -g pm2
+    ```
+2.  **Start the app**:
+    ```bash
+    sudo pm2 start "./venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80" --name rag-api
+    ```
+3.  **Save the list** to restart on reboot:
+    ```bash
+    sudo pm2 save
+    sudo pm2 startup
+    ```
+
+### Method 3: Screen / Nohup (Quick)
+
+```bash
+# Using nohup
+sudo nohup ./venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80 > server.log 2>&1 &
+```
