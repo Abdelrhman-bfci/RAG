@@ -1,6 +1,9 @@
 import os
 import json
 import time
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
@@ -75,18 +78,58 @@ def ingest_websites(force_fresh: bool = False):
 
     for url in links:
         try:
-            # Simple tracking based on URL and date (as websites change content)
-            # For a more robust solution, we could hash the content, but that requires loading it first.
             last_indexed = tracking_data.get(url, 0)
-            if not force_fresh and (time.time() - last_indexed < 86400): # Skip if indexed in last 24h
+            if not force_fresh and (time.time() - last_indexed < 86400): 
                 yield f"Skipping (indexed recently): {url}\n"
                 continue
 
-            yield f"Extracting content from: {url}\n"
-            loader = WebBaseLoader(url)
-            docs = loader.load()
-            new_documents.extend(docs)
-            processed_links.append(url)
+            yield f"Discovering links on: {url}\n"
+            base_url = url.rstrip('/')
+            domain = urlparse(url).netloc
+            
+            try:
+                response = requests.get(url, timeout=10)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Find links that are on the same domain and look interesting
+                found_links = set()
+                found_links.add(url) # Include the main URL
+                
+                for a in soup.find_all('a', href=True):
+                    href = a['href']
+                    text = a.get_text().lower().strip()
+                    full_url = urljoin(url, href)
+                    parsed_full = urlparse(full_url)
+                    
+                    if parsed_full.netloc == domain:
+                        # Focus on likely informative pages by path OR by link text
+                        path = parsed_full.path.lower()
+                        keywords = ["about", "history", "vision", "mission", "leader", "academic", "program", "department"]
+                        if any(kw in path for kw in keywords) or any(kw in text for kw in keywords):
+                            found_links.add(full_url)
+                
+                target_urls = list(found_links)[:10] 
+                yield f"Discovered {len(target_urls)} relevant pages:\n"
+                for t_url in target_urls:
+                    yield f" - {t_url}\n"
+                
+                yield "Starting extraction...\n"
+                loader = WebBaseLoader(target_urls)
+                docs = loader.load()
+                
+                # Filter out empty or failed docs
+                valid_docs = []
+                for d in docs:
+                    if len(d.page_content.strip()) > 300:
+                        valid_docs.append(d)
+                        source_url = d.metadata.get("source", "Unknown URL")
+                        yield f"Successfully extracted: {source_url}\n"
+                
+                new_documents.extend(valid_docs)
+                processed_links.append(url)
+
+            except Exception as e:
+                yield f"Discovery FAILED for {url}: {e}\n"
 
         except Exception as e:
             yield f"FAILED to load {url}: {e}\n"

@@ -25,42 +25,53 @@ def get_rag_chain():
             self.vectorstore = vectorstore
             
         def invoke(self, query):
-            # 1. Broad vector search (fast)
-            initial_docs = self.vectorstore.similarity_search(query, k=50)
+            # 1. Broad vector search (increase k to ensure we find sparse website content)
+            initial_docs = self.vectorstore.similarity_search(query, k=100)
             
             # 2. Extract priority terms
             keywords = [w.lower() for w in query.split() if len(w) > 3]
             
+            website_docs = []
             priority_docs = []
             other_docs = []
             
             for d in initial_docs:
                 content_lower = d.page_content.lower()
-                if any(kw in content_lower for kw in keywords):
+                source = d.metadata.get("source", "").lower()
+                
+                # Boost website sources as they are usually more specific to recent queries
+                is_website = source.startswith("http")
+                
+                if is_website:
+                    website_docs.append(d)
+                elif any(kw in content_lower for kw in keywords):
                     priority_docs.append(d)
                 else:
                     other_docs.append(d)
             
-            # Priority first, then top others
-            combined = priority_docs + other_docs
-            return combined[:30] # Increase to 30 for better coverage
+            # Order: Websites first, then keyword matches, then others
+            combined = website_docs + priority_docs + other_docs
+            return combined[:30] 
 
     retriever = HybridRetriever(vectorstore)
 
     # 2. Define the Prompt (More general and encouraging)
-    prompt = ChatPromptTemplate.from_template("""### INSTRUCTION ###
-You are a helpful and factual assistant. Answer the user's question using the provided context.
-- Use at least some of the provided context to answer. 
-- If the answer is absolutely not in the context, say "I don't know based on the provided data."
-- DO NOT use outside knowledge.
-- Be clear and accurate.
-
-### CONTEXT ###
-{context}
-
-### QUESTION ###
-{question}
-""")
+    prompt = ChatPromptTemplate.from_template("""
+        You are a helpful and precise assistant for a university/organization.
+        Use the following pieces of retrieved context to answer the user's question.
+        
+        Instructions:
+        1. If multiple sources (e.g., a PDF and a Website) talk about different things, prioritize the one that matches the specific entity in the user's question.
+        2. If the answer is not in the context, say "I don't know based on the provided resources". Do not make up information.
+        3. Be descriptive but concise.
+        
+        Context:
+        {context}
+        
+        Question: {question}
+        
+        Answer:
+    """)
 
     # 3. Initialize LLM
     if Config.LLM_PROVIDER == "ollama":
