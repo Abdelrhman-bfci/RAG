@@ -26,9 +26,8 @@ def get_rag_chain():
             # 1. Broad vector search (fast)
             initial_docs = self.vectorstore.similarity_search(query, k=50)
             
-            # 2. Extract priority terms and IoT terms
+            # 2. Extract priority terms
             keywords = [w.lower() for w in query.split() if len(w) > 3]
-            keywords.extend(["iot", "internet of things"])
             
             priority_docs = []
             other_docs = []
@@ -42,17 +41,17 @@ def get_rag_chain():
             
             # Priority first, then top others
             combined = priority_docs + other_docs
-            return combined[:15] # Keep k=15 for better balance of speed/accuracy
+            return combined[:30] # Increase to 30 for better coverage
 
     retriever = HybridRetriever(vectorstore)
 
-    # 2. Define the Prompt
+    # 2. Define the Prompt (More general and encouraging)
     prompt = ChatPromptTemplate.from_template("""### INSTRUCTION ###
-You are a factual assistant. Your task is to answer the user's question using ONLY the provided context.
-- First, locate any mention of "Internet of Things" or "IoT" in the context.
-- Second, identify the program or department associated with that course/topic.
-- If the information is not explicitly found, say "I don't know based on the provided data."
+You are a helpful and factual assistant. Answer the user's question using the provided context.
+- Use at least some of the provided context to answer. 
+- If the answer is absolutely not in the context, say "I don't know based on the provided data."
 - DO NOT use outside knowledge.
+- Be clear and accurate.
 
 ### CONTEXT ###
 {context}
@@ -77,18 +76,8 @@ You are a factual assistant. Your task is to answer the user's question using ON
 
     # 4. Construct the Chain
     def format_docs(docs):
-        # Prioritize chunks containing the core keywords
-        keywords = ["Internet of Things", "IoT"]
-        priority_docs = []
-        regular_docs = []
-        
-        for d in docs:
-            if any(kw.lower() in d.page_content.lower() for kw in keywords):
-                priority_docs.append(d)
-            else:
-                regular_docs.append(d)
-        
-        sorted_docs = priority_docs + regular_docs
+        # Simply return docs as ranked by retriever
+        sorted_docs = docs
         
         context_parts = []
         for i, doc in enumerate(sorted_docs):

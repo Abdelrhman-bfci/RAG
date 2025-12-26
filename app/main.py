@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.ingestion.pdf_ingest import ingest_pdfs
 from app.ingestion.db_ingest import ingest_database
+from app.ingestion.web_ingest import ingest_websites
 from app.qa.rag_chain import answer_question
 import uvicorn
 
@@ -94,6 +95,26 @@ async def trigger_db_ingestion(request: DBIngestRequest, background_tasks: Backg
         
     background_tasks.add_task(ingest_database, request.query, request.table_name)
     return {"status": "accepted", "message": "Database ingestion started in background"}
+
+@app.get("/ingest/web/stream")
+async def stream_web_ingestion(fresh: bool = False):
+    """
+    Stream Website ingestion progress in real-time.
+    - Set fresh=true to clear tracking for configured links.
+    """
+    return StreamingResponse(ingest_websites(force_fresh=fresh), media_type="text/plain")
+
+@app.post("/ingest/web")
+async def trigger_web_ingestion(background_tasks: BackgroundTasks):
+    """
+    Trigger Website ingestion in the background.
+    """
+    def run_ingest():
+        for _ in ingest_websites():
+            pass
+            
+    background_tasks.add_task(run_ingest)
+    return {"status": "accepted", "message": "Website ingestion started in background"}
 
 @app.get("/")
 def read_root():

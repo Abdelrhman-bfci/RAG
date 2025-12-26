@@ -22,6 +22,10 @@ class Config:
     CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "2000"))
     CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "500"))
 
+    # Website Ingestion Settings
+    _website_links_raw = os.getenv("WEBSITE_LINKS", "")
+    WEBSITE_LINKS = [link.strip() for link in _website_links_raw.split(",") if link.strip()]
+
     # Model Settings
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower() # 'openai' or 'ollama'
     
