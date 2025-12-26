@@ -108,7 +108,9 @@ def ingest_websites(force_fresh: bool = False):
     yield f"Generated {total_chunks} chunks. Starting vectorization...\n"
 
     faiss_store = FAISSStore()
-    batch_size = 10
+    vectorstore = faiss_store.load_index() # Load once
+    
+    batch_size = 100 # Increased from 10
     total_batches = (total_chunks + batch_size - 1) // batch_size
     start_time = time.time()
     
@@ -120,7 +122,16 @@ def ingest_websites(force_fresh: bool = False):
         yield f"{batch_msg}\n"
         
         batch = splitted_docs[i:i + batch_size]
-        faiss_store.add_documents(batch)
+        
+        # Add documents to memory
+        if vectorstore:
+            vectorstore.add_documents(batch)
+        else:
+            from langchain_community.vectorstores import FAISS
+            vectorstore = FAISS.from_documents(batch, faiss_store.embeddings)
+
+    # Save once at the end
+    faiss_store.save_index(vectorstore)
 
     for url in processed_links:
         tracking_data[url] = time.time()

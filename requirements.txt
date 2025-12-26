@@ -5,6 +5,7 @@ langchain-openai
 langchain-community
 faiss-cpu
 pypdf
+pymupdf
 sqlalchemy
 mysql-connector-python
 python-dotenv
