@@ -1,5 +1,5 @@
 # Environment variables
-.env
+# .env
 
 # Local ingestion files and status
 ingested_websites.json
