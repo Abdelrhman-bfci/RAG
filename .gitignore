@@ -1,0 +1,16 @@
+# Environment variables
+.env
+
+# Local ingestion files and status
+ingested_websites.json
+web_ingestion_status.json
+ingested_files.json
+ingestion_status.json
+
+# Pycache
+__pycache__/
+app/ingestion/__pycache__/web_ingest.cpython-314.pyc
+
+# Vector store
+faiss_index_v3/
+
