@@ -2,9 +2,11 @@ from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
+import time
+import traceback
 
 def get_rag_chain():
     """
@@ -85,7 +87,6 @@ You are a helpful and factual assistant. Answer the user's question using the pr
         
         return "\n\n".join(context_parts)
 
-    from langchain_core.runnables import RunnableLambda
     rag_chain = (
         {"context": RunnableLambda(lambda x: retriever.invoke(x)) | format_docs, "question": RunnablePassthrough()}
         | prompt
@@ -99,7 +100,6 @@ def answer_question(question: str):
     """
     Entry point to answer a question with performance metrics.
     """
-    import time
     start_total = time.time()
     try:
         chain = get_rag_chain()
@@ -116,6 +116,5 @@ def answer_question(question: str):
     except ValueError as e:
         return f"Error: {e}"
     except Exception as e:
-        import traceback
         print(f"DEBUG ERROR: {traceback.format_exc()}")
         return f"An unexpected error occurred: {str(e)}"

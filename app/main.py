@@ -1,13 +1,16 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+import uvicorn
+import json
+import os
+
 from app.ingestion.pdf_ingest import ingest_pdfs
 from app.ingestion.db_ingest import ingest_database
 from app.ingestion.web_ingest import ingest_websites
 from app.qa.rag_chain import answer_question
-import uvicorn
-
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="RAG System API", description="PDF & SQL RAG with Strict Context Control")
 
@@ -38,9 +41,6 @@ async def ask_question(request: QuestionRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
-    import json
-    import os
-    
     # Check ingestion status
     status_msg = ""
     if os.path.exists("ingestion_status.json"):
@@ -61,8 +61,6 @@ async def ask_question(request: QuestionRequest):
 
     answer = answer_question(request.question)
     return {"question": request.question, "answer": answer + status_msg}
-
-from fastapi.responses import StreamingResponse
 
 @app.get("/ingest/pdf/stream")
 async def stream_pdf_ingestion(fresh: bool = False):

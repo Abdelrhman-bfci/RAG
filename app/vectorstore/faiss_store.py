@@ -11,7 +11,6 @@ class FAISSStore:
                 base_url=Config.OLLAMA_BASE_URL,
                 model=Config.OLLAMA_EMBEDDING_MODEL
             )
-            print(f"DEBUG: FAISSStore initialized with OLLAMA model: {Config.OLLAMA_EMBEDDING_MODEL}")
         else:
             self.embeddings = OpenAIEmbeddings(
                 model=Config.EMBEDDING_MODEL,
@@ -19,7 +18,6 @@ class FAISSStore:
             )
         
         self.vector_db_path = Config.VECTOR_DB_PATH
-        print(f"DEBUG: Vector DB Path: {self.vector_db_path}")
 
     def load_index(self):
         """
