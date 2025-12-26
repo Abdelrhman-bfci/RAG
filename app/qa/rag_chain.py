@@ -94,27 +94,37 @@ You are a helpful and factual assistant. Answer the user's question using the pr
         | StrOutputParser()
     )
 
-    return rag_chain
+    return rag_chain, retriever
 
 def answer_question(question: str):
     """
-    Entry point to answer a question with performance metrics.
+    Entry point to answer a question with performance metrics and source citations.
     """
     start_total = time.time()
     try:
-        chain = get_rag_chain()
+        chain, retriever = get_rag_chain()
         
+        # 1. Retrieve documents manually to get metadata for citations
+        docs = retriever.invoke(question)
+        sources = sorted(list(set([doc.metadata.get("source", "Unknown") for doc in docs])))
+        
+        # 2. Invoke the chain
         start_llm = time.time()
-        response = chain.invoke(question)
+        answer = chain.invoke(question)
         end_time = time.time()
         
         total_time = end_time - start_total
         llm_time = end_time - start_llm
         
-        perf_info = f"\n\n[⏱️ Performance: Total {total_time:.1f}s | LLM {llm_time:.1f}s]"
-        return response + perf_info
+        performance = f"Total {total_time:.1f}s | LLM {llm_time:.1f}s"
+        
+        return {
+            "answer": answer,
+            "sources": sources,
+            "performance": performance
+        }
     except ValueError as e:
-        return f"Error: {e}"
+        return {"error": str(e)}
     except Exception as e:
         print(f"DEBUG ERROR: {traceback.format_exc()}")
-        return f"An unexpected error occurred: {str(e)}"
+        return {"error": f"An unexpected error occurred: {str(e)}"}

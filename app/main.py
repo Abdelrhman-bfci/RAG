@@ -59,8 +59,17 @@ async def ask_question(request: QuestionRequest):
         except:
             pass
 
-    answer = answer_question(request.question)
-    return {"question": request.question, "answer": answer + status_msg}
+    result = answer_question(request.question)
+    
+    if "error" in result:
+        return {"question": request.question, "answer": result["error"] + status_msg}
+
+    return {
+        "question": request.question, 
+        "answer": result["answer"] + status_msg,
+        "sources": result["sources"],
+        "performance": result["performance"]
+    }
 
 @app.get("/ingest/pdf/stream")
 async def stream_pdf_ingestion(fresh: bool = False):
