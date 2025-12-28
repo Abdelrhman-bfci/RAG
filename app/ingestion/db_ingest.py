@@ -103,9 +103,15 @@ def ingest_database():
                 table_docs.append(Document(page_content=content, metadata=metadata))
             
             if table_docs:
-                faiss_store.add_documents(table_docs)
-                total_ingested_all += len(table_docs)
-                yield f"  - Added {len(table_docs)} records.\n"
+                # Batch processing to avoid "context length exceeded" errors
+                batch_size = 100
+                table_total = len(table_docs)
+                for i in range(0, table_total, batch_size):
+                    batch = table_docs[i:i + batch_size]
+                    faiss_store.add_documents(batch)
+                    
+                total_ingested_all += table_total
+                yield f"  - Added {table_total} records.\n"
             else:
                 yield f"  - Table '{table}' is empty.\n"
 
