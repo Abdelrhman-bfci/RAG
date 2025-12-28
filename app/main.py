@@ -93,17 +93,48 @@ async def trigger_pdf_ingestion(background_tasks: BackgroundTasks):
     return {"status": "accepted", "message": "PDF ingestion started in background"}
 
 @app.post("/ingest/db")
-async def trigger_db_ingestion(request: DBIngestRequest, background_tasks: BackgroundTasks):
+async def trigger_db_ingestion(background_tasks: BackgroundTasks, request: Optional[DBIngestRequest] = None):
     """
     Trigger Database ingestion in the background.
+    If no request body is provided, it ingests all tables in Config.INGEST_TABLES.
     """
-    if not request.query and not request.table_name:
-        raise HTTPException(status_code=400, detail="Must provide either 'query' or 'table_name'")
+    query = request.query if request else None
+    table_name = request.table_name if request else None
         
-    background_tasks.add_task(ingest_database, request.query, request.table_name)
+    background_tasks.add_task(ingest_database, query, table_name)
     return {"status": "accepted", "message": "Database ingestion started in background"}
 
-@app.get("/ingest/web/stream")
+@app.get("/ingest/db/status")
+async def get_database_status():
+    """
+    Get the status of ingested tables and their relations.
+    """
+    from app.ingestion.db_ingest import get_db_status
+    return get_db_status()
+
+@app.get("/qa/db/engineering-computer")
+async def get_engineering_computer_courses():
+    """
+    Get all courses in Faculty of Engineering provided by Computer Department.
+    """
+    from app.qa.qa_db import get_courses_engineering_computer
+    return get_courses_engineering_computer()
+
+@app.get("/qa/db/electrical-count")
+async def get_electrical_count():
+    """
+    Get number of courses provided by Electrical Department in Faculty of Engineering.
+    """
+    from app.qa.qa_db import count_courses_electrical_engineering
+    return {"count": count_courses_electrical_engineering()}
+
+@app.get("/qa/db/credit-4")
+async def get_credit_4_courses():
+    """
+    Get list of courses with 4 credit hours.
+    """
+    from app.qa.qa_db import get_courses_4_credit_hours
+    return {"courses": get_courses_4_credit_hours()}
 async def stream_web_ingestion(fresh: bool = False):
     """
     Stream Website ingestion progress in real-time.
