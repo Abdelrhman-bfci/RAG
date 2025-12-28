@@ -95,7 +95,14 @@ async def stream_db_ingestion():
     Stream Database ingestion progress in real-time.
     Ingests all tables configured in Config.INGEST_TABLES.
     """
-    return StreamingResponse(ingest_database(), media_type="text/plain")
+    return StreamingResponse(
+        ingest_database(), 
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.get("/ingest/db/status")
 async def get_database_status():
