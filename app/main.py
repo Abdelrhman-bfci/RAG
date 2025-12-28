@@ -112,29 +112,7 @@ async def get_database_status():
     from app.ingestion.db_ingest import get_db_status
     return get_db_status()
 
-@app.get("/qa/db/engineering-computer")
-async def get_engineering_computer_courses():
-    """
-    Get all courses in Faculty of Engineering provided by Computer Department.
-    """
-    from app.qa.qa_db import get_courses_engineering_computer
-    return get_courses_engineering_computer()
-
-@app.get("/qa/db/electrical-count")
-async def get_electrical_count():
-    """
-    Get number of courses provided by Electrical Department in Faculty of Engineering.
-    """
-    from app.qa.qa_db import count_courses_electrical_engineering
-    return {"count": count_courses_electrical_engineering()}
-
-@app.get("/qa/db/credit-4")
-async def get_credit_4_courses():
-    """
-    Get list of courses with 4 credit hours.
-    """
-    from app.qa.qa_db import get_courses_4_credit_hours
-    return {"courses": get_courses_4_credit_hours()}
+@app.get("/ingest/web/stream")
 async def stream_web_ingestion(fresh: bool = False):
     """
     Stream Website ingestion progress in real-time.
