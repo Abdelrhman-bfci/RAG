@@ -20,11 +20,11 @@ def update_db_status(status, current=0, total=0, message=""):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
-def ingest_database(query: str = None, table_name: str = None):
+def ingest_database():
     """
-    Ingest data from a SQL database.
-    Can ingest from a specific table, a raw SQL query, or all tables in Config.INGEST_TABLES.
+    Ingest data from a SQL database for all tables in Config.INGEST_TABLES.
     Yields progress updates.
+    Automatically identifies relations based on 'tablename_minus_s_id' convention.
     """
     if not Config.DATABASE_URL:
         yield "ERROR: DATABASE_URL not set\n"
@@ -37,51 +37,25 @@ def ingest_database(query: str = None, table_name: str = None):
         yield f"ERROR: Database connection failed: {e}\n"
         return
 
-    documents = []
-    tables_to_ingest = []
-
-    if query:
-        yield f"Running custom query: {query}\n"
-        update_db_status("running", message=f"Running query: {query}")
-        try:
-            result = connection.execute(text(query))
-            rows = result.fetchall()
-            keys = result.keys()
-            for row in rows:
-                row_dict = dict(zip(keys, row))
-                content = "\n".join([f"{k}: {v}" for k, v in row_dict.items() if v is not None])
-                documents.append(Document(page_content=content, metadata={"source": f"Query: {query}", "type": "database_record"}))
-            
-            if documents:
-                yield f"Generated {len(documents)} docs from query. Vectorizing...\n"
-                faiss_store = FAISSStore()
-                faiss_store.add_documents(documents)
-                yield f"SUCCESS: Ingested {len(documents)} records from query.\n"
-                update_db_status("completed", message=f"Ingested {len(documents)} records from query.")
-            else:
-                yield "WARNING: No records found for query.\n"
-                update_db_status("completed", message="No records found for query.")
-        except Exception as e:
-            yield f"ERROR: Query ingestion failed: {e}\n"
-            update_db_status("error", message=str(e))
-        finally:
-            connection.close()
-        return
-
-    if table_name:
-        tables_to_ingest = [table_name]
-    else:
-        tables_to_ingest = Config.INGEST_TABLES
+    tables_to_ingest = Config.INGEST_TABLES
 
     if not tables_to_ingest:
         connection.close()
-        yield "ERROR: No tables specified for ingestion.\n"
+        yield "ERROR: No tables specified for ingestion in Config.INGEST_TABLES.\n"
         return
 
     try:
         inspector = inspect(engine)
         existing_tables = inspector.get_table_names()
         
+        # Build relation map: {column_name: table_name} 
+        # e.g., {'institute_id': 'institutes', 'department_id': 'departments'}
+        relation_map = {}
+        for table in tables_to_ingest:
+            if table.endswith('s'):
+                rel_col = table[:-1] + "_id"
+                relation_map[rel_col] = table
+
         total_tables = len(tables_to_ingest)
         yield f"Starting ingestion for {total_tables} tables...\n"
         
@@ -91,7 +65,7 @@ def ingest_database(query: str = None, table_name: str = None):
         for idx, table in enumerate(tables_to_ingest):
             current_num = idx + 1
             if table not in existing_tables:
-                yield f"SKIP: Table '{table}' not found.\n"
+                yield f"SKIP: Table '{table}' not found in database.\n"
                 continue
             
             yield f"[{current_num}/{total_tables}] Ingesting: {table}...\n"
@@ -104,8 +78,29 @@ def ingest_database(query: str = None, table_name: str = None):
             table_docs = []
             for row in rows:
                 row_dict = dict(zip(keys, row))
-                content = "\n".join([f"{k}: {v}" for k, v in row_dict.items() if v is not None])
-                table_docs.append(Document(page_content=content, metadata={"source": f"Table: {table}", "type": "database_record", "table": table}))
+                
+                # Build content parts, noting relations
+                content_parts = []
+                for k, v in row_dict.items():
+                    if v is None: continue
+                    
+                    line = f"{k}: {v}"
+                    if k in relation_map:
+                        line += f" (Link to {relation_map[k]})"
+                    content_parts.append(line)
+                
+                content = "\n".join(content_parts)
+                metadata = {
+                    "source": f"Table: {table}", 
+                    "type": "database_record", 
+                    "table": table
+                }
+                # Add foreign keys to metadata for better retrieval logic if needed
+                for k, v in row_dict.items():
+                    if k in relation_map and v is not None:
+                        metadata[k] = v
+
+                table_docs.append(Document(page_content=content, metadata=metadata))
             
             if table_docs:
                 faiss_store.add_documents(table_docs)

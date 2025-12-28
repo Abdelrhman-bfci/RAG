@@ -27,10 +27,6 @@ app.add_middleware(
 class QuestionRequest(BaseModel):
     question: str
 
-class DBIngestRequest(BaseModel):
-    query: Optional[str] = None
-    table_name: Optional[str] = None
-
 # --- Endpoints ---
 
 @app.post("/ask")
@@ -94,15 +90,12 @@ async def trigger_pdf_ingestion(background_tasks: BackgroundTasks):
 
 @app.get("/ingest/db/stream")
 @app.post("/ingest/db")
-async def stream_db_ingestion(request: Optional[DBIngestRequest] = None):
+async def stream_db_ingestion():
     """
     Stream Database ingestion progress in real-time.
-    If no request body is provided, it ingests all tables in Config.INGEST_TABLES.
+    Ingests all tables configured in Config.INGEST_TABLES.
     """
-    query = request.query if request else None
-    table_name = request.table_name if request else None
-    
-    return StreamingResponse(ingest_database(query, table_name), media_type="text/plain")
+    return StreamingResponse(ingest_database(), media_type="text/plain")
 
 @app.get("/ingest/db/status")
 async def get_database_status():
