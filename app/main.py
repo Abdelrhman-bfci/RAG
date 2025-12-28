@@ -92,17 +92,17 @@ async def trigger_pdf_ingestion(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_ingest)
     return {"status": "accepted", "message": "PDF ingestion started in background"}
 
+@app.get("/ingest/db/stream")
 @app.post("/ingest/db")
-async def trigger_db_ingestion(background_tasks: BackgroundTasks, request: Optional[DBIngestRequest] = None):
+async def stream_db_ingestion(request: Optional[DBIngestRequest] = None):
     """
-    Trigger Database ingestion in the background.
+    Stream Database ingestion progress in real-time.
     If no request body is provided, it ingests all tables in Config.INGEST_TABLES.
     """
     query = request.query if request else None
     table_name = request.table_name if request else None
-        
-    background_tasks.add_task(ingest_database, query, table_name)
-    return {"status": "accepted", "message": "Database ingestion started in background"}
+    
+    return StreamingResponse(ingest_database(query, table_name), media_type="text/plain")
 
 @app.get("/ingest/db/status")
 async def get_database_status():
