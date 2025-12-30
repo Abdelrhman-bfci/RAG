@@ -69,10 +69,18 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
 ## 🏃 Usage
 
 1. **Start the Server**:
+
+   **Option A: Local Development (Recommended)**
+   ```bash
+   python3 -m uvicorn app.main:app --reload
+   ```
+
+   **Option B: Production (using venv and sudo)**
    ```bash
    # Using the full path to the virtual environment's python is the most reliable way with sudo
    sudo ./venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
    ```
+
 
 2. **Ingest Data**:
    - **PDFs**: Place files in `RESOURCE/` and POST to `/ingest/pdf`.
