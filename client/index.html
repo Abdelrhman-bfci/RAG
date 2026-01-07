@@ -16,49 +16,74 @@
 
 <body>
     <div class="app-container">
-        <header>
-            <div class="logo">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
                 <div class="icon">🤖</div>
-                <h1>ASU Engineering <span>Assistant</span></h1>
+                <h1>ASU <span>RAG</span></h1>
             </div>
-            <div class="header-actions">
+
+            <nav class="nav-links">
+                <div class="nav-item active">
+                    <i class="fas fa-comment-dots"></i>
+                    <span>Chat Assistant</span>
+                </div>
+                <!-- Future features could go here -->
+                <div class="nav-item" id="sidebar-db-btn">
+                    <i class="fas fa-database"></i>
+                    <span>Database</span>
+                </div>
+                <div class="nav-item" id="sidebar-settings-btn">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="disclaimer">
+                    Powered by ASU Engineering
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="main-content">
+            <header>
                 <div class="status-indicator">
                     <span class="status-dot"></span>
-                    <span class="status-text">Connected</span>
+                    <span class="status-text">Connected to RAG Engine</span>
                 </div>
-                <!-- Database Management Button -->
-                <button id="db-btn" class="icon-btn" title="Database Management">
-                    <i class="fas fa-database"></i>
-                </button>
-                <!-- Settings Button -->
-                <button id="settings-btn" class="icon-btn" title="Settings">
-                    <i class="fas fa-cog"></i>
-                </button>
-            </div>
-        </header>
+                <div class="header-actions">
+                    <button id="db-btn" class="icon-btn" title="Database Management">
+                        <i class="fas fa-server"></i>
+                    </button>
+                    <button id="settings-btn" class="icon-btn" title="Settings">
+                        <i class="fas fa-sliders-h"></i>
+                    </button>
+                </div>
+            </header>
 
-        <div id="stats-container">
-            <!-- JS will populate metrics here -->
-        </div>
-
-        <div class="chat-container" id="chat-container">
-            <!-- Messages will appear here -->
-            <div class="welcome-message">
-                <h2><i class="fas fa-robot"></i> RAG Assistant Ready</h2>
-                <p>Ask me anything about your documents.</p>
-                <div class="suggested-queries">
-                    <button onclick="setQuery('What are the available departments?')">Available departments</button>
-                    <button onclick="setQuery('Tell me about the bylaws.')">Bylaws info</button>
+            <div class="chat-container" id="chat-container">
+                <div class="welcome-message">
+                    <h2>Hello, <span>How can I help you?</span></h2>
+                    <p>Access your documents through natural language. Ask specific questions or explore topics.</p>
+                    <div class="suggested-queries">
+                        <button onclick="setQuery('What are the available departments?')">Departments</button>
+                        <button onclick="setQuery('Tell me about the bylaws.')">Bylaws</button>
+                        <button onclick="setQuery('How to apply for graduation?')">Graduation</button>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="input-area">
-            <textarea id="user-input" placeholder="Type your question..." rows="1"></textarea>
-            <button id="send-btn">
-                <i class="fas fa-paper-plane"></i>
-            </button>
-        </div>
+            <div class="input-area-wrapper">
+                <div class="input-area">
+                    <textarea id="user-input" placeholder="Message RAG Assistant..." rows="1"></textarea>
+                    <button id="send-btn">
+                        <i class="fas fa-arrow-up"></i>
+                    </button>
+                </div>
+            </div>
+        </main>
 
         <!-- Settings Modal -->
         <div id="settings-modal" class="modal">
@@ -327,9 +352,13 @@
             const freshStreamBtn = document.getElementById('fresh-stream-btn');
 
             // Open/Close Modal
-            dbBtn.addEventListener('click', () => {
-                dbModal.style.display = 'block';
-            });
+            const openDbModal = () => { dbModal.style.display = 'block'; };
+            const openSettingsModal = () => { settingsModal.style.display = 'block'; };
+
+            dbBtn.onclick = openDbModal;
+            settingsBtn.onclick = openSettingsModal;
+            document.getElementById('sidebar-db-btn').onclick = openDbModal;
+            document.getElementById('sidebar-settings-btn').onclick = openSettingsModal;
 
             closeDbBtn.addEventListener('click', () => {
                 dbModal.style.display = 'none';
