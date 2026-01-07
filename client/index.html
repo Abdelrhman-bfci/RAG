@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASU Engineering RAG Assistant</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
 </head>
+
 <body>
     <div class="app-container">
         <header>
@@ -40,7 +44,11 @@
             <div class="input-wrapper">
                 <input type="text" id="user-input" placeholder="Type your question here..." autocomplete="off">
                 <button id="send-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
                 </button>
             </div>
             <p class="disclaimer">Retrieved from official ASU Engineering documents and website.</p>
@@ -51,7 +59,8 @@
         const chatContainer = document.getElementById('chat-container');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-        const API_BASE = "http://localhost:80"; // Adjust if necessary
+        // Dynamically get the API base URL from the current window location
+        const API_BASE = window.location.origin;
 
         function setQuery(query) {
             userInput.value = query;
@@ -61,15 +70,15 @@
         function addMessage(content, isUser = false) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
-            
+
             const avatar = document.createElement('div');
             avatar.className = 'avatar';
             avatar.innerText = isUser ? '👤' : 'AI';
-            
+
             const textDiv = document.createElement('div');
             textDiv.className = 'text';
             textDiv.innerText = content;
-            
+
             msgDiv.appendChild(avatar);
             msgDiv.appendChild(textDiv);
             chatContainer.appendChild(msgDiv);
@@ -89,7 +98,7 @@
 
             try {
                 const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}`);
-                
+
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
                 }
@@ -97,7 +106,7 @@
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let accumulatedAnswer = '';
-                
+
                 botTextDiv.innerHTML = ''; // Clear thinking state
 
                 while (true) {
@@ -137,4 +146,5 @@
         });
     </script>
 </body>
+
 </html>
