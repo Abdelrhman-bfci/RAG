@@ -58,9 +58,27 @@ class Config:
 
     @classmethod
     def update_model(cls, model_name: str):
-        """Update the current LLM model."""
+        """Update the current LLM model and persist to .env."""
         cls.OLLAMA_LLM_MODEL = model_name
-        # Optional: persist to .env if needed, but for now just in-memory
+        
+        # Persist to .env
+        env_path = ".env"
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+        
+        updated = False
+        with open(env_path, "w") as f:
+            for line in lines:
+                if line.startswith("OLLAMA_LLM_MODEL="):
+                    f.write(f"OLLAMA_LLM_MODEL={model_name}\n")
+                    updated = True
+                else:
+                    f.write(line)
+            if not updated:
+                f.write(f"OLLAMA_LLM_MODEL={model_name}\n")
+        
         return True
 
 if Config.LLM_PROVIDER == "openai" and not Config.OPENAI_API_KEY:

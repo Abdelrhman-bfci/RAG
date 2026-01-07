@@ -91,16 +91,18 @@
                 <span class="close-btn">&times;</span>
                 <h2>Settings</h2>
 
-                <div class="setting-group">
-                    <label for="model-select">Ollama Model:</label>
-                    <select id="model-select">
-                        <option value="" disabled selected>Loading models...</option>
-                    </select>
-                    <p class="setting-hint">Select the local LLM to use for generation.</p>
+                <div class="modal-body">
+                    <div class="setting-group">
+                        <label for="model-select">Ollama Model</label>
+                        <select id="model-select">
+                            <option value="" disabled selected>Loading models...</option>
+                        </select>
+                        <p class="setting-hint">Select the local LLM to use for generation.</p>
+                    </div>
                 </div>
 
                 <div class="modal-actions">
-                    <button id="save-settings-btn" class="primary-btn">Save</button>
+                    <button id="save-settings-btn" class="primary-btn">Save Changes</button>
                 </div>
             </div>
         </div>
@@ -144,6 +146,11 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div id="toast" class="toast">
+            <i class="fas fa-check-circle"></i>
+            <span id="toast-message">Settings saved successfully</span>
         </div>
 
         <script>
@@ -311,11 +318,30 @@
                 }
             }
 
+            function showToast(message, isError = false) {
+                const toast = document.getElementById('toast');
+                const toastMsg = document.getElementById('toast-message');
+                toastMsg.innerText = message;
+                toast.classList.add('show');
+                if (isError) {
+                    toast.style.borderLeft = '4px solid #f43f5e';
+                    toast.querySelector('i').className = 'fas fa-exclamation-circle';
+                    toast.querySelector('i').style.color = '#f43f5e';
+                } else {
+                    toast.style.borderLeft = '4px solid #10b981';
+                    toast.querySelector('i').className = 'fas fa-check-circle';
+                    toast.querySelector('i').style.color = '#10b981';
+                }
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 3000);
+            }
+
             saveSettings.onclick = async () => {
                 const selectedModel = modelSelect.value;
                 if (!selectedModel) return;
 
-                saveSettings.innerText = 'Saving...';
+                saveSettings.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
                 saveSettings.disabled = true;
 
                 try {
@@ -327,10 +353,12 @@
 
                     if (response.ok) {
                         settingsModal.style.display = 'none';
-                        alert(`Model switched to ${selectedModel}`);
+                        showToast(`Model switched to ${selectedModel}`);
+                    } else {
+                        throw new Error('Failed to update');
                     }
                 } catch (error) {
-                    alert('Failed to update model settings');
+                    showToast('Failed to update model settings', true);
                 } finally {
                     saveSettings.innerText = 'Save Changes';
                     saveSettings.disabled = false;
