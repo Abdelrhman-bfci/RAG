@@ -380,7 +380,7 @@ footer {
     border-top: 1px solid var(--glass-border);
 }
 
-.input-wrapper {
+.input-area {
     display: flex;
     gap: 12px;
     background: rgba(255, 255, 255, 0.05);
@@ -389,14 +389,20 @@ footer {
     border-radius: 16px;
     border: 1px solid var(--glass-border);
     transition: all 0.2s;
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 800px;
 }
 
-.input-wrapper:focus-within {
+.input-area:focus-within {
     border-color: var(--primary);
     background: rgba(255, 255, 255, 0.08);
 }
 
-input {
+textarea {
     flex: 1;
     background: transparent;
     border: none;
@@ -404,6 +410,9 @@ input {
     font-family: inherit;
     font-size: 15px;
     outline: none;
+    resize: none;
+    padding: 10px 0;
+    line-height: 1.5;
 }
 
 #send-btn {
