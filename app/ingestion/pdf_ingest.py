@@ -120,6 +120,7 @@ def ingest_pdfs(force_fresh: bool = False):
     total_chunks = len(splitted_docs)
     yield f"Generated {total_chunks} new chunks. Starting vectorization...\n"
 
+    # Create/Load vectorstore
     faiss_store = FAISSStore()
     vectorstore = faiss_store.load_index() # Load once
     
@@ -127,29 +128,39 @@ def ingest_pdfs(force_fresh: bool = False):
     total_batches = (total_chunks + batch_size - 1) // batch_size
     start_time = time.time()
     
-    for i in range(0, total_chunks, batch_size):
-        current_batch_num = i // batch_size + 1
-        batch_msg = f"Ingesting batch {current_batch_num}/{total_batches} (Chunks {i+1}-{min(i+batch_size, total_chunks)})"
-        
-        update_status("running", current=current_batch_num, total=total_batches, message=batch_msg, start_time=start_time)
-        yield f"{batch_msg}\n"
-        
-        batch = splitted_docs[i:i + batch_size]
-        
-        # Add documents to memory
+    try:
+        for i in range(0, total_chunks, batch_size):
+            current_batch_num = i // batch_size + 1
+            batch_msg = f"Ingesting batch {current_batch_num}/{total_batches} (Chunks {i+1}-{min(i+batch_size, total_chunks)})"
+            
+            update_status("running", current=current_batch_num, total=total_batches, message=batch_msg, start_time=start_time)
+            yield f"{batch_msg}\n"
+            
+            batch = splitted_docs[i:i + batch_size]
+            
+            # Add documents to memory
+            if vectorstore:
+                vectorstore.add_documents(batch)
+            else:
+                from langchain_community.vectorstores import FAISS
+                vectorstore = FAISS.from_documents(batch, faiss_store.embeddings)
+            
+            # checkpoint every 5 batches to avoid total loss on crash
+            if current_batch_num % 5 == 0:
+                yield "Saving checkpoint...\n"
+                faiss_store.save_index(vectorstore)
+
+        # Update metadata for processed files
+        for pdf_path, file_id in processed_files_metadata:
+            tracking_data[pdf_path] = file_id
+        save_tracking_data(tracking_data)
+
+        success_msg = f"SUCCESS: Ingested {total_chunks} chunks from {len(processed_files_metadata)} files."
+        update_status("completed", message=success_msg)
+        yield f"{success_msg}\n"
+
+    finally:
+        # Always attempt to save at the end, even if interrupted
         if vectorstore:
-            vectorstore.add_documents(batch)
-        else:
-            from langchain_community.vectorstores import FAISS
-            vectorstore = FAISS.from_documents(batch, faiss_store.embeddings)
-
-    # Save once at the end
-    faiss_store.save_index(vectorstore)
-
-    for pdf_path, file_id in processed_files_metadata:
-        tracking_data[pdf_path] = file_id
-    save_tracking_data(tracking_data)
-
-    success_msg = f"SUCCESS: Ingested {total_chunks} chunks from {len(processed_files_metadata)} files."
-    update_status("completed", message=success_msg)
-    yield f"{success_msg}\n"
+            yield "Finalizing index save...\n"
+            faiss_store.save_index(vectorstore)

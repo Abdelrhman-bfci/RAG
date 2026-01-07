@@ -27,7 +27,7 @@ def get_rag_chain():
             
         def invoke(self, query):
             # 1. Broad vector search (increase k to ensure we find sparse website content)
-            initial_docs = self.vectorstore.similarity_search(query, k=100)
+            initial_docs = self.vectorstore.similarity_search(query, k=200)
             
             # 2. Extract priority terms
             keywords = [w.lower() for w in query.split() if len(w) > 3]
