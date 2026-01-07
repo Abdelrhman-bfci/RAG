@@ -291,6 +291,9 @@
             const saveSettings = document.getElementById('save-settings-btn');
 
             const openSettingsModal = async () => {
+                // Ensure mutual exclusion
+                if (dbModal) dbModal.style.display = 'none';
+
                 settingsModal.style.display = 'block';
                 await loadModels();
             };
@@ -380,7 +383,12 @@
             const freshStreamBtn = document.getElementById('fresh-stream-btn');
 
             // Open/Close Modal
-            const openDbModal = () => { dbModal.style.display = 'block'; };
+            const openDbModal = () => {
+                // Ensure mutual exclusion
+                if (settingsModal) settingsModal.style.display = 'none';
+
+                dbModal.style.display = 'block';
+            };
 
             dbBtn.onclick = openDbModal;
             settingsBtn.onclick = openSettingsModal;
