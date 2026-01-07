@@ -124,7 +124,7 @@ def ingest_pdfs(force_fresh: bool = False):
     faiss_store = FAISSStore()
     vectorstore = faiss_store.load_index() # Load once
     
-    batch_size = 100 # Increased from 10
+    batch_size = 20 # Reduced from 100 to prevent OOM
     total_batches = (total_chunks + batch_size - 1) // batch_size
     start_time = time.time()
     
