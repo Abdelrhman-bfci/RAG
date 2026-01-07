@@ -182,11 +182,14 @@ def stream_answer(question: str):
             "retrieval": f"{retrieval_time:.1f}s"
         }
         
+        current_model = Config.OLLAMA_LLM_MODEL if Config.LLM_PROVIDER == "ollama" else Config.LLM_MODEL
+        
         yield json.dumps({
             "type": "metadata", 
             "sources": sources, 
             "performance": performance,
-            "tokens": estimated_tokens
+            "tokens": estimated_tokens,
+            "model": current_model
         }) + "\n"
         
         yield json.dumps({"type": "done"}) + "\n"

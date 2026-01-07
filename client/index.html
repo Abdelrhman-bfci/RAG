@@ -21,11 +21,41 @@
                 <div class="icon">🤖</div>
                 <h1>ASU Engineering <span>Assistant</span></h1>
             </div>
-            <div class="status-indicator">
-                <span class="status-dot"></span>
-                <span class="status-text">Connected</span>
+            <div class="header-actions">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Connected</span>
+                </div>
+                <button id="settings-btn" title="Model Settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                        </path>
+                    </svg>
+                </button>
             </div>
         </header>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Model Settings</h3>
+                    <span class="close-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <label for="model-select">Current Ollama Model:</label>
+                    <select id="model-select">
+                        <option value="">Loading models...</option>
+                    </select>
+                    <p class="helper-text">Select a model from your local Ollama instance.</p>
+                </div>
+                <div class="modal-footer">
+                    <button id="save-settings" class="primary-btn">Save Changes</button>
+                </div>
+            </div>
+        </div>
 
         <main id="chat-container">
             <div class="welcome-message">
@@ -133,6 +163,7 @@
                                 metaDiv.className = 'message-meta';
 
                                 const stats = [
+                                    { label: 'Model', value: data.model, icon: 'fa-robot' },
                                     { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
                                     { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
                                     { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
@@ -177,6 +208,73 @@
         userInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
+
+        // Settings Modal Logic
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const closeModal = document.querySelector('.close-modal');
+        const modelSelect = document.getElementById('model-select');
+        const saveSettings = document.getElementById('save-settings');
+
+        settingsBtn.onclick = async () => {
+            settingsModal.style.display = 'block';
+            await loadModels();
+        }
+
+        closeModal.onclick = () => {
+            settingsModal.style.display = 'none';
+        }
+
+        window.onclick = (event) => {
+            if (event.target == settingsModal) {
+                settingsModal.style.display = 'none';
+            }
+        }
+
+        async function loadModels() {
+            try {
+                const response = await fetch(`${API_BASE}/models/ollama`);
+                const data = await response.json();
+
+                modelSelect.innerHTML = '';
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.text = model;
+                    if (model === data.current) option.selected = true;
+                    modelSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load models:', error);
+                modelSelect.innerHTML = '<option value="">Error loading models</option>';
+            }
+        }
+
+        saveSettings.onclick = async () => {
+            const selectedModel = modelSelect.value;
+            if (!selectedModel) return;
+
+            saveSettings.innerText = 'Saving...';
+            saveSettings.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/config/update_model`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: selectedModel })
+                });
+
+                if (response.ok) {
+                    settingsModal.style.display = 'none';
+                    alert(`Model switched to ${selectedModel}`);
+                }
+            } catch (error) {
+                alert('Failed to update model settings');
+            } finally {
+                saveSettings.innerText = 'Save Changes';
+                saveSettings.disabled = false;
+            }
+        }
     </script>
 </body>
 

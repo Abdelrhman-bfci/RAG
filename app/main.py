@@ -31,7 +31,23 @@ app.mount("/client", StaticFiles(directory="client"), name="client")
 class QuestionRequest(BaseModel):
     question: str
 
+class ModelUpdateRequest(BaseModel):
+    model: str
+
 # --- Endpoints ---
+
+@app.get("/models/ollama")
+async def list_ollama_models():
+    """List available Ollama models."""
+    from app.config import Config
+    return {"models": Config.get_ollama_models(), "current": Config.OLLAMA_LLM_MODEL}
+
+@app.post("/config/update_model")
+async def update_llm_model(request: ModelUpdateRequest):
+    """Update the current LLM model used for generation."""
+    from app.config import Config
+    Config.update_model(request.model)
+    return {"status": "success", "model": Config.OLLAMA_LLM_MODEL}
 
 @app.post("/ask")
 async def ask_question(request: QuestionRequest):

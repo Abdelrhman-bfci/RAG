@@ -42,5 +42,25 @@ class Config:
     OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "llama3.2")
     OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
 
+    @classmethod
+    def get_ollama_models(cls):
+        """Fetch available models from Ollama API."""
+        import requests
+        try:
+            response = requests.get(f"{cls.OLLAMA_BASE_URL}/api/tags", timeout=5)
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                return [m["name"] for m in models]
+        except:
+            pass
+        return [cls.OLLAMA_LLM_MODEL]
+
+    @classmethod
+    def update_model(cls, model_name: str):
+        """Update the current LLM model."""
+        cls.OLLAMA_LLM_MODEL = model_name
+        # Optional: persist to .env if needed, but for now just in-memory
+        return True
+
 if Config.LLM_PROVIDER == "openai" and not Config.OPENAI_API_KEY:
     print("WARNING: OPENAI_API_KEY is not set.")
