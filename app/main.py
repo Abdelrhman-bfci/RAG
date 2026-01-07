@@ -33,6 +33,7 @@ app.mount("/client", StaticFiles(directory="client"), name="client")
 # --- Pydantic Models ---
 class QuestionRequest(BaseModel):
     question: str
+    deep_thinking: bool = False
 
 class ModelUpdateRequest(BaseModel):
     model: str
@@ -78,7 +79,7 @@ async def ask_question(request: QuestionRequest):
         except:
             pass
 
-    result = answer_question(request.question)
+    result = answer_question(request.question, deep_thinking=request.deep_thinking)
     
     if "error" in result:
         return {"question": request.question, "answer": result["error"] + status_msg}
@@ -91,7 +92,7 @@ async def ask_question(request: QuestionRequest):
     }
 
 @app.get("/ask/stream")
-async def ask_question_stream(question: str):
+async def ask_question_stream(question: str, deep_thinking: bool = False):
     """
     Answer a question using the RAG system with streaming.
     """
@@ -99,7 +100,7 @@ async def ask_question_stream(question: str):
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
     return StreamingResponse(
-        stream_answer(question), 
+        stream_answer(question, deep_thinking=deep_thinking), 
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

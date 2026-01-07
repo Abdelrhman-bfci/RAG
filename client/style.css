@@ -659,6 +659,53 @@ header {
 }
 
 /* Input Area Fixes */
+.mode-selector {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    width: fit-content;
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+}
+
+.mode-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mode-btn i {
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+.mode-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-btn.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.mode-btn.active i {
+    opacity: 1;
+}
+
 .input-area-wrapper {
     position: absolute;
     bottom: 30px;
@@ -834,6 +881,7 @@ textarea {
 .source-badge:hover {
     background: rgba(99, 102, 241, 0.2);
 }
+
 /* Responsive Design */
 .mobile-only-btn {
     display: none;
@@ -859,7 +907,7 @@ textarea {
         width: 280px;
         background: rgba(15, 23, 42, 0.95);
         z-index: 1000;
-        box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+        box-shadow: 20px 0 50px rgba(0, 0, 0, 0.5);
     }
 
     .sidebar.mobile-active {

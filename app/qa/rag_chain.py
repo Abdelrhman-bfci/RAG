@@ -9,7 +9,46 @@ import time
 import traceback
 import json
 
-def get_rag_chain():
+# --- Prompt Templates ---
+STRICT_RAG_PROMPT = ChatPromptTemplate.from_template("""
+    You are a highly precise legal/academic assistant.
+    Your goal is to answer questions strictly based on the provided context.
+    
+    STRICT RULES:
+    1. Answer ONLY using the information from the Context below.
+    2. If the answer is not explicitly found in the Context, you MUST say "I cannot answer this based on the provided documents."
+    3. Do NOT make assumptions or use outside knowledge.
+    4. Cite the document name if possible.
+    
+    Context:
+    {context}
+    
+    Question: {question}
+    
+    Answer:
+""")
+
+DEEP_THINKING_PROMPT = ChatPromptTemplate.from_template("""
+    You are an expert academic analyst and research assistant.
+    Your goal is to provide a comprehensive, analytical summary and deep insights based on the provided documents.
+    
+    INSTRUCTIONS:
+    1. Synthesize information from multiple parts of the Context to provide a detailed, well-structured answer.
+    2. Use professional, academic language.
+    3. If the Context contains conflicting information, highlight it.
+    4. Provide an "Analytical Summary" section followed by "Key Details".
+    5. Cite sources for major points using [Source Name].
+    6. If the information is missing, clearly state what is unknown while summarizing what IS available.
+    
+    Context:
+    {context}
+    
+    Question: {question}
+    
+    Analytical Response:
+""")
+
+def get_rag_chain(deep_thinking: bool = False):
     """
     Creates and returns the RAG chain for Question Answering.
     """
@@ -56,37 +95,21 @@ def get_rag_chain():
 
     retriever = HybridRetriever(vectorstore)
 
-    # 2. Define the Prompt (Strict Grounding)
-    prompt = ChatPromptTemplate.from_template("""
-        You are a highly precise legal/academic assistant.
-        Your goal is to answer questions strictly based on the provided context.
-        
-        STRICT RULES:
-        1. Answer ONLY using the information from the Context below.
-        2. If the answer is not explicitly found in the Context, you MUST say "I cannot answer this based on the provided documents."
-        3. Do NOT make assumptions, hallucinate, or use outside knowledge.
-        4. Cite the document name if possible when referencing specific details.
-        
-        Context:
-        {context}
-        
-        Question: {question}
-        
-        Answer:
-    """)
+    # 2. Select Prompt
+    prompt = DEEP_THINKING_PROMPT if deep_thinking else STRICT_RAG_PROMPT
 
     # 3. Initialize LLM
     if Config.LLM_PROVIDER == "ollama":
         llm = ChatOllama(
             base_url=Config.OLLAMA_BASE_URL,
             model=Config.OLLAMA_LLM_MODEL,
-            temperature=0.1,
+            temperature=0.2 if deep_thinking else 0.1,
             num_ctx=Config.OLLAMA_CONTEXT_WINDOW
         )
     else:
         llm = ChatOpenAI(
             model=Config.LLM_MODEL,
-            temperature=0.1, # strict factual answers
+            temperature=0.2 if deep_thinking else 0.1,
             openai_api_key=Config.OPENAI_API_KEY
         )
 
@@ -110,13 +133,13 @@ def get_rag_chain():
 
     return rag_chain, retriever
 
-def answer_question(question: str):
+def answer_question(question: str, deep_thinking: bool = False):
     """
     Entry point to answer a question with performance metrics and source citations.
     """
     start_total = time.time()
     try:
-        chain, retriever = get_rag_chain()
+        chain, retriever = get_rag_chain(deep_thinking=deep_thinking)
         
         # 1. Retrieve documents manually to get metadata for citations
         docs = retriever.invoke(question)
@@ -143,14 +166,14 @@ def answer_question(question: str):
         print(f"DEBUG ERROR: {traceback.format_exc()}")
         return {"error": f"An unexpected error occurred: {str(e)}"}
 
-def stream_answer(question: str):
+def stream_answer(question: str, deep_thinking: bool = False):
     """
     Entry point to stream chunks of the LLM response.
     Yields JSON strings containing either chunks or final metadata.
     """
     start_total = time.time()
     try:
-        chain, retriever = get_rag_chain()
+        chain, retriever = get_rag_chain(deep_thinking=deep_thinking)
         
         # 1. Pre-retrieve docs just to get sources early (optional but better for UX)
         start_retrieval = time.time()
