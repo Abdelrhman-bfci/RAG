@@ -14,6 +14,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
   - Answers **ONLY** from the retrieved context.
   - Responds with "I don't know based on the provided data" if the answer is missing.
 - **Vector Search**: Uses local FAISS index for fast and private similarity search.
+- **Streaming Chat UI**: Premium real-time chat interface with glassmorphism design.
 - **API First**: Fully documented FastAPI endpoints.
 
 ## 🛠️ Tech Stack
@@ -94,7 +95,10 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
    }
    ```
 
-4. **API Documentation**:
+4. **Chat Interface**:
+   Access the premium real-time chat UI at `http://localhost:80/client/index.html`.
+
+5. **API Documentation**:
    Visit `http://localhost:80/docs` for interactive Swagger UI.
 
 ## 📂 Project Structure

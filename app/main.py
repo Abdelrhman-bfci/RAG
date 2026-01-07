@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
@@ -10,7 +11,7 @@ import os
 from app.ingestion.pdf_ingest import ingest_pdfs
 from app.ingestion.db_ingest import ingest_database
 from app.ingestion.web_ingest import ingest_websites
-from app.qa.rag_chain import answer_question
+from app.qa.rag_chain import answer_question, stream_answer
 
 app = FastAPI(title="RAG System API", description="PDF & SQL RAG with Strict Context Control")
 
@@ -22,6 +23,9 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# --- Static Files ---
+app.mount("/client", StaticFiles(directory="client"), name="client")
 
 # --- Pydantic Models ---
 class QuestionRequest(BaseModel):
@@ -67,13 +71,38 @@ async def ask_question(request: QuestionRequest):
         "performance": result["performance"]
     }
 
+@app.get("/ask/stream")
+async def ask_question_stream(question: str):
+    """
+    Answer a question using the RAG system with streaming.
+    """
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+    
+    return StreamingResponse(
+        stream_answer(question), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
 @app.get("/ingest/pdf/stream")
 async def stream_pdf_ingestion(fresh: bool = False):
     """
     Stream PDF ingestion progress in real-time.
     - Set fresh=true to clear the index first.
     """
-    return StreamingResponse(ingest_pdfs(force_fresh=fresh), media_type="text/plain")
+    return StreamingResponse(
+        ingest_pdfs(force_fresh=fresh), 
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.post("/ingest/pdf")
 async def trigger_pdf_ingestion(background_tasks: BackgroundTasks):
@@ -118,7 +147,14 @@ async def stream_web_ingestion(fresh: bool = False):
     Stream Website ingestion progress in real-time.
     - Set fresh=true to clear tracking for configured links.
     """
-    return StreamingResponse(ingest_websites(force_fresh=fresh), media_type="text/plain")
+    return StreamingResponse(
+        ingest_websites(force_fresh=fresh), 
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.post("/ingest/web")
 async def trigger_web_ingestion(background_tasks: BackgroundTasks):
@@ -134,7 +170,11 @@ async def trigger_web_ingestion(background_tasks: BackgroundTasks):
 
 @app.get("/")
 def read_root():
-    return {"message": "RAG System is running. Use /docs to see API."}
+    return {
+        "message": "RAG System is running.",
+        "api_docs": "/docs",
+        "chat_interface": "/client/index.html"
+    }
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=80, reload=True)

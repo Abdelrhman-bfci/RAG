@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASU Engineering RAG Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <div class="icon">🤖</div>
+                <h1>ASU Engineering <span>Assistant</span></h1>
+            </div>
+            <div class="status-indicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Connected</span>
+            </div>
+        </header>
+
+        <main id="chat-container">
+            <div class="welcome-message">
+                <div class="bot-avatar">AI</div>
+                <h2>How can I help you today?</h2>
+                <p>I can help you with information about ASU Engineering bylaws, departments, and programs.</p>
+                <div class="suggested-queries">
+                    <button onclick="setQuery('What are the available departments?')">Available departments</button>
+                    <button onclick="setQuery('Tell me about the bylaws.')">Bylaws info</button>
+                    <button onclick="setQuery('What are the program requirements?')">Program requirements</button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="input-wrapper">
+                <input type="text" id="user-input" placeholder="Type your question here..." autocomplete="off">
+                <button id="send-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+            <p class="disclaimer">Retrieved from official ASU Engineering documents and website.</p>
+        </footer>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const API_BASE = "http://localhost:80"; // Adjust if necessary
+
+        function setQuery(query) {
+            userInput.value = query;
+            sendMessage();
+        }
+
+        function addMessage(content, isUser = false) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'avatar';
+            avatar.innerText = isUser ? '👤' : 'AI';
+            
+            const textDiv = document.createElement('div');
+            textDiv.className = 'text';
+            textDiv.innerText = content;
+            
+            msgDiv.appendChild(avatar);
+            msgDiv.appendChild(textDiv);
+            chatContainer.appendChild(msgDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return textDiv;
+        }
+
+        async function sendMessage() {
+            const question = userInput.value.trim();
+            if (!question) return;
+
+            userInput.value = '';
+            addMessage(question, true);
+
+            const botTextDiv = addMessage('', false);
+            botTextDiv.innerHTML = '<span class="typing">Thinking...</span>';
+
+            try {
+                const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}`);
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let accumulatedAnswer = '';
+                
+                botTextDiv.innerHTML = ''; // Clear thinking state
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.type === 'sources') {
+                                // Optional: display sources separately
+                                console.log('Sources:', data.sources);
+                            } else if (data.type === 'chunk') {
+                                accumulatedAnswer += data.content;
+                                botTextDiv.innerText = accumulatedAnswer;
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            } else if (data.type === 'error') {
+                                botTextDiv.innerText = `Error: ${data.content}`;
+                            }
+                        } catch (e) {
+                            console.error('Error parsing JSON chunk', e);
+                        }
+                    }
+                }
+            } catch (error) {
+                botTextDiv.innerText = `Error: ${error.message}`;
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>

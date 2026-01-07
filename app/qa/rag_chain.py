@@ -7,6 +7,7 @@ from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
 import time
 import traceback
+import json
 
 def get_rag_chain():
     """
@@ -139,3 +140,30 @@ def answer_question(question: str):
     except Exception as e:
         print(f"DEBUG ERROR: {traceback.format_exc()}")
         return {"error": f"An unexpected error occurred: {str(e)}"}
+
+def stream_answer(question: str):
+    """
+    Entry point to stream chunks of the LLM response.
+    Yields JSON strings containing either chunks or final metadata.
+    """
+    try:
+        chain, retriever = get_rag_chain()
+        
+        # 1. Pre-retrieve docs just to get sources early (optional but better for UX)
+        docs = retriever.invoke(question)
+        sources = sorted(list(set([doc.metadata.get("source", "Unknown") for doc in docs])))
+        
+        # Send sources first
+        yield json.dumps({"type": "sources", "sources": sources}) + "\n"
+        
+        # 2. Stream the chain
+        for chunk in chain.stream(question):
+            yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
+        
+        yield json.dumps({"type": "done"}) + "\n"
+
+    except ValueError as e:
+        yield json.dumps({"type": "error", "content": str(e)}) + "\n"
+    except Exception as e:
+        print(f"DEBUG ERROR: {traceback.format_exc()}")
+        yield json.dumps({"type": "error", "content": f"An unexpected error occurred: {str(e)}"}) + "\n"
