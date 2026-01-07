@@ -94,7 +94,7 @@
             addMessage(question, true);
 
             const botTextDiv = addMessage('', false);
-            botTextDiv.innerHTML = '<span class="typing">Thinking...</span>';
+            botTextDiv.innerHTML = '<div class="typing">AI Assistant is thinking...</div>';
 
             try {
                 const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}`);
@@ -126,6 +126,39 @@
                             } else if (data.type === 'chunk') {
                                 accumulatedAnswer += data.content;
                                 botTextDiv.innerText = accumulatedAnswer;
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            } else if (data.type === 'metadata') {
+                                // Add performance metrics and sources
+                                const metaDiv = document.createElement('div');
+                                metaDiv.className = 'message-meta';
+
+                                const stats = [
+                                    { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
+                                    { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
+                                    { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
+                                ];
+
+                                stats.forEach(stat => {
+                                    const item = document.createElement('div');
+                                    item.className = 'meta-item';
+                                    item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
+                                    metaDiv.appendChild(item);
+                                });
+
+                                if (data.sources && data.sources.length > 0) {
+                                    const sourceContainer = document.createElement('div');
+                                    sourceContainer.className = 'source-badges';
+                                    data.sources.forEach(src => {
+                                        const badge = document.createElement('span');
+                                        badge.className = 'source-badge';
+                                        badge.innerText = src.startsWith('http') ? new URL(src).hostname : src.split('/').pop();
+                                        badge.title = src;
+                                        sourceContainer.appendChild(badge);
+                                    });
+                                    metaDiv.appendChild(sourceContainer);
+                                }
+
+                                botTextDiv.appendChild(metaDiv);
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
                             } else if (data.type === 'error') {
                                 botTextDiv.innerText = `Error: ${data.content}`;

@@ -146,19 +146,48 @@ def stream_answer(question: str):
     Entry point to stream chunks of the LLM response.
     Yields JSON strings containing either chunks or final metadata.
     """
+    start_total = time.time()
     try:
         chain, retriever = get_rag_chain()
         
         # 1. Pre-retrieve docs just to get sources early (optional but better for UX)
+        start_retrieval = time.time()
         docs = retriever.invoke(question)
+        end_retrieval = time.time()
+        
         sources = sorted(list(set([doc.metadata.get("source", "Unknown") for doc in docs])))
         
         # Send sources first
         yield json.dumps({"type": "sources", "sources": sources}) + "\n"
         
         # 2. Stream the chain
+        start_llm = time.time()
+        accumulated_text = ""
         for chunk in chain.stream(question):
+            accumulated_text += chunk
             yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
+        
+        end_time = time.time()
+        
+        total_time = end_time - start_total
+        llm_time = end_time - start_llm
+        retrieval_time = end_retrieval - start_retrieval
+        
+        # Simple token estimation (approx 4 chars per token)
+        estimated_tokens = len(accumulated_text) // 4
+        
+        performance = {
+            "total": f"{total_time:.1f}s",
+            "llm": f"{llm_time:.1f}s",
+            "retrieval": f"{retrieval_time:.1f}s"
+        }
+        
+        yield json.dumps({
+            "type": "metadata", 
+            "sources": sources, 
+            "performance": performance,
+            "tokens": estimated_tokens
+        }) + "\n"
         
         yield json.dumps({"type": "done"}) + "\n"
 
