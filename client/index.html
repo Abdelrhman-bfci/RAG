@@ -21,6 +21,9 @@
             <div class="sidebar-header">
                 <div class="icon">🤖</div>
                 <h1>ASU <span>RAG</span></h1>
+                <button id="close-sidebar" class="mobile-only-btn">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
 
             <nav class="nav-links">
@@ -50,8 +53,11 @@
         <main class="main-content">
             <header>
                 <div class="status-indicator">
+                    <button id="menu-toggle" class="mobile-only-btn">
+                        <i class="fas fa-bars"></i>
+                    </button>
                     <span class="status-dot"></span>
-                    <span class="status-text">Connected to RAG Engine</span>
+                    <span class="status-text">Connected</span>
                 </div>
                 <div class="header-actions">
                     <button id="db-btn" class="icon-btn" title="Database Management">
@@ -284,19 +290,13 @@
             const modelSelect = document.getElementById('model-select');
             const saveSettings = document.getElementById('save-settings-btn');
 
-            settingsBtn.onclick = async () => {
+            const openSettingsModal = async () => {
                 settingsModal.style.display = 'block';
                 await loadModels();
-            }
+            };
 
             closeModal.onclick = () => {
                 settingsModal.style.display = 'none';
-            }
-
-            window.onclick = (event) => {
-                if (event.target == settingsModal) {
-                    settingsModal.style.display = 'none';
-                }
             }
 
             async function loadModels() {
@@ -381,7 +381,6 @@
 
             // Open/Close Modal
             const openDbModal = () => { dbModal.style.display = 'block'; };
-            const openSettingsModal = () => { settingsModal.style.display = 'block'; };
 
             dbBtn.onclick = openDbModal;
             settingsBtn.onclick = openSettingsModal;
@@ -528,13 +527,36 @@
             streamBtn.addEventListener('click', () => startIngestionStream(false));
             freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
 
-            // Update window click handler to close both modals
+            // Mobile Sidebar Toggle Logic
+            const menuToggle = document.getElementById('menu-toggle');
+            const closeSidebar = document.getElementById('close-sidebar');
+            const sidebar = document.querySelector('.sidebar');
+
+            menuToggle.onclick = () => {
+                sidebar.classList.add('mobile-active');
+            };
+
+            closeSidebar.onclick = () => {
+                sidebar.classList.remove('mobile-active');
+            };
+
+            // Close sidebar when clicking a nav item on mobile
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    sidebar.classList.remove('mobile-active');
+                });
+            });
+
+            // Update window click handler to close both modals AND sidebar
             window.onclick = (event) => {
                 if (event.target == settingsModal) {
                     settingsModal.style.display = 'none';
                 }
                 if (event.target == dbModal) {
                     dbModal.style.display = 'none';
+                }
+                if (event.target == sidebar && sidebar.classList.contains('mobile-active')) {
+                    sidebar.classList.remove('mobile-active');
                 }
             }
         </script>
