@@ -11,7 +11,7 @@
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
@@ -25,15 +25,16 @@
                 <div class="status-indicator">
                     <span class="status-dot"></span>
                     <span class="status-text">Connected</span>
-                    <!-- Database Management Button -->
-                    <button id="db-btn" class="icon-btn" title="Database Management">
-                        <i class="fas fa-database"></i>
-                    </button>
-                    <!-- Settings Button -->
-                    <button id="settings-btn" class="icon-btn" title="Settings">
-                        <i class="fas fa-cog"></i>
-                    </button>
                 </div>
+                <!-- Database Management Button -->
+                <button id="db-btn" class="icon-btn" title="Database Management">
+                    <i class="fas fa-database"></i>
+                </button>
+                <!-- Settings Button -->
+                <button id="settings-btn" class="icon-btn" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
         </header>
 
         <div id="stats-container">
@@ -45,6 +46,10 @@
             <div class="welcome-message">
                 <h2><i class="fas fa-robot"></i> RAG Assistant Ready</h2>
                 <p>Ask me anything about your documents.</p>
+                <div class="suggested-queries">
+                    <button onclick="setQuery('What are the available departments?')">Available departments</button>
+                    <button onclick="setQuery('Tell me about the bylaws.')">Bylaws info</button>
+                </div>
             </div>
         </div>
 
@@ -66,391 +71,416 @@
                     <select id="model-select">
                         <option value="" disabled selected>Loading models...</option>
                     </select>
-                    <h2>How can I help you today?</h2>
-                    <p>I can help you with information about ASU Engineering bylaws, departments, and programs.</p>
-                    <div class="suggested-queries">
-                        <button onclick="setQuery('What are the available departments?')">Available departments</button>
-                        <button onclick="setQuery('Tell me about the bylaws.')">Bylaws info</button>
-                        <button onclick="setQuery('What are the program requirements?')">Program requirements</button>
-                    </div>
+                    <p class="setting-hint">Select the local LLM to use for generation.</p>
                 </div>
-                </main>
 
-                <footer>
-                    <div class="input-wrapper">
-                        <input type="text" id="user-input" placeholder="Type your question here..." autocomplete="off">
-                        <button id="send-btn">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="22" y1="2" x2="11" y2="13"></line>
-                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                            </svg>
+                <div class="modal-actions">
+                    <button id="save-settings-btn" class="primary-btn">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Modal -->
+        <div id="db-modal" class="modal">
+            <div class="modal-content wide-modal">
+                <span class="close-db-btn">&times;</span>
+                <h2><i class="fas fa-server"></i> Database Management</h2>
+
+                <!-- Section 1: Upload -->
+                <div class="db-section">
+                    <h3>1. Upload Resource</h3>
+                    <div class="upload-zone" id="upload-zone">
+                        <input type="file" id="file-input" accept=".pdf" hidden>
+                        <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop PDF here or <a href="#"
+                                id="browse-btn">Browse</a></p>
+                        <span id="file-name-display"></span>
+                    </div>
+                    <button id="upload-btn" class="action-btn" disabled>Upload File</button>
+                </div>
+
+                <!-- Section 2: Ingestion Controls -->
+                <div class="db-section">
+                    <h3>2. Ingestion Operations</h3>
+                    <div class="button-group">
+                        <button id="stream-btn" class="action-btn warning-btn">
+                            <i class="fas fa-sync"></i> Quick Sync (Update)
+                        </button>
+                        <button id="fresh-stream-btn" class="action-btn danger-btn">
+                            <i class="fas fa-hammer"></i> Fresh Build (Reset)
                         </button>
                     </div>
-                    <p class="disclaimer">Retrieved from official ASU Engineering documents and website.</p>
-                </footer>
+                </div>
+
+                <!-- Section 3: Live Logs -->
+                <div class="db-section">
+                    <h3>3. Live System Logs</h3>
+                    <div id="console-output" class="terminal-window">
+                        <span class="log-line system">> System ready. Waiting for command...</span>
+                    </div>
+                </div>
             </div>
+        </div>
 
-            <script>
-                const chatContainer = document.getElementById('chat-container');
-                const userInput = document.getElementById('user-input');
-                const sendBtn = document.getElementById('send-btn');
-                // Dynamically get the API base URL from the current window location
-                const API_BASE = window.location.origin;
+        <script>
+            const chatContainer = document.getElementById('chat-container');
+            const userInput = document.getElementById('user-input');
+            const sendBtn = document.getElementById('send-btn');
+            // Dynamically get the API base URL from the current window location
+            const API_BASE = window.location.origin;
 
-                function setQuery(query) {
-                    userInput.value = query;
-                    sendMessage();
-                }
+            function setQuery(query) {
+                userInput.value = query;
+                sendMessage();
+            }
 
-                function addMessage(content, isUser = false) {
-                    const msgDiv = document.createElement('div');
-                    msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            function addMessage(content, isUser = false) {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
 
-                    const avatar = document.createElement('div');
-                    avatar.className = 'avatar';
-                    avatar.innerText = isUser ? '👤' : 'AI';
+                const avatar = document.createElement('div');
+                avatar.className = 'avatar';
+                avatar.innerText = isUser ? '👤' : 'AI';
 
-                    const textDiv = document.createElement('div');
-                    textDiv.className = 'text';
-                    textDiv.innerText = content;
+                const textDiv = document.createElement('div');
+                textDiv.className = 'text';
+                textDiv.innerText = content;
 
-                    msgDiv.appendChild(avatar);
-                    msgDiv.appendChild(textDiv);
-                    chatContainer.appendChild(msgDiv);
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    return textDiv;
-                }
+                msgDiv.appendChild(avatar);
+                msgDiv.appendChild(textDiv);
+                chatContainer.appendChild(msgDiv);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                return textDiv;
+            }
 
-                async function sendMessage() {
-                    const question = userInput.value.trim();
-                    if (!question) return;
+            async function sendMessage() {
+                const question = userInput.value.trim();
+                if (!question) return;
 
-                    userInput.value = '';
-                    addMessage(question, true);
+                userInput.value = '';
+                addMessage(question, true);
 
-                    const botTextDiv = addMessage('', false);
-                    botTextDiv.innerHTML = '<div class="typing">AI Assistant is thinking...</div>';
+                const botTextDiv = addMessage('', false);
+                botTextDiv.innerHTML = '<div class="typing">AI Assistant is thinking...</div>';
 
-                    try {
-                        const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}`);
+                try {
+                    const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}`);
 
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok');
-                        }
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
 
-                        const reader = response.body.getReader();
-                        const decoder = new TextDecoder();
-                        let accumulatedAnswer = '';
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let accumulatedAnswer = '';
 
-                        botTextDiv.innerHTML = ''; // Clear thinking state
+                    botTextDiv.innerHTML = ''; // Clear thinking state
 
-                        while (true) {
-                            const { value, done } = await reader.read();
-                            if (done) break;
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
 
-                            const chunk = decoder.decode(value, { stream: true });
-                            const lines = chunk.split('\n');
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n');
 
-                            for (const line of lines) {
-                                if (!line.trim()) continue;
-                                try {
-                                    const data = JSON.parse(line);
-                                    if (data.type === 'sources') {
-                                        // Optional: display sources separately
-                                        console.log('Sources:', data.sources);
-                                    } else if (data.type === 'chunk') {
-                                        accumulatedAnswer += data.content;
-                                        botTextDiv.innerText = accumulatedAnswer;
-                                        chatContainer.scrollTop = chatContainer.scrollHeight;
-                                    } else if (data.type === 'metadata') {
-                                        // Add performance metrics and sources
-                                        const metaDiv = document.createElement('div');
-                                        metaDiv.className = 'message-meta';
+                        for (const line of lines) {
+                            if (!line.trim()) continue;
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.type === 'sources') {
+                                    // Optional: display sources separately
+                                    console.log('Sources:', data.sources);
+                                } else if (data.type === 'chunk') {
+                                    accumulatedAnswer += data.content;
+                                    botTextDiv.innerText = accumulatedAnswer;
+                                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                                } else if (data.type === 'metadata') {
+                                    // Add performance metrics and sources
+                                    const metaDiv = document.createElement('div');
+                                    metaDiv.className = 'message-meta';
 
-                                        const stats = [
-                                            { label: 'Model', value: data.model, icon: 'fa-robot' },
-                                            { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
-                                            { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
-                                            { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
-                                        ];
+                                    const stats = [
+                                        { label: 'Model', value: data.model, icon: 'fa-robot' },
+                                        { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
+                                        { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
+                                        { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
+                                    ];
 
-                                        stats.forEach(stat => {
-                                            const item = document.createElement('div');
-                                            item.className = 'meta-item';
-                                            item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
-                                            metaDiv.appendChild(item);
+                                    stats.forEach(stat => {
+                                        const item = document.createElement('div');
+                                        item.className = 'meta-item';
+                                        item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
+                                        metaDiv.appendChild(item);
+                                    });
+
+                                    if (data.sources && data.sources.length > 0) {
+                                        const sourceContainer = document.createElement('div');
+                                        sourceContainer.className = 'source-badges';
+                                        data.sources.forEach(src => {
+                                            const badge = document.createElement('span');
+                                            badge.className = 'source-badge';
+                                            badge.innerText = src.startsWith('http') ? new URL(src).hostname : src.split('/').pop();
+                                            badge.title = src;
+                                            sourceContainer.appendChild(badge);
                                         });
-
-                                        if (data.sources && data.sources.length > 0) {
-                                            const sourceContainer = document.createElement('div');
-                                            sourceContainer.className = 'source-badges';
-                                            data.sources.forEach(src => {
-                                                const badge = document.createElement('span');
-                                                badge.className = 'source-badge';
-                                                badge.innerText = src.startsWith('http') ? new URL(src).hostname : src.split('/').pop();
-                                                badge.title = src;
-                                                sourceContainer.appendChild(badge);
-                                            });
-                                            metaDiv.appendChild(sourceContainer);
-                                        }
-
-                                        botTextDiv.appendChild(metaDiv);
-                                        chatContainer.scrollTop = chatContainer.scrollHeight;
-                                    } else if (data.type === 'error') {
-                                        botTextDiv.innerText = `Error: ${data.content}`;
+                                        metaDiv.appendChild(sourceContainer);
                                     }
-                                } catch (e) {
-                                    console.error('Error parsing JSON chunk', e);
+
+                                    botTextDiv.appendChild(metaDiv);
+                                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                                } else if (data.type === 'error') {
+                                    botTextDiv.innerText = `Error: ${data.content}`;
                                 }
+                            } catch (e) {
+                                console.error('Error parsing JSON chunk', e);
                             }
                         }
-                    } catch (error) {
-                        botTextDiv.innerText = `Error: ${error.message}`;
                     }
+                } catch (error) {
+                    botTextDiv.innerText = `Error: ${error.message}`;
                 }
+            }
 
-                sendBtn.addEventListener('click', sendMessage);
-                userInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') sendMessage();
-                });
+            sendBtn.addEventListener('click', sendMessage);
+            userInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
 
-                // Settings Modal Logic
-                const settingsBtn = document.getElementById('settings-btn');
-                const settingsModal = document.getElementById('settings-modal');
-                const closeModal = document.querySelector('.close-modal');
-                const modelSelect = document.getElementById('model-select');
-                const saveSettings = document.getElementById('save-settings');
+            // Settings Modal Logic
+            const settingsBtn = document.getElementById('settings-btn');
+            const settingsModal = document.getElementById('settings-modal');
+            const closeModal = document.querySelector('.close-btn');
+            const modelSelect = document.getElementById('model-select');
+            const saveSettings = document.getElementById('save-settings-btn');
 
-                settingsBtn.onclick = async () => {
-                    settingsModal.style.display = 'block';
-                    await loadModels();
-                }
+            settingsBtn.onclick = async () => {
+                settingsModal.style.display = 'block';
+                await loadModels();
+            }
 
-                closeModal.onclick = () => {
+            closeModal.onclick = () => {
+                settingsModal.style.display = 'none';
+            }
+
+            window.onclick = (event) => {
+                if (event.target == settingsModal) {
                     settingsModal.style.display = 'none';
                 }
+            }
 
-                window.onclick = (event) => {
-                    if (event.target == settingsModal) {
-                        settingsModal.style.display = 'none';
-                    }
+            async function loadModels() {
+                try {
+                    const response = await fetch(`${API_BASE}/models/ollama`);
+                    const data = await response.json();
+
+                    modelSelect.innerHTML = '';
+                    data.models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model;
+                        option.text = model;
+                        if (model === data.current) option.selected = true;
+                        modelSelect.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Failed to load models:', error);
+                    modelSelect.innerHTML = '<option value="">Error loading models</option>';
                 }
+            }
 
-                async function loadModels() {
-                    try {
-                        const response = await fetch(`${API_BASE}/models/ollama`);
+            saveSettings.onclick = async () => {
+                const selectedModel = modelSelect.value;
+                if (!selectedModel) return;
+
+                saveSettings.innerText = 'Saving...';
+                saveSettings.disabled = true;
+
+                try {
+                    const response = await fetch(`${API_BASE}/config/update_model`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: selectedModel })
+                    });
+
+                    if (response.ok) {
+                        settingsModal.style.display = 'none';
+                        alert(`Model switched to ${selectedModel}`);
+                    }
+                } catch (error) {
+                    alert('Failed to update model settings');
+                } finally {
+                    saveSettings.innerText = 'Save Changes';
+                    saveSettings.disabled = false;
+                }
+            }
+            // ==========================================
+            // DATABASE & INGESTION LOGIC
+            // ==========================================
+            const dbModal = document.getElementById('db-modal');
+            const dbBtn = document.getElementById('db-btn');
+            const closeDbBtn = document.querySelector('.close-db-btn'); // Note: changed class in HTML
+            const fileInput = document.getElementById('file-input');
+            const uploadZone = document.getElementById('upload-zone');
+            const uploadBtn = document.getElementById('upload-btn');
+            const fileNameDisplay = document.getElementById('file-name-display');
+            const browseBtn = document.getElementById('browse-btn');
+            const consoleOutput = document.getElementById('console-output');
+            const streamBtn = document.getElementById('stream-btn');
+            const freshStreamBtn = document.getElementById('fresh-stream-btn');
+
+            // Open/Close Modal
+            dbBtn.addEventListener('click', () => {
+                dbModal.style.display = 'block';
+            });
+
+            closeDbBtn.addEventListener('click', () => {
+                dbModal.style.display = 'none';
+            });
+
+            // Close on outside click is handled by window.onclick below
+
+            // File Selection Logic
+            browseBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                fileInput.click();
+            });
+
+            uploadZone.addEventListener('click', (e) => {
+                if (e.target !== browseBtn) fileInput.click();
+            });
+
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.style.borderColor = 'var(--accent-color)';
+            });
+
+            uploadZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                uploadZone.style.borderColor = 'var(--border-color)';
+            });
+
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.style.borderColor = 'var(--border-color)';
+                if (e.dataTransfer.files.length) {
+                    handleFileSelect(e.dataTransfer.files[0]);
+                }
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (fileInput.files.length) {
+                    handleFileSelect(fileInput.files[0]);
+                }
+            });
+
+            let selectedFile = null;
+
+            function handleFileSelect(file) {
+                if (file.type !== 'application/pdf') {
+                    alert('Please upload a valid PDF file.');
+                    return;
+                }
+                selectedFile = file;
+                fileNameDisplay.textContent = `Selected: ${file.name}`;
+                uploadBtn.disabled = false;
+            }
+
+            // Upload Logic
+            uploadBtn.addEventListener('click', async () => {
+                if (!selectedFile) return;
+
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+
+                uploadBtn.disabled = true;
+                uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+
+                try {
+                    const response = await fetch(`${API_BASE}/upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
                         const data = await response.json();
-
-                        modelSelect.innerHTML = '';
-                        data.models.forEach(model => {
-                            const option = document.createElement('option');
-                            option.value = model;
-                            option.text = model;
-                            if (model === data.current) option.selected = true;
-                            modelSelect.appendChild(option);
-                        });
-                    } catch (error) {
-                        console.error('Failed to load models:', error);
-                        modelSelect.innerHTML = '<option value="">Error loading models</option>';
+                        alert('File uploaded successfully!');
+                        fileNameDisplay.textContent = '';
+                        selectedFile = null;
+                        logToConsole(`UPLOAD SUCCESS: ${data.message}`, 'success');
+                    } else {
+                        throw new Error('Upload failed');
                     }
-                }
-
-                saveSettings.onclick = async () => {
-                    const selectedModel = modelSelect.value;
-                    if (!selectedModel) return;
-
-                    saveSettings.innerText = 'Saving...';
-                    saveSettings.disabled = true;
-
-                    try {
-                        const response = await fetch(`${API_BASE}/config/update_model`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ model: selectedModel })
-                        });
-
-                        if (response.ok) {
-                            settingsModal.style.display = 'none';
-                            alert(`Model switched to ${selectedModel}`);
-                        }
-                    } catch (error) {
-                        alert('Failed to update model settings');
-                    } finally {
-                        saveSettings.innerText = 'Save Changes';
-                        saveSettings.disabled = false;
-                    }
-                }
-                // ==========================================
-                // DATABASE & INGESTION LOGIC
-                // ==========================================
-                const dbModal = document.getElementById('db-modal');
-                const dbBtn = document.getElementById('db-btn');
-                const closeDbBtn = document.querySelector('.close-db-btn'); // Note: changed class in HTML
-                const fileInput = document.getElementById('file-input');
-                const uploadZone = document.getElementById('upload-zone');
-                const uploadBtn = document.getElementById('upload-btn');
-                const fileNameDisplay = document.getElementById('file-name-display');
-                const browseBtn = document.getElementById('browse-btn');
-                const consoleOutput = document.getElementById('console-output');
-                const streamBtn = document.getElementById('stream-btn');
-                const freshStreamBtn = document.getElementById('fresh-stream-btn');
-
-                // Open/Close Modal
-                dbBtn.addEventListener('click', () => {
-                    dbModal.style.display = 'block';
-                });
-
-                closeDbBtn.addEventListener('click', () => {
-                    dbModal.style.display = 'none';
-                });
-
-                // Close on outside click is handled by window.onclick below
-
-                // File Selection Logic
-                browseBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    fileInput.click();
-                });
-
-                uploadZone.addEventListener('click', (e) => {
-                    if (e.target !== browseBtn) fileInput.click();
-                });
-
-                uploadZone.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    uploadZone.style.borderColor = 'var(--accent-color)';
-                });
-
-                uploadZone.addEventListener('dragleave', (e) => {
-                    e.preventDefault();
-                    uploadZone.style.borderColor = 'var(--border-color)';
-                });
-
-                uploadZone.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    uploadZone.style.borderColor = 'var(--border-color)';
-                    if (e.dataTransfer.files.length) {
-                        handleFileSelect(e.dataTransfer.files[0]);
-                    }
-                });
-
-                fileInput.addEventListener('change', (e) => {
-                    if (fileInput.files.length) {
-                        handleFileSelect(fileInput.files[0]);
-                    }
-                });
-
-                let selectedFile = null;
-
-                function handleFileSelect(file) {
-                    if (file.type !== 'application/pdf') {
-                        alert('Please upload a valid PDF file.');
-                        return;
-                    }
-                    selectedFile = file;
-                    fileNameDisplay.textContent = `Selected: ${file.name}`;
-                    uploadBtn.disabled = false;
-                }
-
-                // Upload Logic
-                uploadBtn.addEventListener('click', async () => {
-                    if (!selectedFile) return;
-
-                    const formData = new FormData();
-                    formData.append('file', selectedFile);
-
+                } catch (error) {
+                    alert('Error uploading file');
+                    logToConsole(`UPLOAD ERROR: ${error.message}`, 'error');
+                } finally {
                     uploadBtn.disabled = true;
-                    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+                    uploadBtn.textContent = 'Upload File';
+                }
+            });
 
-                    try {
-                        const response = await fetch(`${API_BASE}/upload`, {
-                            method: 'POST',
-                            body: formData
+            // Console Logging Helper
+            function logToConsole(message, type = 'info') {
+                const line = document.createElement('span');
+                line.className = `log-line ${type}`;
+                line.textContent = `> ${message}`;
+                consoleOutput.appendChild(line);
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            }
+
+            // Streaming Logic
+            async function startIngestionStream(fresh = false) {
+                const url = `${API_BASE}/ingest/pdf/stream${fresh ? '?fresh=true' : ''}`;
+
+                streamBtn.disabled = true;
+                freshStreamBtn.disabled = true;
+                logToConsole(fresh ? 'Starting FRESH build...' : 'Starting SYNC...', 'system');
+
+                try {
+                    const response = await fetch(url);
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+
+                        lines.forEach(line => {
+                            if (line.trim()) {
+                                // Check for error keywords
+                                let type = 'info';
+                                if (line.includes('ERROR') || line.includes('failed')) type = 'error';
+                                if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
+                                if (line.includes('WARNING')) type = 'warning';
+
+                                logToConsole(line, type);
+                            }
                         });
-
-                        if (response.ok) {
-                            const data = await response.json();
-                            alert('File uploaded successfully!');
-                            fileNameDisplay.textContent = '';
-                            selectedFile = null;
-                            logToConsole(`UPLOAD SUCCESS: ${data.message}`, 'success');
-                        } else {
-                            throw new Error('Upload failed');
-                        }
-                    } catch (error) {
-                        alert('Error uploading file');
-                        logToConsole(`UPLOAD ERROR: ${error.message}`, 'error');
-                    } finally {
-                        uploadBtn.disabled = true;
-                        uploadBtn.textContent = 'Upload File';
                     }
-                });
+                    logToConsole('Process finished.', 'system');
 
-                // Console Logging Helper
-                function logToConsole(message, type = 'info') {
-                    const line = document.createElement('span');
-                    line.className = `log-line ${type}`;
-                    line.textContent = `> ${message}`;
-                    consoleOutput.appendChild(line);
-                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                } catch (error) {
+                    logToConsole(`STREAM ERROR: ${error.message}`, 'error');
+                } finally {
+                    streamBtn.disabled = false;
+                    freshStreamBtn.disabled = false;
                 }
+            }
 
-                // Streaming Logic
-                async function startIngestionStream(fresh = false) {
-                    const url = `${API_BASE}/ingest/pdf/stream${fresh ? '?fresh=true' : ''}`;
+            streamBtn.addEventListener('click', () => startIngestionStream(false));
+            freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
 
-                    streamBtn.disabled = true;
-                    freshStreamBtn.disabled = true;
-                    logToConsole(fresh ? 'Starting FRESH build...' : 'Starting SYNC...', 'system');
-
-                    try {
-                        const response = await fetch(url);
-                        const reader = response.body.getReader();
-                        const decoder = new TextDecoder();
-
-                        while (true) {
-                            const { done, value } = await reader.read();
-                            if (done) break;
-
-                            const chunk = decoder.decode(value);
-                            const lines = chunk.split('\n');
-
-                            lines.forEach(line => {
-                                if (line.trim()) {
-                                    // Check for error keywords
-                                    let type = 'info';
-                                    if (line.includes('ERROR') || line.includes('failed')) type = 'error';
-                                    if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
-                                    if (line.includes('WARNING')) type = 'warning';
-
-                                    logToConsole(line, type);
-                                }
-                            });
-                        }
-                        logToConsole('Process finished.', 'system');
-
-                    } catch (error) {
-                        logToConsole(`STREAM ERROR: ${error.message}`, 'error');
-                    } finally {
-                        streamBtn.disabled = false;
-                        freshStreamBtn.disabled = false;
-                    }
+            // Update window click handler to close both modals
+            window.onclick = (event) => {
+                if (event.target == settingsModal) {
+                    settingsModal.style.display = 'none';
                 }
-
-                streamBtn.addEventListener('click', () => startIngestionStream(false));
-                freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
-
-                // Update window click handler to close both modals
-                window.onclick = (event) => {
-                    if (event.target == settingsModal) {
-                        settingsModal.style.display = 'none';
-                    }
-                    if (event.target == dbModal) {
-                        dbModal.style.display = 'none';
-                    }
+                if (event.target == dbModal) {
+                    dbModal.style.display = 'none';
                 }
-            </script>
+            }
+        </script>
 </body>
 
 </html>
