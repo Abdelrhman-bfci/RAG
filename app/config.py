@@ -19,8 +19,8 @@ class Config:
     DATABASE_URL = os.getenv("DATABASE_URL")
     
     # PDF Ingestion Settings
-    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "2000"))
-    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "500"))
+    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1100"))
+    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "180"))
 
     # Website Ingestion Settings
     _website_links_raw = os.getenv("WEBSITE_LINKS", "")

@@ -52,19 +52,20 @@ def get_rag_chain():
             
             # Order: Websites first, then keyword matches, then others
             combined = website_docs + priority_docs + other_docs
-            return combined[:30] 
+            return combined[:3] # Strict Top-K limit
 
     retriever = HybridRetriever(vectorstore)
 
-    # 2. Define the Prompt (More general and encouraging)
+    # 2. Define the Prompt (Strict Grounding)
     prompt = ChatPromptTemplate.from_template("""
-        You are a helpful and precise assistant for a university/organization.
-        Use the following pieces of retrieved context to answer the user's question.
+        You are a highly precise legal/academic assistant.
+        Your goal is to answer questions strictly based on the provided context.
         
-        Instructions:
-        1. If multiple sources (e.g., a PDF and a Website) talk about different things, prioritize the one that matches the specific entity in the user's question.
-        2. If the answer is not in the context, say "I don't know based on the provided resources". Do not make up information.
-        3. Be descriptive but concise.
+        STRICT RULES:
+        1. Answer ONLY using the information from the Context below.
+        2. If the answer is not explicitly found in the Context, you MUST say "I cannot answer this based on the provided documents."
+        3. Do NOT make assumptions, hallucinate, or use outside knowledge.
+        4. Cite the document name if possible when referencing specific details.
         
         Context:
         {context}
@@ -79,12 +80,12 @@ def get_rag_chain():
         llm = ChatOllama(
             base_url=Config.OLLAMA_BASE_URL,
             model=Config.OLLAMA_LLM_MODEL,
-            temperature=0
+            temperature=0.1
         )
     else:
         llm = ChatOpenAI(
             model=Config.LLM_MODEL,
-            temperature=0, # strict factual answers
+            temperature=0.1, # strict factual answers
             openai_api_key=Config.OPENAI_API_KEY
         )
 
