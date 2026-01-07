@@ -27,7 +27,7 @@ def get_rag_chain():
             
         def invoke(self, query):
             # 1. Broad vector search (increase k to ensure we find sparse website content)
-            initial_docs = self.vectorstore.similarity_search(query, k=200)
+            initial_docs = self.vectorstore.similarity_search(query, k=300)
             
             # 2. Extract priority terms
             keywords = [w.lower() for w in query.split() if len(w) > 3]
@@ -52,7 +52,7 @@ def get_rag_chain():
             
             # Order: Websites first, then keyword matches, then others
             combined = website_docs + priority_docs + other_docs
-            return combined[:3] # Strict Top-K limit
+            return combined[:30] # Increased Top-K to 30 (approx 12k tokens) for very large context synthesisf
 
     retriever = HybridRetriever(vectorstore)
 
@@ -80,7 +80,8 @@ def get_rag_chain():
         llm = ChatOllama(
             base_url=Config.OLLAMA_BASE_URL,
             model=Config.OLLAMA_LLM_MODEL,
-            temperature=0.1
+            temperature=0.1,
+            num_ctx=Config.OLLAMA_CONTEXT_WINDOW
         )
     else:
         llm = ChatOpenAI(

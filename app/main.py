@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse
+```python
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, UploadFile, File
+from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -7,11 +8,14 @@ from typing import Optional
 import uvicorn
 import json
 import os
+import shutil
+import asyncio
 
 from app.ingestion.pdf_ingest import ingest_pdfs
 from app.ingestion.db_ingest import ingest_database
 from app.ingestion.web_ingest import ingest_websites
 from app.qa.rag_chain import answer_question, stream_answer
+from app.config import Config # Assuming Config is needed for RESOURCE_DIR
 
 app = FastAPI(title="RAG System API", description="PDF & SQL RAG with Strict Context Control")
 
@@ -185,12 +189,28 @@ async def trigger_web_ingestion(background_tasks: BackgroundTasks):
     return {"status": "accepted", "message": "Website ingestion started in background"}
 
 @app.get("/")
-def read_root():
-    return {
-        "message": "RAG System is running.",
-        "api_docs": "/docs",
-        "chat_interface": "/client/index.html"
-    }
+async def get_chat_interface():
+    return FileResponse(os.path.join("client", "index.html"))
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """
+    Upload a file to the RESOURCE_DIR.
+    """
+    try:
+        if not os.path.exists(Config.RESOURCE_DIR):
+            os.makedirs(Config.RESOURCE_DIR)
+        
+        file_path = os.path.join(Config.RESOURCE_DIR, file.filename)
+        
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {"message": f"Successfully uploaded {file.filename}", "filepath": file_path}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Failed to upload file: {str(e)}"})
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=80, reload=True)
+```
