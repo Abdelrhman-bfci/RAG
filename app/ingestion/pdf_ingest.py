@@ -121,40 +121,41 @@ def ingest_pdfs(force_fresh: bool = False):
     yield f"Generated {total_chunks} new chunks. Starting vectorization...\n"
 
     # Create/Load vectorstore
+    # Create/Load vectorstore
     faiss_store = FAISSStore()
     vectorstore = faiss_store.load_index() # Load once
     
-    batch_size = 5 # Extremely reduced to prevent OOM on small servers
-    total_batches = (total_chunks + batch_size - 1) // batch_size
+    # PROCESS ONE CHUNK AT A TIME (Slowest but most stable)
+    total_chunks = len(splitted_docs)
     start_time = time.time()
     
     import gc
 
     try:
-        for i in range(0, total_chunks, batch_size):
-            current_batch_num = i // batch_size + 1
-            batch_msg = f"Ingesting batch {current_batch_num}/{total_batches} (Chunks {i+1}-{min(i+batch_size, total_chunks)})"
+        # We manually iterate to keep strict control
+        for i, doc in enumerate(splitted_docs):
+            current_num = i + 1
             
-            update_status("running", current=current_batch_num, total=total_batches, message=batch_msg, start_time=start_time)
-            yield f"{batch_msg}\n"
-            
-            # Explicitly force garbage collection before processing new batch
-            gc.collect() 
-            
-            batch = splitted_docs[i:i + batch_size]
-            
-            # Add documents to memory
+            # 1. Add single document
             if vectorstore:
-                vectorstore.add_documents(batch)
+                vectorstore.add_documents([doc])
             else:
                 from langchain_community.vectorstores import FAISS
-                vectorstore = FAISS.from_documents(batch, faiss_store.embeddings)
+                vectorstore = FAISS.from_documents([doc], faiss_store.embeddings)
             
-            # checkpoint every 10 batches (approx 50 chunks)
-            if current_batch_num % 10 == 0:
+            # 2. Yield progress every single chunk to keep connection alive
+            msg = f"Ingesting chunk {current_num}/{total_chunks}"
+            yield f"{msg}\n"
+            
+            # 3. Update status file less frequently to save I/O
+            if current_num % 10 == 0:
+                update_status("running", current=current_num, total=total_chunks, message=msg, start_time=start_time)
+                gc.collect() # Free RAM
+            
+            # 4. Checkpoint every 50 chunks (approx every minute)
+            if current_num % 50 == 0:
                 yield "Saving checkpoint...\n"
                 faiss_store.save_index(vectorstore)
-                time.sleep(0.5) # Cool down
 
         # Update metadata for processed files
         for pdf_path, file_id in processed_files_metadata:
@@ -166,7 +167,6 @@ def ingest_pdfs(force_fresh: bool = False):
         yield f"{success_msg}\n"
 
     finally:
-        # Always attempt to save at the end, even if interrupted
         if vectorstore:
             yield "Finalizing index save...\n"
             faiss_store.save_index(vectorstore)
