@@ -18,7 +18,7 @@ STRICT_RAG_PROMPT = ChatPromptTemplate.from_template("""
     1. Answer ONLY using the information from the Context below.
     2. If the answer is not explicitly found in the Context, you MUST say "I cannot answer this based on the provided documents."
     3. Do NOT make assumptions or use outside knowledge.
-    4. Cite the document name if possible.
+    4. CITE the document name AND page number for EVERY specific detail you provide (e.g., [Document.pdf, Page 5]).
     
     Context:
     {context}
@@ -37,7 +37,7 @@ DEEP_THINKING_PROMPT = ChatPromptTemplate.from_template("""
     2. Use professional, academic language.
     3. If the Context contains conflicting information, highlight it.
     4. Provide an "Analytical Summary" section followed by "Key Details".
-    5. Cite sources for major points using [Source Name].
+    5. CITE sources and page numbers for major points using [Source Name, Page X].
     6. If the information is missing, clearly state what is unknown while summarizing what IS available.
     
     Context:
@@ -115,12 +115,16 @@ def get_rag_chain(deep_thinking: bool = False):
 
     # 4. Construct the Chain
     def format_docs(docs):
-        # Simply return docs as ranked by retriever
-        sorted_docs = docs
-        
         context_parts = []
-        for i, doc in enumerate(sorted_docs):
-            context_parts.append(f"--- Document Chunk {i+1} ---\n{doc.page_content}")
+        for i, doc in enumerate(docs):
+            source = os.path.basename(doc.metadata.get("source", "Unknown"))
+            page = doc.metadata.get("page", "N/A")
+            # PyMuPDF uses 0-indexed pages, making it 1-indexed for the LLM/user
+            if isinstance(page, int):
+                page = page + 1
+            
+            header = f"--- Document: {source} | Page: {page} ---"
+            context_parts.append(f"{header}\n{doc.page_content}")
         
         return "\n\n".join(context_parts)
 

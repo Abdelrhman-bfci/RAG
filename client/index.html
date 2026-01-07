@@ -82,15 +82,13 @@
             </div>
 
             <div class="input-area-wrapper">
-                <div class="mode-selector">
-                    <button id="normal-mode" class="mode-btn active" title="Strict RAG Mode">
-                        <i class="fas fa-check-circle"></i> Normal
-                    </button>
-                    <button id="deep-thinking-mode" class="mode-btn" title="Deep Thinking Mode">
-                        <i class="fas fa-brain"></i> Deep Thinking
-                    </button>
-                </div>
                 <div class="input-area">
+                    <div class="mode-dropdown-container">
+                        <select id="chat-mode" class="mode-select-compact">
+                            <option value="normal">🔘 Normal</option>
+                            <option value="deep">🧠 Deep Thinking</option>
+                        </select>
+                    </div>
                     <textarea id="user-input" placeholder="Message RAG Assistant..." rows="1"></textarea>
                     <button id="send-btn">
                         <i class="fas fa-arrow-up"></i>
@@ -200,7 +198,8 @@
 
             async function sendMessage() {
                 const question = userInput.value.trim();
-                const isDeepThinking = document.getElementById('deep-thinking-mode').classList.contains('active');
+                const chatMode = document.getElementById('chat-mode').value;
+                const isDeepThinking = chatMode === 'deep';
 
                 if (!question) return;
 
@@ -544,20 +543,6 @@
 
             streamBtn.addEventListener('click', () => startIngestionStream(false));
             freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
-
-            // Mode Selector Toggle
-            const normalModeBtn = document.getElementById('normal-mode');
-            const deepThinkingBtn = document.getElementById('deep-thinking-mode');
-
-            normalModeBtn.onclick = () => {
-                normalModeBtn.classList.add('active');
-                deepThinkingBtn.classList.remove('active');
-            };
-
-            deepThinkingBtn.onclick = () => {
-                deepThinkingBtn.classList.add('active');
-                normalModeBtn.classList.remove('active');
-            };
 
             // Mobile Sidebar Toggle Logic
             const menuToggle = document.getElementById('menu-toggle');
