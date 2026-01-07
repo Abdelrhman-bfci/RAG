@@ -131,17 +131,24 @@ def ingest_pdfs(force_fresh: bool = False):
     
     import gc
 
+    import traceback
+    
     try:
         # We manually iterate to keep strict control
         for i, doc in enumerate(splitted_docs):
             current_num = i + 1
             
             # 1. Add single document
-            if vectorstore:
-                vectorstore.add_documents([doc])
-            else:
-                from langchain_community.vectorstores import FAISS
-                vectorstore = FAISS.from_documents([doc], faiss_store.embeddings)
+            try:
+                if vectorstore:
+                    vectorstore.add_documents([doc])
+                else:
+                    from langchain_community.vectorstores import FAISS
+                    vectorstore = FAISS.from_documents([doc], faiss_store.embeddings)
+            except Exception as e:
+                yield f"ERROR processing chunk {current_num}: {e}\n"
+                print(f"CRITICAL ERROR embedding chunk {current_num}: {traceback.format_exc()}")
+                continue
             
             # 2. Yield progress every single chunk to keep connection alive
             msg = f"Ingesting chunk {current_num}/{total_chunks}"
@@ -155,7 +162,10 @@ def ingest_pdfs(force_fresh: bool = False):
             # 4. Checkpoint every 50 chunks (approx every minute)
             if current_num % 50 == 0:
                 yield "Saving checkpoint...\n"
-                faiss_store.save_index(vectorstore)
+                try:
+                    faiss_store.save_index(vectorstore)
+                except Exception as e:
+                     yield f"WARNING: Failed to save checkpoint at chunk {current_num}: {e}\n"
 
         # Update metadata for processed files
         for pdf_path, file_id in processed_files_metadata:
@@ -166,7 +176,15 @@ def ingest_pdfs(force_fresh: bool = False):
         update_status("completed", message=success_msg)
         yield f"{success_msg}\n"
 
+    except Exception as e:
+        yield f"FATAL ERROR during ingestion loop: {e}\n"
+        print(f"FATAL INGESTION ERROR: {traceback.format_exc()}")
+        
     finally:
         if vectorstore:
             yield "Finalizing index save...\n"
-            faiss_store.save_index(vectorstore)
+            try:
+                faiss_store.save_index(vectorstore)
+                yield "Index saved successfully.\n"
+            except Exception as e:
+                yield f"ERROR saving final index: {e}\n"
