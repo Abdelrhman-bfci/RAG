@@ -60,6 +60,13 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
    OLLAMA_BASE_URL=http://localhost:11434
    ```
 
+    **Option C: Using vLLM (Local GPU Server)**
+    ```env
+    LLM_PROVIDER=vllm
+    VLLM_BASE_URL=http://localhost:9090/v1
+    VLLM_MODEL=your-model-id
+    ```
+
    **Common Settings**
    ```env
    DATABASE_URL=mysql+pymysql://user:password@localhost/dbname
@@ -115,52 +122,85 @@ RESOURCE/               # PDF Directory
 README.md               # Documentation
 ```
 
+## 🐧 vLLM Linux Setup & Deployment
+
+For servers with high-end GPUs (e.g., 24GB VRAM), vLLM provides superior throughput compared to Ollama.
+
+### 1. Installation
+On your Linux GPU server, install vLLM within your virtual environment:
+```bash
+# Activate your venv first
+source venv/bin/activate
+pip install vllm
+```
+
+### 2. Manual Test Run
+Before setting up the service, you can test the engine manually:
+```bash
+# Optimize for 24GB VRAM (e.g. Qwen2.5-7B)
+python3 -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --gpu-memory-utilization 0.95 \
+    --port 9090 \
+    --host 0.0.0.0
+```
+
+### 3. Connect ASU RAG
+Once the server is running (manually or via service), open the RAG UI:
+1. Go to **Settings**.
+2. Select **LLM Provider**: `vLLM (Local)`.
+3. The available models will be automatically fetched from port 9090.
+
 ## Deployment (Always-on)
 
-To keep the server running even after you close the terminal, use one of the following methods:
+To keep the server running even after you close the terminal:
 
-### Method 1: Systemd (Recommended for Linux)
+### Systemd (Recommended)
 
-1.  **Copy the service file** to the system directory:
+You can manage both the RAG API and the vLLM engine using systemd.
+
+#### 1. RAG API Service
+1.  **Configure**: Edit `rag_server.service` to update `WorkingDirectory` and `ExecStart` paths.
+2.  **Install**:
     ```bash
     sudo cp rag_server.service /etc/systemd/system/rag_server.service
-    ```
-2.  **Edit the file** to match your server's actual paths if they differ:
-    ```bash
-    sudo nano /etc/systemd/system/rag_server.service
-    ```
-3.  **Reload, start, and enable** it to run on boot:
-    ```bash
     sudo systemctl daemon-reload
     sudo systemctl start rag_server
     sudo systemctl enable rag_server
     ```
-4.  **Check status**:
+
+#### 2. vLLM Engine Service (Local GPU)
+1.  **Configure**: Edit `vllm.env` to set your model and quantization.
+2.  **Install**:
     ```bash
-    sudo systemctl status rag_server
+    sudo cp vllm_server.service /etc/systemd/system/vllm_server.service
+    sudo systemctl daemon-reload
+    sudo systemctl start vllm_server
+    sudo systemctl enable vllm_server
     ```
 
-### Method 2: PM2 (Easiest)
+#### 3. Monitoring
+```bash
+# Check status
+sudo systemctl status rag_server
+sudo systemctl status vllm_server
 
-If you have Node.js installed, you can use PM2:
+# Real-time logs
+journalctl -u rag_server -f
+journalctl -u vllm_server -f
+```
 
-1.  **Install PM2**:
-    ```bash
-    npm install -g pm2
-    ```
-2.  **Start the app**:
-    ```bash
-    sudo pm2 start "./venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80" --name rag-api
-    ```
-3.  **Save the list** to restart on reboot:
-    ```bash
-    sudo pm2 save
-    sudo pm2 startup
-    ```
+## 🔒 Security & Firewall (UFW)
 
-### Method 3: Screen / Nohup (Quick)
+If you are running on a remote linux server, ensure the necessary ports are open:
 
 ```bash
-# Using nohup
-sudo nohup ./venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80 > server.log 2>&1 &
+# Allow RAG API (HTTP)
+sudo ufw allow 80/tcp
+
+# Allow vLLM API (Internal or External)
+sudo ufw allow 9090/tcp
+
+# Enable firewall
+sudo ufw enable
 ```

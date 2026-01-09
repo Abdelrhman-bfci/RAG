@@ -107,6 +107,13 @@ def get_rag_chain(deep_thinking: bool = False):
             temperature=0.2 if deep_thinking else 0.1,
             num_ctx=Config.OLLAMA_CONTEXT_WINDOW
         )
+    elif Config.LLM_PROVIDER == "vllm":
+        llm = ChatOpenAI(
+            base_url=Config.VLLM_BASE_URL,
+            model=Config.VLLM_MODEL,
+            temperature=0.2 if deep_thinking else 0.1,
+            api_key="none" # vLLM typically doesn't require an API key by default
+        )
     else:
         llm = ChatOpenAI(
             model=Config.LLM_MODEL,

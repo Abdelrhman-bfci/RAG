@@ -31,7 +31,8 @@ class Config:
     INGEST_TABLES = [table.strip() for table in _ingest_tables_raw.split(",") if table.strip()]
 
     # Model Settings
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower() # 'openai' or 'ollama'
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower() # 'openai', 'ollama', or 'vllm'
+    EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", LLM_PROVIDER) # default to same as LLM
     
     # OpenAI Settings
     EMBEDDING_MODEL = "text-embedding-3-large"
@@ -40,15 +41,21 @@ class Config:
     # Ollama Settings
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+    VLLM_EMBEDDING_MODEL = os.getenv("VLLM_EMBEDDING_MODEL", "nomic-embed-text")
     OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
     OLLAMA_CONTEXT_WINDOW = int(os.getenv("OLLAMA_CONTEXT_WINDOW", "32768"))
 
+    # vLLM Settings (OpenAI Compatible)
+    VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:9090/v1")
+    VLLM_MODEL = os.getenv("VLLM_MODEL", "model")
+
     @classmethod
-    def get_ollama_models(cls):
+    def get_ollama_models(cls, base_url: str = None):
         """Fetch available models from Ollama API."""
         import requests
+        url = base_url or cls.OLLAMA_BASE_URL
         try:
-            response = requests.get(f"{cls.OLLAMA_BASE_URL}/api/tags", timeout=5)
+            response = requests.get(f"{url}/api/tags", timeout=5)
             if response.status_code == 200:
                 models = response.json().get("models", [])
                 return [m["name"] for m in models]
@@ -57,29 +64,60 @@ class Config:
         return [cls.OLLAMA_LLM_MODEL]
 
     @classmethod
-    def update_model(cls, model_name: str):
-        """Update the current LLM model and persist to .env."""
-        cls.OLLAMA_LLM_MODEL = model_name
-        
-        # Persist to .env
+    def get_vllm_models(cls, base_url: str = None):
+        """Fetch available models from vLLM API."""
+        import requests
+        url = base_url or cls.VLLM_BASE_URL
+        try:
+            # vLLM provides an OpenAI-compatible /models endpoint
+            response = requests.get(f"{url}/models", timeout=5)
+            if response.status_code == 200:
+                models = response.json().get("data", [])
+                return [m["id"] for m in models]
+        except:
+            pass
+        return [cls.VLLM_MODEL]
+
+    @classmethod
+    def update_config(cls, updates: dict):
+        """Update multiple configuration values and persist to .env."""
         env_path = ".env"
         lines = []
         if os.path.exists(env_path):
             with open(env_path, "r") as f:
                 lines = f.readlines()
         
-        updated = False
-        with open(env_path, "w") as f:
-            for line in lines:
-                if line.startswith("OLLAMA_LLM_MODEL="):
-                    f.write(f"OLLAMA_LLM_MODEL={model_name}\n")
-                    updated = True
-                else:
-                    f.write(line)
-            if not updated:
-                f.write(f"OLLAMA_LLM_MODEL={model_name}\n")
+        # Track which keys we've updated in the file
+        applied_updates = set()
+        new_lines = []
         
+        for line in lines:
+            updated_line = line
+            for key, value in updates.items():
+                if line.startswith(f"{key}="):
+                    updated_line = f"{key}={value}\n"
+                    applied_updates.add(key)
+                    # Also update in memory
+                    if hasattr(cls, key):
+                        setattr(cls, key, value)
+            new_lines.append(updated_line)
+            
+        # Add any new keys that weren't in the file
+        for key, value in updates.items():
+            if key not in applied_updates:
+                new_lines.append(f"{key}={value}\n")
+                if hasattr(cls, key):
+                    setattr(cls, key, value)
+                    
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+            
         return True
+
+    @classmethod
+    def update_model(cls, model_name: str):
+        """Legacy method for backward compatibility."""
+        return cls.update_config({"OLLAMA_LLM_MODEL": model_name})
 
 if Config.LLM_PROVIDER == "openai" and not Config.OPENAI_API_KEY:
     print("WARNING: OPENAI_API_KEY is not set.")

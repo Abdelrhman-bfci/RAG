@@ -41,14 +41,50 @@ class ModelUpdateRequest(BaseModel):
 # --- Endpoints ---
 
 @app.get("/models/ollama")
-async def list_ollama_models():
+async def list_ollama_models(base_url: str = None):
     """List available Ollama models."""
     from app.config import Config
-    return {"models": Config.get_ollama_models(), "current": Config.OLLAMA_LLM_MODEL}
+    return {"models": Config.get_ollama_models(base_url=base_url), "current": Config.OLLAMA_LLM_MODEL}
+
+@app.get("/models/vllm")
+async def list_vllm_models(base_url: str = None):
+    """List available vLLM models."""
+    from app.config import Config
+    return {"models": Config.get_vllm_models(base_url=base_url), "current": Config.VLLM_MODEL}
+
+@app.get("/config/current")
+async def get_current_config():
+    """Get current provider and settings."""
+    from app.config import Config
+    return {
+        "provider": Config.LLM_PROVIDER,
+        "embedding_provider": Config.EMBEDDING_PROVIDER,
+        "ollama": {
+            "model": Config.OLLAMA_LLM_MODEL,
+            "embedding_model": Config.OLLAMA_EMBEDDING_MODEL,
+            "base_url": Config.OLLAMA_BASE_URL
+        },
+        "vllm": {
+            "model": Config.VLLM_MODEL,
+            "embedding_model": Config.VLLM_EMBEDDING_MODEL,
+            "base_url": Config.VLLM_BASE_URL
+        },
+        "openai": {
+            "model": Config.LLM_MODEL,
+            "embedding_model": Config.EMBEDDING_MODEL
+        }
+    }
+
+@app.post("/config/update")
+async def update_configuration(updates: dict):
+    """Update general configuration."""
+    from app.config import Config
+    Config.update_config(updates)
+    return {"status": "success"}
 
 @app.post("/config/update_model")
 async def update_llm_model(request: ModelUpdateRequest):
-    """Update the current LLM model used for generation."""
+    """Legacy endpoint for backward compatibility."""
     from app.config import Config
     Config.update_model(request.model)
     return {"status": "success", "model": Config.OLLAMA_LLM_MODEL}

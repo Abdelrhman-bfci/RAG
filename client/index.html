@@ -105,11 +105,50 @@
 
                 <div class="modal-body">
                     <div class="setting-group">
-                        <label for="model-select">Ollama Model</label>
-                        <select id="model-select">
-                            <option value="" disabled selected>Loading models...</option>
+                        <label for="provider-select">LLM Provider</label>
+                        <select id="provider-select">
+                            <option value="openai">OpenAI</option>
+                            <option value="ollama">Ollama (Local)</option>
+                            <option value="vllm">vLLM (Local)</option>
                         </select>
-                        <p class="setting-hint">Select the local LLM to use for generation.</p>
+                        <p class="setting-hint">Choose where your AI model is hosted.</p>
+                    </div>
+
+                    <div class="setting-group">
+                        <label for="embedding-provider-select">Embedding Provider</label>
+                        <select id="embedding-provider-select">
+                            <option value="openai">OpenAI</option>
+                            <option value="ollama">Ollama (Local)</option>
+                            <option value="vllm">vLLM (Local)</option>
+                        </select>
+                        <p class="setting-hint">Provider for document vectorization (FAISS).</p>
+                    </div>
+
+                    <div id="local-settings" class="provider-settings-group" style="display: none;">
+                        <div class="setting-group" id="vllm-url-group" style="display: none;">
+                            <label for="vllm-url">Provider Base URL (vLLM)</label>
+                            <input type="text" id="vllm-url" placeholder="http://localhost:9090/v1">
+                        </div>
+
+                        <div class="setting-group" id="llm-model-group">
+                            <label for="model-select">LLM Model</label>
+                            <select id="model-select">
+                                <option value="" disabled selected>Select a model...</option>
+                            </select>
+                            <p class="setting-hint" id="model-hint">Select the model for chat generation.</p>
+                        </div>
+
+                        <div class="setting-group" id="embedding-model-group">
+                            <label for="embedding-model-select">Embedding Model</label>
+                            <select id="embedding-model-select">
+                                <option value="" disabled selected>Select a model...</option>
+                            </select>
+                            <p class="setting-hint">Select the model for vector embeddings.</p>
+                        </div>
+                    </div>
+
+                    <div id="openai-settings" class="provider-settings-group" style="display: none;">
+                        <p class="setting-hint">OpenAI settings are managed via environment variables.</p>
                     </div>
                 </div>
 
@@ -118,465 +157,557 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Database Modal -->
-        <div id="db-modal" class="modal">
-            <div class="modal-content wide-modal">
-                <span class="close-db-btn">&times;</span>
-                <h2><i class="fas fa-server"></i> Database Management</h2>
+    <!-- Database Modal -->
+    <div id="db-modal" class="modal">
+        <div class="modal-content wide-modal">
+            <span class="close-db-btn">&times;</span>
+            <h2><i class="fas fa-server"></i> Database Management</h2>
 
-                <!-- Section 1: Upload -->
-                <div class="db-section">
-                    <h3>1. Upload Resource</h3>
-                    <div class="upload-zone" id="upload-zone">
-                        <input type="file" id="file-input" accept=".pdf" hidden>
-                        <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop PDF here or <a href="#"
-                                id="browse-btn">Browse</a></p>
-                        <span id="file-name-display"></span>
-                    </div>
-                    <button id="upload-btn" class="action-btn" disabled>Upload File</button>
+            <!-- Section 1: Upload -->
+            <div class="db-section">
+                <h3>1. Upload Resource</h3>
+                <div class="upload-zone" id="upload-zone">
+                    <input type="file" id="file-input" accept=".pdf" hidden>
+                    <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop PDF here or <a href="#"
+                            id="browse-btn">Browse</a></p>
+                    <span id="file-name-display"></span>
                 </div>
+                <button id="upload-btn" class="action-btn" disabled>Upload File</button>
+            </div>
 
-                <!-- Section 2: Ingestion Controls -->
-                <div class="db-section">
-                    <h3>2. Ingestion Operations</h3>
-                    <div class="button-group">
-                        <button id="stream-btn" class="action-btn warning-btn">
-                            <i class="fas fa-sync"></i> Quick Sync (Update)
-                        </button>
-                        <button id="fresh-stream-btn" class="action-btn danger-btn">
-                            <i class="fas fa-hammer"></i> Fresh Build (Reset)
-                        </button>
-                    </div>
+            <!-- Section 2: Ingestion Controls -->
+            <div class="db-section">
+                <h3>2. Ingestion Operations</h3>
+                <div class="button-group">
+                    <button id="stream-btn" class="action-btn warning-btn">
+                        <i class="fas fa-sync"></i> Quick Sync (Update)
+                    </button>
+                    <button id="fresh-stream-btn" class="action-btn danger-btn">
+                        <i class="fas fa-hammer"></i> Fresh Build (Reset)
+                    </button>
                 </div>
+            </div>
 
-                <!-- Section 3: Live Logs -->
-                <div class="db-section">
-                    <h3>3. Live System Logs</h3>
-                    <div id="console-output" class="terminal-window">
-                        <span class="log-line system">> System ready. Waiting for command...</span>
-                    </div>
+            <!-- Section 3: Live Logs -->
+            <div class="db-section">
+                <h3>3. Live System Logs</h3>
+                <div id="console-output" class="terminal-window">
+                    <span class="log-line system">> System ready. Waiting for command...</span>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div id="toast" class="toast">
-            <i class="fas fa-check-circle"></i>
-            <span id="toast-message">Settings saved successfully</span>
-        </div>
+    <div id="toast" class="toast">
+        <i class="fas fa-check-circle"></i>
+        <span id="toast-message">Settings saved successfully</span>
+    </div>
 
-        <script>
-            const chatContainer = document.getElementById('chat-container');
-            const userInput = document.getElementById('user-input');
-            const sendBtn = document.getElementById('send-btn');
-            // Dynamically get the API base URL from the current window location
-            const API_BASE = window.location.origin;
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        // Dynamically get the API base URL from the current window location
+        const API_BASE = window.location.origin;
 
-            function setQuery(query) {
-                userInput.value = query;
-                sendMessage();
-            }
+        function setQuery(query) {
+            userInput.value = query;
+            sendMessage();
+        }
 
-            function addMessage(content, isUser = false) {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+        function addMessage(content, isUser = false) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
 
-                const avatar = document.createElement('div');
-                avatar.className = 'avatar';
-                avatar.innerText = isUser ? '👤' : 'AI';
+            const avatar = document.createElement('div');
+            avatar.className = 'avatar';
+            avatar.innerText = isUser ? '👤' : 'AI';
 
-                const textDiv = document.createElement('div');
-                textDiv.className = 'text';
-                textDiv.innerText = content;
+            const textDiv = document.createElement('div');
+            textDiv.className = 'text';
+            textDiv.innerText = content;
 
-                msgDiv.appendChild(avatar);
-                msgDiv.appendChild(textDiv);
-                chatContainer.appendChild(msgDiv);
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-                return textDiv;
-            }
+            msgDiv.appendChild(avatar);
+            msgDiv.appendChild(textDiv);
+            chatContainer.appendChild(msgDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return textDiv;
+        }
 
-            async function sendMessage() {
-                const question = userInput.value.trim();
-                const chatMode = document.getElementById('chat-mode').value;
-                const isDeepThinking = chatMode === 'deep';
+        async function sendMessage() {
+            const question = userInput.value.trim();
+            const chatMode = document.getElementById('chat-mode').value;
+            const isDeepThinking = chatMode === 'deep';
 
-                if (!question) return;
+            if (!question) return;
 
-                userInput.value = '';
-                addMessage(question, true);
+            userInput.value = '';
+            addMessage(question, true);
 
-                const botTextDiv = addMessage('', false);
-                botTextDiv.innerHTML = '<div class="typing">AI Assistant is thinking...</div>';
+            const botTextDiv = addMessage('', false);
+            botTextDiv.innerHTML = '<div class="typing">AI Assistant is thinking...</div>';
 
-                try {
-                    const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}&deep_thinking=${isDeepThinking}`);
+            try {
+                const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}&deep_thinking=${isDeepThinking}`);
 
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
 
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let accumulatedAnswer = '';
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let accumulatedAnswer = '';
 
-                    botTextDiv.innerHTML = ''; // Clear thinking state
+                botTextDiv.innerHTML = ''; // Clear thinking state
 
-                    while (true) {
-                        const { value, done } = await reader.read();
-                        if (done) break;
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
 
-                        const chunk = decoder.decode(value, { stream: true });
-                        const lines = chunk.split('\n');
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
 
-                        for (const line of lines) {
-                            if (!line.trim()) continue;
-                            try {
-                                const data = JSON.parse(line);
-                                if (data.type === 'sources') {
-                                    // Optional: display sources separately
-                                    console.log('Sources:', data.sources);
-                                } else if (data.type === 'chunk') {
-                                    accumulatedAnswer += data.content;
-                                    botTextDiv.innerText = accumulatedAnswer;
-                                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                                } else if (data.type === 'metadata') {
-                                    // Add performance metrics and sources
-                                    const metaDiv = document.createElement('div');
-                                    metaDiv.className = 'message-meta';
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.type === 'sources') {
+                                // Optional: display sources separately
+                                console.log('Sources:', data.sources);
+                            } else if (data.type === 'chunk') {
+                                accumulatedAnswer += data.content;
+                                botTextDiv.innerText = accumulatedAnswer;
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            } else if (data.type === 'metadata') {
+                                // Add performance metrics and sources
+                                const metaDiv = document.createElement('div');
+                                metaDiv.className = 'message-meta';
 
-                                    const stats = [
-                                        { label: 'Model', value: data.model, icon: 'fa-robot' },
-                                        { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
-                                        { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
-                                        { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
-                                    ];
+                                const stats = [
+                                    { label: 'Model', value: data.model, icon: 'fa-robot' },
+                                    { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
+                                    { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
+                                    { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
+                                ];
 
-                                    stats.forEach(stat => {
-                                        const item = document.createElement('div');
-                                        item.className = 'meta-item';
-                                        item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
-                                        metaDiv.appendChild(item);
+                                stats.forEach(stat => {
+                                    const item = document.createElement('div');
+                                    item.className = 'meta-item';
+                                    item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
+                                    metaDiv.appendChild(item);
+                                });
+
+                                if (data.sources && data.sources.length > 0) {
+                                    const sourceContainer = document.createElement('div');
+                                    sourceContainer.className = 'source-badges';
+                                    data.sources.forEach(src => {
+                                        const badge = document.createElement('span');
+                                        badge.className = 'source-badge';
+                                        badge.innerText = src.startsWith('http') ? new URL(src).hostname : src.split('/').pop();
+                                        badge.title = src;
+                                        sourceContainer.appendChild(badge);
                                     });
-
-                                    if (data.sources && data.sources.length > 0) {
-                                        const sourceContainer = document.createElement('div');
-                                        sourceContainer.className = 'source-badges';
-                                        data.sources.forEach(src => {
-                                            const badge = document.createElement('span');
-                                            badge.className = 'source-badge';
-                                            badge.innerText = src.startsWith('http') ? new URL(src).hostname : src.split('/').pop();
-                                            badge.title = src;
-                                            sourceContainer.appendChild(badge);
-                                        });
-                                        metaDiv.appendChild(sourceContainer);
-                                    }
-
-                                    botTextDiv.appendChild(metaDiv);
-                                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                                } else if (data.type === 'error') {
-                                    botTextDiv.innerText = `Error: ${data.content}`;
+                                    metaDiv.appendChild(sourceContainer);
                                 }
-                            } catch (e) {
-                                console.error('Error parsing JSON chunk', e);
+
+                                botTextDiv.appendChild(metaDiv);
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            } else if (data.type === 'error') {
+                                botTextDiv.innerText = `Error: ${data.content}`;
                             }
+                        } catch (e) {
+                            console.error('Error parsing JSON chunk', e);
                         }
                     }
-                } catch (error) {
-                    botTextDiv.innerText = `Error: ${error.message}`;
+                }
+            } catch (error) {
+                botTextDiv.innerText = `Error: ${error.message}`;
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Settings Modal Logic
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const closeModal = document.querySelector('.close-btn');
+        const modelSelect = document.getElementById('model-select');
+        const saveSettings = document.getElementById('save-settings-btn');
+
+        const providerSelect = document.getElementById('provider-select');
+        const embeddingProviderSelect = document.getElementById('embedding-provider-select');
+        const localSettings = document.getElementById('local-settings');
+        const vllmUrlGroup = document.getElementById('vllm-url-group');
+        const vllmUrlInput = document.getElementById('vllm-url');
+        const openaiSettings = document.getElementById('openai-settings');
+        const modelHint = document.getElementById('model-hint');
+        const embeddingModelSelect = document.getElementById('embedding-model-select');
+
+        let currentConfig = null;
+
+        providerSelect.onchange = async () => {
+            const provider = providerSelect.value;
+            localSettings.style.display = (provider === 'ollama' || provider === 'vllm') ? 'block' : 'none';
+            vllmUrlGroup.style.display = provider === 'vllm' ? 'block' : 'none';
+            openaiSettings.style.display = provider === 'openai' ? 'block' : 'none';
+
+            if (provider === 'ollama' || provider === 'vllm') {
+                modelHint.innerText = provider === 'ollama' ? 'Select the local Ollama model.' : 'Select the model served by vLLM.';
+                const baseUrl = provider === 'vllm' ? vllmUrlInput.value : null;
+                await loadModels(provider, baseUrl, modelSelect);
+
+                if (currentConfig && provider === currentConfig.provider) {
+                    modelSelect.value = (provider === 'ollama') ? currentConfig.ollama.model : currentConfig.vllm.model;
                 }
             }
+        };
 
-            sendBtn.addEventListener('click', sendMessage);
-            userInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') sendMessage();
-            });
+        embeddingProviderSelect.onchange = async () => {
+            const provider = embeddingProviderSelect.value;
+            if (provider === 'ollama' || provider === 'vllm') {
+                const baseUrl = provider === 'vllm' ? vllmUrlInput.value : null;
+                await loadModels(provider, baseUrl, embeddingModelSelect);
 
-            // Settings Modal Logic
-            const settingsBtn = document.getElementById('settings-btn');
-            const settingsModal = document.getElementById('settings-modal');
-            const closeModal = document.querySelector('.close-btn');
-            const modelSelect = document.getElementById('model-select');
-            const saveSettings = document.getElementById('save-settings-btn');
-
-            const openSettingsModal = async () => {
-                // Ensure mutual exclusion
-                if (dbModal) dbModal.style.display = 'none';
-
-                settingsModal.style.display = 'block';
-                await loadModels();
-            };
-
-            closeModal.onclick = () => {
-                settingsModal.style.display = 'none';
+                if (currentConfig && provider === currentConfig.embedding_provider) {
+                    embeddingModelSelect.value = (provider === 'ollama') ? currentConfig.ollama.embedding_model : currentConfig.vllm.embedding_model;
+                }
             }
+        };
 
-            async function loadModels() {
-                try {
-                    const response = await fetch(`${API_BASE}/models/ollama`);
-                    const data = await response.json();
+        // Debounced model loading for URL change
+        let vllmUrlTimeout;
+        vllmUrlInput.oninput = () => {
+            clearTimeout(vllmUrlTimeout);
+            vllmUrlTimeout = setTimeout(() => {
+                if (providerSelect.value === 'vllm') loadModels('vllm', vllmUrlInput.value, modelSelect);
+                if (embeddingProviderSelect.value === 'vllm') loadModels('vllm', vllmUrlInput.value, embeddingModelSelect);
+            }, 800);
+        };
 
-                    modelSelect.innerHTML = '';
+        const openSettingsModal = async () => {
+            if (dbModal) dbModal.style.display = 'none';
+            settingsModal.style.display = 'block';
+
+            try {
+                const response = await fetch(`${API_BASE}/config/current`);
+                currentConfig = await response.json();
+
+                providerSelect.value = currentConfig.provider;
+                embeddingProviderSelect.value = currentConfig.embedding_provider || currentConfig.provider;
+
+                if (currentConfig.provider === 'vllm') {
+                    vllmUrlInput.value = currentConfig.vllm.base_url;
+                }
+
+                await providerSelect.onchange();
+                await embeddingProviderSelect.onchange();
+            } catch (error) {
+                console.error('Failed to load current config:', error);
+            }
+        };
+
+        closeModal.onclick = () => {
+            settingsModal.style.display = 'none';
+        }
+
+        async function loadModels(provider, baseUrl = null, targetSelect) {
+            if (!provider) provider = providerSelect.value;
+            if (provider === 'openai') return;
+
+            let url = `${API_BASE}${provider === 'ollama' ? '/models/ollama' : '/models/vllm'}`;
+            if (baseUrl) url += `?base_url=${encodeURIComponent(baseUrl)}`;
+
+            targetSelect.innerHTML = '<option value="" disabled selected>Loading models...</option>';
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                targetSelect.innerHTML = '';
+                if (data.models && data.models.length > 0) {
                     data.models.forEach(model => {
                         const option = document.createElement('option');
                         option.value = model;
                         option.text = model;
-                        if (model === data.current) option.selected = true;
-                        modelSelect.appendChild(option);
+                        targetSelect.appendChild(option);
                     });
-                } catch (error) {
-                    console.error('Failed to load models:', error);
-                    modelSelect.innerHTML = '<option value="">Error loading models</option>';
-                }
-            }
-
-            function showToast(message, isError = false) {
-                const toast = document.getElementById('toast');
-                const toastMsg = document.getElementById('toast-message');
-                toastMsg.innerText = message;
-                toast.classList.add('show');
-                if (isError) {
-                    toast.style.borderLeft = '4px solid #f43f5e';
-                    toast.querySelector('i').className = 'fas fa-exclamation-circle';
-                    toast.querySelector('i').style.color = '#f43f5e';
                 } else {
-                    toast.style.borderLeft = '4px solid #10b981';
-                    toast.querySelector('i').className = 'fas fa-check-circle';
-                    toast.querySelector('i').style.color = '#10b981';
+                    targetSelect.innerHTML = '<option value="">No models found</option>';
                 }
-                setTimeout(() => {
-                    toast.classList.remove('show');
-                }, 3000);
+            } catch (error) {
+                console.error('Failed to load models:', error);
+                targetSelect.innerHTML = '<option value="">Error connecting</option>';
             }
+        }
 
-            saveSettings.onclick = async () => {
-                const selectedModel = modelSelect.value;
-                if (!selectedModel) return;
-
-                saveSettings.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-                saveSettings.disabled = true;
-
-                try {
-                    const response = await fetch(`${API_BASE}/config/update_model`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ model: selectedModel })
-                    });
-
-                    if (response.ok) {
-                        settingsModal.style.display = 'none';
-                        showToast(`Model switched to ${selectedModel}`);
-                    } else {
-                        throw new Error('Failed to update');
-                    }
-                } catch (error) {
-                    showToast('Failed to update model settings', true);
-                } finally {
-                    saveSettings.innerText = 'Save Changes';
-                    saveSettings.disabled = false;
-                }
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            toastMsg.innerText = message;
+            toast.classList.add('show');
+            if (isError) {
+                toast.style.borderLeft = '4px solid #f43f5e';
+                toast.querySelector('i').className = 'fas fa-exclamation-circle';
+                toast.querySelector('i').style.color = '#f43f5e';
+            } else {
+                toast.style.borderLeft = '4px solid #10b981';
+                toast.querySelector('i').className = 'fas fa-check-circle';
+                toast.querySelector('i').style.color = '#10b981';
             }
-            // ==========================================
-            // DATABASE & INGESTION LOGIC
-            // ==========================================
-            const dbModal = document.getElementById('db-modal');
-            const dbBtn = document.getElementById('db-btn');
-            const closeDbBtn = document.querySelector('.close-db-btn'); // Note: changed class in HTML
-            const fileInput = document.getElementById('file-input');
-            const uploadZone = document.getElementById('upload-zone');
-            const uploadBtn = document.getElementById('upload-btn');
-            const fileNameDisplay = document.getElementById('file-name-display');
-            const browseBtn = document.getElementById('browse-btn');
-            const consoleOutput = document.getElementById('console-output');
-            const streamBtn = document.getElementById('stream-btn');
-            const freshStreamBtn = document.getElementById('fresh-stream-btn');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
 
-            // Open/Close Modal
-            const openDbModal = () => {
-                // Ensure mutual exclusion
-                if (settingsModal) settingsModal.style.display = 'none';
-
-                dbModal.style.display = 'block';
+        saveSettings.onclick = async () => {
+            const provider = providerSelect.value;
+            const embedProvider = embeddingProviderSelect.value;
+            const updates = {
+                "LLM_PROVIDER": provider,
+                "EMBEDDING_PROVIDER": embedProvider
             };
 
-            dbBtn.onclick = openDbModal;
-            settingsBtn.onclick = openSettingsModal;
-            document.getElementById('sidebar-db-btn').onclick = openDbModal;
-            document.getElementById('sidebar-settings-btn').onclick = openSettingsModal;
-
-            closeDbBtn.addEventListener('click', () => {
-                dbModal.style.display = 'none';
-            });
-
-            // Close on outside click is handled by window.onclick below
-
-            // File Selection Logic
-            browseBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                fileInput.click();
-            });
-
-            uploadZone.addEventListener('click', (e) => {
-                if (e.target !== browseBtn) fileInput.click();
-            });
-
-            uploadZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadZone.style.borderColor = 'var(--accent-color)';
-            });
-
-            uploadZone.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                uploadZone.style.borderColor = 'var(--border-color)';
-            });
-
-            uploadZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadZone.style.borderColor = 'var(--border-color)';
-                if (e.dataTransfer.files.length) {
-                    handleFileSelect(e.dataTransfer.files[0]);
-                }
-            });
-
-            fileInput.addEventListener('change', (e) => {
-                if (fileInput.files.length) {
-                    handleFileSelect(fileInput.files[0]);
-                }
-            });
-
-            let selectedFile = null;
-
-            function handleFileSelect(file) {
-                if (file.type !== 'application/pdf') {
-                    alert('Please upload a valid PDF file.');
-                    return;
-                }
-                selectedFile = file;
-                fileNameDisplay.textContent = `Selected: ${file.name}`;
-                uploadBtn.disabled = false;
+            if (provider === 'ollama' || provider === 'vllm') {
+                updates[provider === 'ollama' ? "OLLAMA_LLM_MODEL" : "VLLM_MODEL"] = modelSelect.value;
             }
 
-            // Upload Logic
-            uploadBtn.addEventListener('click', async () => {
-                if (!selectedFile) return;
-
-                const formData = new FormData();
-                formData.append('file', selectedFile);
-
-                uploadBtn.disabled = true;
-                uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-
-                try {
-                    const response = await fetch(`${API_BASE}/upload`, {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        alert('File uploaded successfully!');
-                        fileNameDisplay.textContent = '';
-                        selectedFile = null;
-                        logToConsole(`UPLOAD SUCCESS: ${data.message}`, 'success');
-                    } else {
-                        throw new Error('Upload failed');
-                    }
-                } catch (error) {
-                    alert('Error uploading file');
-                    logToConsole(`UPLOAD ERROR: ${error.message}`, 'error');
-                } finally {
-                    uploadBtn.disabled = true;
-                    uploadBtn.textContent = 'Upload File';
-                }
-            });
-
-            // Console Logging Helper
-            function logToConsole(message, type = 'info') {
-                const line = document.createElement('span');
-                line.className = `log-line ${type}`;
-                line.textContent = `> ${message}`;
-                consoleOutput.appendChild(line);
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            if (embedProvider === 'ollama' || embedProvider === 'vllm') {
+                updates[embedProvider === 'ollama' ? "OLLAMA_EMBEDDING_MODEL" : "VLLM_EMBEDDING_MODEL"] = embeddingModelSelect.value;
             }
 
-            // Streaming Logic
-            async function startIngestionStream(fresh = false) {
-                const url = `${API_BASE}/ingest/pdf/stream${fresh ? '?fresh=true' : ''}`;
-
-                streamBtn.disabled = true;
-                freshStreamBtn.disabled = true;
-                logToConsole(fresh ? 'Starting FRESH build...' : 'Starting SYNC...', 'system');
-
-                try {
-                    const response = await fetch(url);
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-
-                        const chunk = decoder.decode(value);
-                        const lines = chunk.split('\n');
-
-                        lines.forEach(line => {
-                            if (line.trim()) {
-                                // Check for error keywords
-                                let type = 'info';
-                                if (line.includes('ERROR') || line.includes('failed')) type = 'error';
-                                if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
-                                if (line.includes('WARNING')) type = 'warning';
-
-                                logToConsole(line, type);
-                            }
-                        });
-                    }
-                    logToConsole('Process finished.', 'system');
-
-                } catch (error) {
-                    logToConsole(`STREAM ERROR: ${error.message}`, 'error');
-                } finally {
-                    streamBtn.disabled = false;
-                    freshStreamBtn.disabled = false;
-                }
+            if (provider === 'vllm' || embedProvider === 'vllm') {
+                updates["VLLM_BASE_URL"] = vllmUrlInput.value;
             }
 
-            streamBtn.addEventListener('click', () => startIngestionStream(false));
-            freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
+            saveSettings.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            saveSettings.disabled = true;
 
-            // Mobile Sidebar Toggle Logic
-            const menuToggle = document.getElementById('menu-toggle');
-            const closeSidebar = document.getElementById('close-sidebar');
-            const sidebar = document.querySelector('.sidebar');
-
-            menuToggle.onclick = () => {
-                sidebar.classList.add('mobile-active');
-            };
-
-            closeSidebar.onclick = () => {
-                sidebar.classList.remove('mobile-active');
-            };
-
-            // Close sidebar when clicking a nav item on mobile
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    sidebar.classList.remove('mobile-active');
+            try {
+                const response = await fetch(`${API_BASE}/config/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
                 });
-            });
 
-            // Update window click handler to close both modals AND sidebar
-            window.onclick = (event) => {
-                if (event.target == settingsModal) {
+                if (response.ok) {
                     settingsModal.style.display = 'none';
+                    showToast(`Settings updated successfully`);
+                } else {
+                    throw new Error('Failed to update');
                 }
-                if (event.target == dbModal) {
-                    dbModal.style.display = 'none';
-                }
-                if (event.target == sidebar && sidebar.classList.contains('mobile-active')) {
-                    sidebar.classList.remove('mobile-active');
-                }
+            } catch (error) {
+                showToast('Failed to update settings', true);
+            } finally {
+                saveSettings.innerText = 'Save Changes';
+                saveSettings.disabled = false;
             }
-        </script>
+        }
+        // ==========================================
+        // DATABASE & INGESTION LOGIC
+        // ==========================================
+        const dbModal = document.getElementById('db-modal');
+        const dbBtn = document.getElementById('db-btn');
+        const closeDbBtn = document.querySelector('.close-db-btn'); // Note: changed class in HTML
+        const fileInput = document.getElementById('file-input');
+        const uploadZone = document.getElementById('upload-zone');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const browseBtn = document.getElementById('browse-btn');
+        const consoleOutput = document.getElementById('console-output');
+        const streamBtn = document.getElementById('stream-btn');
+        const freshStreamBtn = document.getElementById('fresh-stream-btn');
+
+        // Open/Close Modal
+        const openDbModal = () => {
+            // Ensure mutual exclusion
+            if (settingsModal) settingsModal.style.display = 'none';
+
+            dbModal.style.display = 'block';
+        };
+
+        dbBtn.onclick = openDbModal;
+        settingsBtn.onclick = openSettingsModal;
+        document.getElementById('sidebar-db-btn').onclick = openDbModal;
+        document.getElementById('sidebar-settings-btn').onclick = openSettingsModal;
+
+        closeDbBtn.addEventListener('click', () => {
+            dbModal.style.display = 'none';
+        });
+
+        // Close on outside click is handled by window.onclick below
+
+        // File Selection Logic
+        browseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            fileInput.click();
+        });
+
+        uploadZone.addEventListener('click', (e) => {
+            if (e.target !== browseBtn) fileInput.click();
+        });
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = 'var(--accent-color)';
+        });
+
+        uploadZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = 'var(--border-color)';
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.style.borderColor = 'var(--border-color)';
+            if (e.dataTransfer.files.length) {
+                handleFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (fileInput.files.length) {
+                handleFileSelect(fileInput.files[0]);
+            }
+        });
+
+        let selectedFile = null;
+
+        function handleFileSelect(file) {
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a valid PDF file.');
+                return;
+            }
+            selectedFile = file;
+            fileNameDisplay.textContent = `Selected: ${file.name}`;
+            uploadBtn.disabled = false;
+        }
+
+        // Upload Logic
+        uploadBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+
+            try {
+                const response = await fetch(`${API_BASE}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    alert('File uploaded successfully!');
+                    fileNameDisplay.textContent = '';
+                    selectedFile = null;
+                    logToConsole(`UPLOAD SUCCESS: ${data.message}`, 'success');
+                } else {
+                    throw new Error('Upload failed');
+                }
+            } catch (error) {
+                alert('Error uploading file');
+                logToConsole(`UPLOAD ERROR: ${error.message}`, 'error');
+            } finally {
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = 'Upload File';
+            }
+        });
+
+        // Console Logging Helper
+        function logToConsole(message, type = 'info') {
+            const line = document.createElement('span');
+            line.className = `log-line ${type}`;
+            line.textContent = `> ${message}`;
+            consoleOutput.appendChild(line);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        // Streaming Logic
+        async function startIngestionStream(fresh = false) {
+            const url = `${API_BASE}/ingest/pdf/stream${fresh ? '?fresh=true' : ''}`;
+
+            streamBtn.disabled = true;
+            freshStreamBtn.disabled = true;
+            logToConsole(fresh ? 'Starting FRESH build...' : 'Starting SYNC...', 'system');
+
+            try {
+                const response = await fetch(url);
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    lines.forEach(line => {
+                        if (line.trim()) {
+                            // Check for error keywords
+                            let type = 'info';
+                            if (line.includes('ERROR') || line.includes('failed')) type = 'error';
+                            if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
+                            if (line.includes('WARNING')) type = 'warning';
+
+                            logToConsole(line, type);
+                        }
+                    });
+                }
+                logToConsole('Process finished.', 'system');
+
+            } catch (error) {
+                logToConsole(`STREAM ERROR: ${error.message}`, 'error');
+            } finally {
+                streamBtn.disabled = false;
+                freshStreamBtn.disabled = false;
+            }
+        }
+
+        streamBtn.addEventListener('click', () => startIngestionStream(false));
+        freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
+
+        // Mobile Sidebar Toggle Logic
+        const menuToggle = document.getElementById('menu-toggle');
+        const closeSidebar = document.getElementById('close-sidebar');
+        const sidebar = document.querySelector('.sidebar');
+
+        menuToggle.onclick = () => {
+            sidebar.classList.add('mobile-active');
+        };
+
+        closeSidebar.onclick = () => {
+            sidebar.classList.remove('mobile-active');
+        };
+
+        // Close sidebar when clicking a nav item on mobile
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                sidebar.classList.remove('mobile-active');
+            });
+        });
+
+        // Update window click handler to close both modals AND sidebar
+        window.onclick = (event) => {
+            if (event.target == settingsModal) {
+                settingsModal.style.display = 'none';
+            }
+            if (event.target == dbModal) {
+                dbModal.style.display = 'none';
+            }
+            if (event.target == sidebar && sidebar.classList.contains('mobile-active')) {
+                sidebar.classList.remove('mobile-active');
+            }
+        }
+    </script>
 </body>
 
 </html>

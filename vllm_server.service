@@ -1,0 +1,27 @@
+[Unit]
+Description=vLLM OpenAI API Server
+After=network.target
+
+[Service]
+User=root
+Group=root
+
+# Change this to the actual directory on your server
+WorkingDirectory=/home/asuengai/RAG/RAG
+
+# Load environment variables from vllm.env
+EnvironmentFile=/home/asuengai/RAG/RAG/vllm.env
+
+# Use the full path to your python environment
+ExecStart=/home/asuengai/RAG/RAG/venv/bin/python3 -m vllm.entrypoints.openai.api_server \
+    --model ${VLLM_MODEL} \
+    --port ${VLLM_PORT} \
+    --quantization ${VLLM_QUANTIZATION} \
+    --gpu-memory-utilization ${VLLM_GPU_UTIL} \
+    --host ${VLLM_HOST}
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

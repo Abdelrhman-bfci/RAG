@@ -6,10 +6,17 @@ from app.config import Config
 
 class FAISSStore:
     def __init__(self):
-        if Config.LLM_PROVIDER == "ollama":
+        if Config.EMBEDDING_PROVIDER == "ollama":
             self.embeddings = OllamaEmbeddings(
                 base_url=Config.OLLAMA_BASE_URL,
                 model=Config.OLLAMA_EMBEDDING_MODEL
+            )
+        elif Config.EMBEDDING_PROVIDER == "vllm":
+            # vLLM provides an OpenAI-compatible /v1/embeddings endpoint
+            self.embeddings = OpenAIEmbeddings(
+                model=Config.VLLM_EMBEDDING_MODEL,
+                openai_api_base=Config.VLLM_BASE_URL, # Ensure this includes /v1
+                openai_api_key="none"
             )
         else:
             self.embeddings = OpenAIEmbeddings(
