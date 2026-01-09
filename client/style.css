@@ -598,8 +598,36 @@ header {
 }
 
 #upload-btn:hover:not(:disabled) {
-    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.5);
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
+.url-input-group {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.url-input-group input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    padding: 12px 16px;
+    border-radius: 12px;
+    color: white;
+    font-size: 0.95rem;
+    transition: var(--transition);
+}
+
+.url-input-group input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.url-input-group .action-btn {
+    width: auto;
+    white-space: nowrap;
 }
 
 #upload-btn:disabled {
@@ -1057,4 +1085,172 @@ textarea {
     background-color: rgba(2, 6, 23, 0.7);
     backdrop-filter: blur(8px);
     animation: fadeIn 0.3s ease-out;
+}
+
+/* Markdown Rendering Styles */
+.bot-message .text h1,
+.bot-message .text h2,
+.bot-message .text h3 {
+    margin: 1.5rem 0 1rem 0;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.bot-message .text h1 {
+    font-size: 1.5rem;
+}
+
+.bot-message .text h2 {
+    font-size: 1.25rem;
+}
+
+.bot-message .text h3 {
+    font-size: 1.1rem;
+}
+
+.bot-message .text p {
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
+.bot-message .text ul,
+.bot-message .text ol {
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+.bot-message .text li {
+    margin-bottom: 0.5rem;
+}
+
+.bot-message .text a {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
+
+.bot-message .text code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9em;
+}
+
+.bot-message .text pre {
+    background: rgba(15, 23, 42, 0.8);
+    padding: 16px;
+    border-radius: 12px;
+    margin: 1rem 0;
+    overflow-x: auto;
+    border: 1px solid var(--glass-border);
+}
+
+.bot-message .text strong {
+    color: var(--primary-light);
+    font-weight: 600;
+}
+/* Database Resource Styles */
+.db-resource-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.field-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.field-row label {
+    min-width: 80px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.field-row select {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    padding: 10px;
+    border-radius: 8px;
+    color: white;
+}
+
+.tables-checklist {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.table-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.table-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+.table-item input {
+    cursor: pointer;
+}
+
+.hint {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    grid-column: 1 / -1;
+    text-align: center;
+}
+
+/* Cloud Provider Settings Styles */
+#cloud-settings .setting-group {
+    margin-bottom: 20px;
+}
+
+#cloud-settings label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+#cloud-settings input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    padding: 12px 16px;
+    border-radius: 12px;
+    color: white;
+    font-size: 0.95rem;
+    transition: var(--transition);
+}
+
+#cloud-settings input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+#cloud-settings .setting-hint {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
 }

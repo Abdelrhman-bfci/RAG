@@ -5,8 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    # OpenAI API Key
+    # API Keys
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     
     # Vector Database Path (Local FAISS)
     VECTOR_DB_PATH = os.getenv("VECTOR_DB_PATH", "faiss_index")
@@ -35,8 +36,12 @@ class Config:
     EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", LLM_PROVIDER) # default to same as LLM
     
     # OpenAI Settings
-    EMBEDDING_MODEL = "text-embedding-3-large"
-    LLM_MODEL = "gpt-4-turbo-preview"
+    OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
+    OPENAI_LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4-turbo-preview")
+
+    # Gemini Settings
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
 
     # Ollama Settings
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -69,7 +74,6 @@ class Config:
         import requests
         url = base_url or cls.VLLM_BASE_URL
         try:
-            # vLLM provides an OpenAI-compatible /models endpoint
             response = requests.get(f"{url}/models", timeout=5)
             if response.status_code == 200:
                 models = response.json().get("data", [])
@@ -77,6 +81,27 @@ class Config:
         except:
             pass
         return [cls.VLLM_MODEL]
+
+    @classmethod
+    def get_openai_models(cls, api_key: str = None, base_url: str = None):
+        """Fetch available models from OpenAI."""
+        import requests
+        url = base_url or cls.OPENAI_BASE_URL
+        key = api_key or cls.OPENAI_API_KEY
+        if not key: return ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo-preview", "gpt-4o"]
+        try:
+            response = requests.get(f"{url}/models", headers={"Authorization": f"Bearer {key}"}, timeout=5)
+            if response.status_code == 200:
+                models = response.json().get("data", [])
+                return [m["id"] for m in models if "gpt" in m["id"] or "o1" in m["id"]]
+        except:
+            pass
+        return ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo-preview", "gpt-4o"]
+
+    @classmethod
+    def get_gemini_models(cls, api_key: str = None):
+        """List common Gemini models."""
+        return ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"]
 
     @classmethod
     def update_config(cls, updates: dict):

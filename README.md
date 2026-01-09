@@ -4,28 +4,28 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
 
 ## 🚀 Features
 
-- **Multi-Source Ingestion**:
-  - **PDFs**: Automatically scans and indexes PDFs from a `/RESOURCE` directory.
-  - **SQL Database**: Indexes text from SQL tables or arbitrary queries.
-- **Flexible LLM Support**:
-  - **OpenAI**: Use GPT-4 for top-tier performance.
-  - **Ollama (Local)**: Run open-source models (Llama 3, Mistral) locally or on your own server for privacy and cost savings.
-- **Strict QA**:
-  - Answers **ONLY** from the retrieved context.
-  - Responds with "I don't know based on the provided data" if the answer is missing.
-- **Vector Search**: Uses local FAISS index for fast and private similarity search.
-- **Streaming Chat UI**: Premium real-time chat interface with glassmorphism design.
-- **API First**: Fully documented FastAPI endpoints.
+- **Multi-Source Ingestion with Streaming Progress**:
+  - **PDFs**: Automatically scans and indexes PDFs from a `/RESOURCE` directory with real-time logs.
+  - **Web Crawling**: Enter any URL in the UI to crawl, extract sub-links, and ingest content dynamically.
+  - **SQL Database**: Selective ingestion by schema and table. Pick exactly what you need to index.
+- **Flexible LLM & Embedding Providers**:
+  - **Ollama (Local)**: High-performance local inference.
+  - **vLLM (Local GPU)**: Enterprise-grade throughput for local servers.
+  - **OpenAI**: Support for ChatGPT models (GPT-4o, etc.) with custom base URL support.
+  - **Google Gemini**: Support for Gemini 1.5 Pro and Flash.
+- **Advanced QA**:
+  - **Deep Thinking Mode**: Analytical prompt engineering for complex reasoning.
+  - **Strict Adherence**: Answers ONLY from provided context or admits ignorance.
+  - **Precise Citations**: Cites source file and exact page number for transparency.
+- **Premium Chat UI**: Responsive, glassmorphism design with real-time markdown rendering and streaming ingestion console.
 
 ## 🛠️ Tech Stack
 
 - **Framework**: FastAPI
 - **LLM Orchestration**: LangChain
-- **LLM Providers**: 
-  - **OpenAI** (gpt-4-turbo-preview)
-  - **Ollama** (Llama 3, Mistral, etc.)
-- **Vector Store**: FAISS (CPU)
-- **Database**: SQLAlchemy (Generic SQL support)
+- **Providers**: OpenAI, Google Gemini, Ollama, vLLM
+- **Vector Store**: FAISS
+- **Database**: SQLAlchemy 
 
 ## 📦 Installation
 
@@ -38,75 +38,48 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
 2. **Install Dependencies**:
    ```bash
    pip3 install -r requirements.txt
+   # For Gemini support:
+   pip3 install langchain-google-genai
    ```
 
-3. **Install Ollama (Optional)**:
-   If you want to run local models:
-   - Download from [ollama.com](https://ollama.com)
-   - Pull a model: `ollama pull llama3`
-
-4. **Environment Setup**:
-   Create a `.env` file in the root directory:
+3. **Environment Setup**:
+   Create a `.env` file in the root directory (see `.env.example` or the template below):
    
-   **Option A: Using OpenAI**
+   **Cloud Providers (OpenAI/Gemini)**
    ```env
-   LLM_PROVIDER=openai
+   LLM_PROVIDER=openai # or gemini
    OPENAI_API_KEY=sk-...
+   GEMINI_API_KEY=AIza...
    ```
 
-   **Option B: Using Ollama (Local/Server)**
+   **Local Providers (Ollama/vLLM)**
    ```env
-   LLM_PROVIDER=ollama
+   LLM_PROVIDER=ollama # or vllm
    OLLAMA_BASE_URL=http://localhost:11434
-   ```
-
-    **Option C: Using vLLM (Local GPU Server)**
-    ```env
-    LLM_PROVIDER=vllm
-    VLLM_BASE_URL=http://localhost:9090/v1
-    VLLM_MODEL=your-model-id
-    ```
-
-   **Common Settings**
-   ```env
-   DATABASE_URL=mysql+pymysql://user:password@localhost/dbname
-   RESOURCE_DIR=RESOURCE
-   VECTOR_DB_PATH=faiss_index
+   VLLM_BASE_URL=http://localhost:9090/v1
    ```
 
 ## 🏃 Usage
 
 1. **Start the Server**:
-
-   **Option A: Local Development (Recommended)**
    ```bash
+   # Local
    python3 -m uvicorn app.main:app --reload
    ```
 
-   **Option B: Production (using venv and sudo)**
-   ```bash
-   # Using the full path to the virtual environment's python is the most reliable way with sudo
-   sudo ./venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
-   ```
+2. **Manage Knowledge Base (UI)**:
+   - Open `http://localhost:80/client/index.html`.
+   - Click the **Database** icon in the sidebar.
+   - **PDFs**: Drop files or browse to upload.
+   - **Web**: Paste a URL to crawl and ingest.
+   - **SQL**: Select a schema, pick your tables, and click Ingest.
+   - *Monitor real-time progress in the built-in streaming console.*
 
-
-2. **Ingest Data**:
-   - **PDFs**: Place files in `RESOURCE/` and POST to `/ingest/pdf`.
-   - **Database**: POST query/table to `/ingest/db`.
-
-3. **Ask Questions**:
-   POST to `/ask`:
-   ```json
-   {
-     "question": "What is the summary of the report?"
-   }
-   ```
-
-4. **Chat Interface**:
-   Access the premium real-time chat UI at `http://localhost:80/client/index.html`.
-
-5. **API Documentation**:
-   Visit `http://localhost:80/docs` for interactive Swagger UI.
+3. **Configure Providers (UI)**:
+   - Click the **Settings** icon.
+   - Switch between providers (OpenAI, Gemini, Ollama, vLLM).
+   - Enter API keys or Base URLs on the fly.
+   - Select your preferred LLM and Embedding models.
 
 ## 📂 Project Structure
 

@@ -40,6 +40,12 @@ class ModelUpdateRequest(BaseModel):
 
 # --- Endpoints ---
 
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Redirect to the chat interface."""
+    with open("client/index.html", "r") as f:
+        return f.read()
+
 @app.get("/models/ollama")
 async def list_ollama_models(base_url: str = None):
     """List available Ollama models."""
@@ -51,6 +57,18 @@ async def list_vllm_models(base_url: str = None):
     """List available vLLM models."""
     from app.config import Config
     return {"models": Config.get_vllm_models(base_url=base_url), "current": Config.VLLM_MODEL}
+
+@app.get("/models/openai")
+async def list_openai_models(api_key: str = None, base_url: str = None):
+    """List available OpenAI models."""
+    from app.config import Config
+    return {"models": Config.get_openai_models(api_key=api_key, base_url=base_url), "current": Config.OPENAI_LLM_MODEL}
+
+@app.get("/models/gemini")
+async def list_gemini_models():
+    """List available Gemini models."""
+    from app.config import Config
+    return {"models": Config.get_gemini_models(), "current": Config.GEMINI_MODEL}
 
 @app.get("/config/current")
 async def get_current_config():
@@ -70,8 +88,14 @@ async def get_current_config():
             "base_url": Config.VLLM_BASE_URL
         },
         "openai": {
-            "model": Config.LLM_MODEL,
-            "embedding_model": Config.EMBEDDING_MODEL
+            "model": Config.OPENAI_LLM_MODEL,
+            "embedding_model": Config.OPENAI_EMBEDDING_MODEL,
+            "api_key": Config.OPENAI_API_KEY,
+            "base_url": Config.OPENAI_BASE_URL
+        },
+        "gemini": {
+            "model": Config.GEMINI_MODEL,
+            "api_key": Config.GEMINI_API_KEY
         }
     }
 
@@ -145,14 +169,62 @@ async def ask_question_stream(question: str, deep_thinking: bool = False):
         }
     )
 
-@app.get("/ingest/pdf/stream")
-async def stream_pdf_ingestion(fresh: bool = False):
+@app.get("/db/schemas")
+async def list_db_schemas():
+    """List available database schemas."""
+    from sqlalchemy import create_engine, inspect
+    from app.config import Config
+    if not Config.DATABASE_URL:
+        return {"schemas": []}
+    try:
+        engine = create_engine(Config.DATABASE_URL)
+        inspector = inspect(engine)
+        return {"schemas": inspector.get_schema_names()}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/db/tables")
+async def list_db_tables(schema: Optional[str] = None):
+    """List available tables for a selected schema."""
+    from sqlalchemy import create_engine, inspect
+    from app.config import Config
+    if not Config.DATABASE_URL:
+        return {"tables": []}
+    try:
+        engine = create_engine(Config.DATABASE_URL)
+        inspector = inspect(engine)
+        return {"tables": inspector.get_table_names(schema=schema)}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/ingest/web/stream")
+async def stream_web_ingestion(url: Optional[str] = None):
     """
-    Stream PDF ingestion progress in real-time.
-    - Set fresh=true to clear the index first.
+    Stream Website ingestion progress in real-time.
+    - url: Optional specific URL to ingest.
     """
+    from app.ingestion.web_ingest import ingest_websites
+    urls = [url] if url else None
     return StreamingResponse(
-        ingest_pdfs(force_fresh=fresh), 
+        ingest_websites(urls=urls), 
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+@app.get("/ingest/db/stream")
+async def stream_db_ingestion(tables: Optional[str] = None, schema: Optional[str] = None):
+    """
+    Stream Database ingestion progress in real-time.
+    - tables: Comma-separated list of tables.
+    - schema: Optional schema name.
+    """
+    from app.ingestion.db_ingest import ingest_database
+    table_list = tables.split(",") if tables else None
+    return StreamingResponse(
+        ingest_database(tables=table_list, schema=schema), 
         media_type="text/plain",
         headers={
             "Cache-Control": "no-cache",

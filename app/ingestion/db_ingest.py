@@ -20,11 +20,11 @@ def update_db_status(status, current=0, total=0, message=""):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
-def ingest_database():
+def ingest_database(tables: list = None, schema: str = None):
     """
-    Ingest data from a SQL database for all tables in Config.INGEST_TABLES.
-    Yields progress updates.
-    Automatically identifies relations based on 'tablename_minus_s_id' convention.
+    Ingest data from a SQL database.
+    - tables: Optional list of table names to ingest.
+    - schema: Optional schema name.
     """
     if not Config.DATABASE_URL:
         yield "ERROR: DATABASE_URL not set\n"
@@ -37,16 +37,17 @@ def ingest_database():
         yield f"ERROR: Database connection failed: {e}\n"
         return
 
-    tables_to_ingest = Config.INGEST_TABLES
+    # Use provided tables or fall back to config
+    tables_to_ingest = tables if tables else Config.INGEST_TABLES
 
     if not tables_to_ingest:
         connection.close()
-        yield "ERROR: No tables specified for ingestion in Config.INGEST_TABLES.\n"
+        yield "ERROR: No tables specified for ingestion.\n"
         return
 
     try:
         inspector = inspect(engine)
-        existing_tables = inspector.get_table_names()
+        existing_tables = inspector.get_table_names(schema=schema)
         
         # Build relation map: {column_name: table_name} 
         # e.g., {'institute_id': 'institutes', 'department_id': 'departments'}
@@ -57,7 +58,7 @@ def ingest_database():
                 relation_map[rel_col] = table
 
         total_tables = len(tables_to_ingest)
-        yield f"Starting ingestion for {total_tables} tables...\n"
+        yield f"Starting ingestion for {total_tables} tables{' in schema ' + schema if schema else ''}...\n"
         
         total_ingested_all = 0
         faiss_store = FAISSStore()
@@ -71,7 +72,9 @@ def ingest_database():
             yield f"[{current_num}/{total_tables}] Ingesting: {table}...\n"
             update_db_status("running", current=current_num, total=total_tables, message=f"Ingesting {table}")
             
-            result = connection.execute(text(f"SELECT * FROM {table}"))
+            # Use schema-qualified name if provided
+            full_table_name = f"{schema}.{table}" if schema else table
+            result = connection.execute(text(f"SELECT * FROM {full_table_name}"))
             rows = result.fetchall()
             keys = result.keys()
             

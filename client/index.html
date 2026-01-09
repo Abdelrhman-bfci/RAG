@@ -12,6 +12,7 @@
         rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=3">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
@@ -108,6 +109,7 @@
                         <label for="provider-select">LLM Provider</label>
                         <select id="provider-select">
                             <option value="openai">OpenAI</option>
+                            <option value="gemini">Google Gemini</option>
                             <option value="ollama">Ollama (Local)</option>
                             <option value="vllm">vLLM (Local)</option>
                         </select>
@@ -147,8 +149,19 @@
                         </div>
                     </div>
 
-                    <div id="openai-settings" class="provider-settings-group" style="display: none;">
-                        <p class="setting-hint">OpenAI settings are managed via environment variables.</p>
+                    <div id="cloud-settings" class="provider-settings-group" style="display: none;">
+                        <div class="setting-group" id="openai-key-group">
+                            <label for="openai-api-key">OpenAI API Key</label>
+                            <input type="password" id="openai-api-key" placeholder="sk-...">
+                        </div>
+                        <div class="setting-group" id="openai-url-group">
+                            <label for="openai-base-url">OpenAI Base URL</label>
+                            <input type="text" id="openai-base-url" placeholder="https://api.openai.com/v1">
+                        </div>
+                        <div class="setting-group" id="gemini-key-group">
+                            <label for="gemini-api-key">Gemini API Key</label>
+                            <input type="password" id="gemini-api-key" placeholder="AIza...">
+                        </div>
                     </div>
                 </div>
 
@@ -177,9 +190,42 @@
                 <button id="upload-btn" class="action-btn" disabled>Upload File</button>
             </div>
 
-            <!-- Section 2: Ingestion Controls -->
+            <!-- Section 2: Web Resource -->
             <div class="db-section">
-                <h3>2. Ingestion Operations</h3>
+                <h3>2. Web Resource</h3>
+                <div class="url-input-group">
+                    <input type="text" id="web-url-input" placeholder="https://example.com/about">
+                    <button id="web-ingest-btn" class="action-btn">
+                        <i class="fas fa-spider"></i> Crawl & Ingest
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 3: SQL Database Resource -->
+            <div class="db-section">
+                <h3>3. SQL Database Resource</h3>
+                <div class="db-resource-group">
+                    <div class="field-row">
+                        <label>Schema:</label>
+                        <select id="db-schema-select">
+                            <option value="">Default / Loading...</option>
+                        </select>
+                    </div>
+                    <div class="field-row">
+                        <label>Tables:</label>
+                        <div id="db-tables-container" class="tables-checklist">
+                            <p class="hint">Select schema to load tables...</p>
+                        </div>
+                    </div>
+                    <button id="db-ingest-btn" class="action-btn">
+                        <i class="fas fa-database"></i> Ingest Selected Tables
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 4: Ingestion Controls -->
+            <div class="db-section">
+                <h3>4. Ingestion Operations</h3>
                 <div class="button-group">
                     <button id="stream-btn" class="action-btn warning-btn">
                         <i class="fas fa-sync"></i> Quick Sync (Update)
@@ -278,7 +324,7 @@
                                 console.log('Sources:', data.sources);
                             } else if (data.type === 'chunk') {
                                 accumulatedAnswer += data.content;
-                                botTextDiv.innerText = accumulatedAnswer;
+                                botTextDiv.innerHTML = marked.parse(accumulatedAnswer);
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
                             } else if (data.type === 'metadata') {
                                 // Add performance metrics and sources
@@ -342,28 +388,28 @@
         const providerSelect = document.getElementById('provider-select');
         const embeddingProviderSelect = document.getElementById('embedding-provider-select');
         const localSettings = document.getElementById('local-settings');
-        const vllmUrlGroup = document.getElementById('vllm-url-group');
-        const vllmUrlInput = document.getElementById('vllm-url');
-        const openaiSettings = document.getElementById('openai-settings');
-        const modelHint = document.getElementById('model-hint');
         const embeddingModelSelect = document.getElementById('embedding-model-select');
+        const cloudSettings = document.getElementById('cloud-settings');
+        const openaiApiKeyInput = document.getElementById('openai-api-key');
+        const openaiBaseUrlInput = document.getElementById('openai-base-url');
+        const geminiApiKeyInput = document.getElementById('gemini-api-key');
 
         let currentConfig = null;
 
         providerSelect.onchange = async () => {
             const provider = providerSelect.value;
             localSettings.style.display = (provider === 'ollama' || provider === 'vllm') ? 'block' : 'none';
+            cloudSettings.style.display = (provider === 'openai' || provider === 'gemini') ? 'block' : 'none';
             vllmUrlGroup.style.display = provider === 'vllm' ? 'block' : 'none';
-            openaiSettings.style.display = provider === 'openai' ? 'block' : 'none';
 
-            if (provider === 'ollama' || provider === 'vllm') {
-                modelHint.innerText = provider === 'ollama' ? 'Select the local Ollama model.' : 'Select the model served by vLLM.';
-                const baseUrl = provider === 'vllm' ? vllmUrlInput.value : null;
-                await loadModels(provider, baseUrl, modelSelect);
+            // Show/hide specific cloud groups
+            document.getElementById('openai-key-group').style.display = provider === 'openai' ? 'block' : 'none';
+            document.getElementById('openai-url-group').style.display = provider === 'openai' ? 'block' : 'none';
+            document.getElementById('gemini-key-group').style.display = provider === 'gemini' ? 'block' : 'none';
 
-                if (currentConfig && provider === currentConfig.provider) {
-                    modelSelect.value = (provider === 'ollama') ? currentConfig.ollama.model : currentConfig.vllm.model;
-                }
+            if (provider === 'ollama' || provider === 'vllm' || provider === 'openai' || provider === 'gemini') {
+                modelHint.innerText = `Select the ${provider} model for chat generation.`;
+                await loadModels(provider, null, modelSelect);
             }
         };
 
@@ -400,9 +446,12 @@
                 providerSelect.value = currentConfig.provider;
                 embeddingProviderSelect.value = currentConfig.embedding_provider || currentConfig.provider;
 
-                if (currentConfig.provider === 'vllm') {
-                    vllmUrlInput.value = currentConfig.vllm.base_url;
+                if (currentConfig.vllm) vllmUrlInput.value = currentConfig.vllm.base_url || '';
+                if (currentConfig.openai) {
+                    openaiApiKeyInput.value = currentConfig.openai.api_key || '';
+                    openaiBaseUrlInput.value = currentConfig.openai.base_url || 'https://api.openai.com/v1';
                 }
+                if (currentConfig.gemini) geminiApiKeyInput.value = currentConfig.gemini.api_key || '';
 
                 await providerSelect.onchange();
                 await embeddingProviderSelect.onchange();
@@ -417,10 +466,19 @@
 
         async function loadModels(provider, baseUrl = null, targetSelect) {
             if (!provider) provider = providerSelect.value;
-            if (provider === 'openai') return;
 
-            let url = `${API_BASE}${provider === 'ollama' ? '/models/ollama' : '/models/vllm'}`;
-            if (baseUrl) url += `?base_url=${encodeURIComponent(baseUrl)}`;
+            let url = `${API_BASE}/models/${provider}`;
+            const params = new URLSearchParams();
+
+            if (provider === 'vllm' && (baseUrl || vllmUrlInput.value)) params.append('base_url', baseUrl || vllmUrlInput.value);
+            if (provider === 'openai') {
+                if (openaiApiKeyInput.value) params.append('api_key', openaiApiKeyInput.value);
+                if (openaiBaseUrlInput.value) params.append('base_url', openaiBaseUrlInput.value);
+            }
+            if (provider === 'gemini' && geminiApiKeyInput.value) params.append('api_key', geminiApiKeyInput.value);
+
+            const queryString = params.toString();
+            if (queryString) url += `?${queryString}`;
 
             targetSelect.innerHTML = '<option value="" disabled selected>Loading models...</option>';
 
@@ -484,6 +542,17 @@
                 updates["VLLM_BASE_URL"] = vllmUrlInput.value;
             }
 
+            if (provider === 'openai') {
+                updates["OPENAI_API_KEY"] = openaiApiKeyInput.value;
+                updates["OPENAI_BASE_URL"] = openaiBaseUrlInput.value;
+                updates["OPENAI_LLM_MODEL"] = modelSelect.value;
+            }
+
+            if (provider === 'gemini') {
+                updates["GEMINI_API_KEY"] = geminiApiKeyInput.value;
+                updates["GEMINI_MODEL"] = modelSelect.value;
+            }
+
             saveSettings.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
             saveSettings.disabled = true;
 
@@ -528,6 +597,8 @@
             if (settingsModal) settingsModal.style.display = 'none';
 
             dbModal.style.display = 'block';
+            loadSchemas();
+            loadTables(""); // Load default schema tables
         };
 
         dbBtn.onclick = openDbModal;
@@ -674,6 +745,149 @@
 
         streamBtn.addEventListener('click', () => startIngestionStream(false));
         freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
+
+        // Web Ingestion Logic
+        const webUrlInput = document.getElementById('web-url-input');
+        const webIngestBtn = document.getElementById('web-ingest-btn');
+
+        async function startWebIngestionStream() {
+            const url = webUrlInput.value.trim();
+            if (!url) {
+                alert('Please enter a URL first.');
+                return;
+            }
+
+            const streamUrl = `${API_BASE}/ingest/web/stream?url=${encodeURIComponent(url)}`;
+            webIngestBtn.disabled = true;
+            logToConsole(`Starting WEB CRAWL for ${url}...`, 'system');
+
+            try {
+                const response = await fetch(streamUrl);
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    lines.forEach(line => {
+                        if (line.trim()) {
+                            let type = 'info';
+                            if (line.includes('ERROR') || line.includes('failed')) type = 'error';
+                            if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
+                            if (line.includes('WARNING')) type = 'warning';
+                            logToConsole(line, type);
+                        }
+                    });
+                }
+                logToConsole('Web ingestion finished.', 'system');
+            } catch (error) {
+                logToConsole(`WEB STREAM ERROR: ${error.message}`, 'error');
+            } finally {
+                webIngestBtn.disabled = false;
+            }
+        }
+
+        webIngestBtn.addEventListener('click', startWebIngestionStream);
+
+        // SQL Database Ingestion Logic
+        const schemaSelect = document.getElementById('db-schema-select');
+        const tablesContainer = document.getElementById('db-tables-container');
+        const dbIngestBtn = document.getElementById('db-ingest-btn');
+
+        async function loadSchemas() {
+            try {
+                const response = await fetch(`${API_BASE}/db/schemas`);
+                const data = await response.json();
+                if (data.schemas) {
+                    schemaSelect.innerHTML = '<option value="">Select Schema...</option>';
+                    data.schemas.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s;
+                        opt.textContent = s;
+                        schemaSelect.appendChild(opt);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load schemas:', error);
+            }
+        }
+
+        async function loadTables(schema) {
+            tablesContainer.innerHTML = '<p class="hint">Loading tables...</p>';
+            try {
+                const url = schema ? `${API_BASE}/db/tables?schema=${encodeURIComponent(schema)}` : `${API_BASE}/db/tables`;
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.tables) {
+                    tablesContainer.innerHTML = '';
+                    data.tables.forEach(table => {
+                        const label = document.createElement('label');
+                        label.className = 'table-item';
+                        label.innerHTML = `
+                            <input type="checkbox" value="${table}" checked>
+                            <span>${table}</span>
+                        `;
+                        tablesContainer.appendChild(label);
+                    });
+                }
+            } catch (error) {
+                tablesContainer.innerHTML = `<p class="hint error">Error loading tables: ${error.message}</p>`;
+            }
+        }
+
+        schemaSelect.addEventListener('change', (e) => loadTables(e.target.value));
+
+        async function startDbIngestionStream() {
+            const selectedTables = Array.from(tablesContainer.querySelectorAll('input:checked'))
+                .map(cb => cb.value);
+
+            if (selectedTables.length === 0) {
+                alert('Please select at least one table.');
+                return;
+            }
+
+            const schema = schemaSelect.value;
+            let streamUrl = `${API_BASE}/ingest/db/stream?tables=${selectedTables.join(',')}`;
+            if (schema) streamUrl += `&schema=${encodeURIComponent(schema)}`;
+
+            dbIngestBtn.disabled = true;
+            logToConsole(`Starting DATABASE INGESTION for ${selectedTables.length} tables...`, 'system');
+
+            try {
+                const response = await fetch(streamUrl);
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    lines.forEach(line => {
+                        if (line.trim()) {
+                            let type = 'info';
+                            if (line.includes('ERROR') || line.includes('SKIP')) type = 'error';
+                            if (line.includes('SUCCESS') || line.includes('Added')) type = 'success';
+                            if (line.includes('WARNING')) type = 'warning';
+                            logToConsole(line, type);
+                        }
+                    });
+                }
+                logToConsole('Database ingestion finished.', 'system');
+            } catch (error) {
+                logToConsole(`DB STREAM ERROR: ${error.message}`, 'error');
+            } finally {
+                dbIngestBtn.disabled = false;
+            }
+        }
+
+        dbIngestBtn.addEventListener('click', startDbIngestionStream);
 
         // Mobile Sidebar Toggle Logic
         const menuToggle = document.getElementById('menu-toggle');

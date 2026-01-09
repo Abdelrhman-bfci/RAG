@@ -49,9 +49,9 @@ def update_status(status, current=0, total=0, message="", start_time=None):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
-def ingest_websites(force_fresh: bool = False):
+def ingest_websites(urls: list = None, force_fresh: bool = False):
     """
-    Ingest website content from the configured WEBSITE_LINKS.
+    Ingest website content from the given urls or Config.WEBSITE_LINKS.
     Only processes links that haven't been successfully indexed recently.
     Yields progress updates as strings.
     """
@@ -63,7 +63,7 @@ def ingest_websites(force_fresh: bool = False):
     yield "Checking website links...\n"
     update_status("running", message="Scanning links...")
     
-    links = Config.WEBSITE_LINKS
+    links = urls if urls else Config.WEBSITE_LINKS
     if not links:
         msg = "No website links found in configuration."
         update_status("completed", message=msg)

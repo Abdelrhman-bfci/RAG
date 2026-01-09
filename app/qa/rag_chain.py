@@ -1,6 +1,10 @@
 import os
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError:
+    ChatGoogleGenerativeAI = None # Will handle failure in get_llm
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
@@ -112,13 +116,30 @@ def get_rag_chain(deep_thinking: bool = False):
             base_url=Config.VLLM_BASE_URL,
             model=Config.VLLM_MODEL,
             temperature=0.2 if deep_thinking else 0.1,
-            api_key="none" # vLLM typically doesn't require an API key by default
+            api_key="none"
         )
-    else:
+    elif Config.LLM_PROVIDER == "openai":
         llm = ChatOpenAI(
-            model=Config.LLM_MODEL,
+            model=Config.OPENAI_LLM_MODEL,
+            base_url=Config.OPENAI_BASE_URL,
             temperature=0.2 if deep_thinking else 0.1,
             openai_api_key=Config.OPENAI_API_KEY
+        )
+    elif Config.LLM_PROVIDER == "gemini":
+        if ChatGoogleGenerativeAI is None:
+            raise ImportError("langchain-google-genai is not installed. Please run 'pip install langchain-google-genai'")
+        llm = ChatGoogleGenerativeAI(
+            model=Config.GEMINI_MODEL,
+            google_api_key=Config.GEMINI_API_KEY,
+            temperature=0.2 if deep_thinking else 0.1
+        )
+    else:
+        # Default fallback to Ollama
+        llm = ChatOllama(
+            model=Config.OLLAMA_LLM_MODEL,
+            base_url=Config.OLLAMA_BASE_URL,
+            temperature=0.2 if deep_thinking else 0.1,
+            num_ctx=Config.OLLAMA_CONTEXT_WINDOW
         )
 
     # 4. Construct the Chain
