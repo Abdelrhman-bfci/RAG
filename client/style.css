@@ -649,9 +649,9 @@ header {
 .table-name {
     font-size: 0.95rem;
     color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    word-break: break-word;
+    /* Allow long words to break */
+    line-height: 1.4;
 }
 
 /* Scrollbar styling for the grid */
