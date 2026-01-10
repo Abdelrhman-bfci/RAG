@@ -536,59 +536,75 @@ header {
     color: var(--text-muted);
 }
 
-/* SQL Table Selection UI */
-.table-controls {
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid var(--glass-border);
+/* SQL Database Ingestion UI - Redesign */
+.db-resource-group {
     display: flex;
     flex-direction: column;
-    /* Stack search and controls */
+    gap: 16px;
+    height: 100%;
+}
+
+.sql-table-container {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 450px;
+    /* Fixed height for large lists */
+}
+
+/* Toolbar Area */
+.sql-toolbar {
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
     gap: 12px;
 }
 
-.search-wrapper {
+.search-box {
+    flex: 1;
     position: relative;
-    width: 100%;
-    /* Full width */
 }
 
-.control-header {
-    display: flex;
-    justify-content: flex-end;
-    /* Align Select All to right */
-    width: 100%;
-}
-
-.search-wrapper i {
+.search-box i {
     position: absolute;
-    left: 10px;
+    left: 12px;
     top: 50%;
     transform: translateY(-50%);
     color: var(--text-secondary);
-    font-size: 0.8rem;
-    pointer-events: none;
+    font-size: 0.9rem;
 }
 
-#table-search {
+.search-box input {
     width: 100%;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.2);
     border: 1px solid var(--glass-border);
-    border-radius: 6px;
-    padding: 8px 10px 8px 34px;
-    /* Increased padding */
+    border-radius: 8px;
+    padding: 10px 12px 10px 36px;
     color: var(--text-primary);
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     outline: none;
     transition: all 0.2s;
 }
 
-#table-search:focus {
+.search-box input:focus {
     border-color: var(--primary);
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.3);
 }
 
-.control-item {
+.bulk-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-left: 12px;
+    border-left: 1px solid var(--glass-border);
+}
+
+.action-checkbox {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -598,65 +614,95 @@ header {
     user-select: none;
 }
 
-.count-badge {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-left: 4px;
-}
-
-.control-item input[type="checkbox"] {
+.action-checkbox input {
     accent-color: var(--primary);
     width: 16px;
     height: 16px;
 }
 
-.tables-grid {
+/* Table List Area */
+.sql-list-header {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    /* Two columns */
-    gap: 12px;
-    max-height: 300px;
+    grid-template-columns: 40px 1fr;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--glass-border);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.sql-list-body {
+    flex: 1;
     overflow-y: auto;
-    padding-right: 4px;
+    padding: 0;
 }
 
-.table-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--glass-border);
-    border-radius: 8px;
+.sql-row {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    transition: background 0.15s;
     cursor: pointer;
-    transition: all 0.2s ease;
-    user-select: none;
+    align-items: center;
 }
 
-.table-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: var(--primary-light);
-    transform: translateY(-1px);
+.sql-row:hover {
+    background: rgba(255, 255, 255, 0.05);
 }
 
-.table-item input[type="checkbox"] {
+.sql-row.selected {
+    background: rgba(99, 102, 241, 0.08);
+    /* Primary color hint */
+}
+
+.sql-row:last-child {
+    border-bottom: none;
+}
+
+.col-check {
+    display: flex;
+    justify-content: center;
+}
+
+.col-check input {
     accent-color: var(--primary);
     width: 16px;
     height: 16px;
     cursor: pointer;
 }
 
-.table-name {
+.col-name {
     font-size: 0.95rem;
     color: var(--text-primary);
-    word-break: break-word;
-    /* Allow long words to break */
-    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* Scrollbar styling for the grid */
-.tables-grid::-webkit-scrollbar {
-    width: 6px;
+/* Footer / Action Area */
+.sql-footer {
+    padding: 16px;
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.01);
+}
+
+.selection-summary {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+#db-ingest-btn {
+    width: auto;
+    padding: 0 22px;
+    /* make it look like a primary button */
+    margin: 0;
 }
 
 .tables-grid::-webkit-scrollbar-track {

@@ -179,7 +179,7 @@
                             </div>
                             <div class="field-row">
                                 <label>Tables:</label>
-                                <div id="db-tables-container" class="tables-checklist">
+                                <div id="db-tables-container">
                                     <p class="hint">Select schema to load tables...</p>
                                 </div>
                             </div>
@@ -992,63 +992,108 @@
                 const response = await fetch(url);
                 const data = await response.json();
                 if (data.tables) {
+                    // Render Professional List Structure
                     tablesContainer.innerHTML = `
-                        <div class="table-controls">
-                            <div class="search-wrapper full-width">
-                                <i class="fas fa-search"></i>
-                                <input type="text" id="table-search" placeholder="Search tables...">
+                        <div class="sql-table-container">
+                            <!-- Toolbar -->
+                            <div class="sql-toolbar">
+                                <div class="search-box">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" id="table-search" placeholder="Search tables...">
+                                </div>
+                                <div class="bulk-actions">
+                                    <label class="action-checkbox">
+                                        <input type="checkbox" id="select-all-tables" checked>
+                                        <span>Select All</span>
+                                    </label>
+                                </div>
                             </div>
-                            <div class="control-header">
-                                <label class="control-item">
-                                    <input type="checkbox" id="select-all-tables" checked>
-                                    <span>Select All <span id="selected-count" class="count-badge"></span></span>
-                                </label>
+
+                            <!-- List Header -->
+                            <div class="sql-list-header">
+                                <div class="col-check"></div>
+                                <div class="col-name">Table Name</div>
+                            </div>
+
+                            <!-- Scrollable List Body -->
+                            <div class="sql-list-body" id="sql-list-body">
+                                <!-- Rows will be injected here -->
+                            </div>
+
+                            <!-- Footer -->
+                            <div class="sql-footer">
+                                <span class="selection-summary" id="selection-summary">0 tables selected</span>
+                                <!-- Button moved here dynamically if needed, or kept outside -->
                             </div>
                         </div>
-                        <div class="tables-grid two-columns"></div>
                     `;
 
-                    const grid = tablesContainer.querySelector('.tables-grid');
+                    const listBody = tablesContainer.querySelector('#sql-list-body');
                     const selectAllCheckbox = tablesContainer.querySelector('#select-all-tables');
                     const searchInput = tablesContainer.querySelector('#table-search');
+                    const summaryText = tablesContainer.querySelector('#selection-summary');
+
+                    // Helper to update selection stats
+                    function updateSelectionStats() {
+                        const total = listBody.querySelectorAll('input[type="checkbox"]').length;
+                        const checked = listBody.querySelectorAll('input[type="checkbox"]:checked').length;
+                        summaryText.textContent = `${checked} of ${total} tables selected`;
+
+                        // Update Select All state
+                        const allChecked = total > 0 && total === checked;
+                        selectAllCheckbox.checked = allChecked;
+                        selectAllCheckbox.indeterminate = !allChecked && checked > 0;
+                    }
 
                     data.tables.forEach(table => {
-                        const label = document.createElement('label');
-                        label.className = 'table-item';
-                        label.innerHTML = `
-                            <input type="checkbox" value="${table}" checked>
-                            <span class="table-name">${table}</span>
+                        const row = document.createElement('div');
+                        row.className = 'sql-row';
+                        row.innerHTML = `
+                            <div class="col-check">
+                                <input type="checkbox" value="${table}" checked>
+                            </div>
+                            <div class="col-name" title="${table}">${table}</div>
                         `;
-                        grid.appendChild(label);
 
-                        // Uncheck "Select All" if any item is unchecked
-                        label.querySelector('input').addEventListener('change', () => {
-                            const allChecked = Array.from(grid.querySelectorAll('input[type="checkbox"]')).every(cb => cb.checked);
-                            selectAllCheckbox.checked = allChecked;
-                            selectAllCheckbox.indeterminate = !allChecked && Array.from(grid.querySelectorAll('input[type="checkbox"]')).some(cb => cb.checked);
+                        // Row click toggles checkbox
+                        row.addEventListener('click', (e) => {
+                            if (e.target.type !== 'checkbox') {
+                                const cb = row.querySelector('input[type="checkbox"]');
+                                cb.checked = !cb.checked;
+                                // Trigger change event manually if needed, or just update stats
+                                updateSelectionStats();
+                            }
                         });
+
+                        // Checkbox change updates stats
+                        row.querySelector('input').addEventListener('change', updateSelectionStats);
+
+                        listBody.appendChild(row);
                     });
+
+                    // Initial stats update
+                    updateSelectionStats();
 
                     // Search Logic
                     searchInput.addEventListener('input', (e) => {
                         const term = e.target.value.toLowerCase();
-                        grid.querySelectorAll('.table-item').forEach(item => {
-                            const name = item.querySelector('.table-name').textContent.toLowerCase();
-                            item.style.display = name.includes(term) ? 'flex' : 'none';
+                        listBody.querySelectorAll('.sql-row').forEach(row => {
+                            const name = row.querySelector('.col-name').textContent.toLowerCase();
+                            row.style.display = name.includes(term) ? 'grid' : 'none';
                         });
                     });
 
                     // Select All Logic
                     selectAllCheckbox.addEventListener('change', (e) => {
                         const isChecked = e.target.checked;
-                        const items = grid.querySelectorAll('.table-item');
+                        const rows = listBody.querySelectorAll('.sql-row');
 
-                        items.forEach(item => {
-                            // Only select visible items if searching
-                            if (item.style.display !== 'none') {
-                                item.querySelector('input[type="checkbox"]').checked = isChecked;
+                        rows.forEach(row => {
+                            if (row.style.display !== 'none') {
+                                row.querySelector('input').checked = isChecked;
                             }
                         });
+                        updateSelectionStats();
                     });
                 }
             } catch (error) {
