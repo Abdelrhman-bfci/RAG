@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, text, inspect
 from langchain_core.documents import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
 
