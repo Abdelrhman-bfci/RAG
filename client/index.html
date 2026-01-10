@@ -28,16 +28,27 @@
             </div>
 
             <nav class="nav-links">
-                <div class="nav-item active">
+                <div class="nav-item active" onclick="switchView('view-chat', this)">
                     <i class="fas fa-comment-dots"></i>
                     <span>Chat Assistant</span>
                 </div>
-                <!-- Future features could go here -->
-                <div class="nav-item" id="sidebar-db-btn">
-                    <i class="fas fa-database"></i>
-                    <span>Database</span>
+                <div class="nav-item" onclick="switchView('view-pdf', this)">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>PDF Documents</span>
                 </div>
-                <div class="nav-item" id="sidebar-settings-btn">
+                <div class="nav-item" onclick="switchView('view-web', this)">
+                    <i class="fas fa-globe"></i>
+                    <span>Web Content</span>
+                </div>
+                <div class="nav-item" onclick="switchView('view-db', this)">
+                    <i class="fas fa-database"></i>
+                    <span>SQL Databases</span>
+                </div>
+                <div class="nav-item" onclick="switchView('view-manage', this)">
+                    <i class="fas fa-tasks"></i>
+                    <span>Management</span>
+                </div>
+                <div class="nav-item" onclick="switchView('view-settings', this)">
                     <i class="fas fa-cog"></i>
                     <span>Settings</span>
                 </div>
@@ -70,194 +81,201 @@
                 </div>
             </header>
 
-            <div class="chat-container" id="chat-container">
-                <div class="welcome-message">
-                    <h2>Hello, <span>How can I help you?</span></h2>
-                    <p>Access your documents through natural language. Ask specific questions or explore topics.</p>
-                    <div class="suggested-queries">
-                        <button onclick="setQuery('What are the available departments?')">Departments</button>
-                        <button onclick="setQuery('Tell me about the bylaws.')">Bylaws</button>
-                        <button onclick="setQuery('How to apply for graduation?')">Graduation</button>
+            <!-- View: Chat Assistant -->
+            <div id="view-chat" class="view-section active">
+                <div class="chat-container" id="chat-container">
+                    <div class="welcome-message">
+                        <h2>Hello, <span>How can I help you?</span></h2>
+                        <p>Access your documents through natural language. Ask specific questions or explore topics.</p>
+                        <div class="suggested-queries">
+                            <button onclick="setQuery('What are the available departments?')">Departments</button>
+                            <button onclick="setQuery('Tell me about the bylaws.')">Bylaws</button>
+                            <button onclick="setQuery('How to apply for graduation?')">Graduation</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area-wrapper">
+                    <div class="input-area">
+                        <div class="mode-dropdown-container">
+                            <select id="chat-mode" class="mode-select-compact">
+                                <option value="normal">🔘 Normal</option>
+                                <option value="deep">🧠 Deep Thinking</option>
+                            </select>
+                        </div>
+                        <textarea id="user-input" placeholder="Message RAG Assistant..." rows="1"></textarea>
+                        <button id="send-btn">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <div class="input-area-wrapper">
-                <div class="input-area">
-                    <div class="mode-dropdown-container">
-                        <select id="chat-mode" class="mode-select-compact">
-                            <option value="normal">🔘 Normal</option>
-                            <option value="deep">🧠 Deep Thinking</option>
-                        </select>
+            <!-- View: PDF Documents -->
+            <div id="view-pdf" class="view-section">
+                <div class="section-container">
+                    <div class="db-section">
+                        <h3><i class="fas fa-file-pdf"></i> PDF Upload</h3>
+                        <div class="upload-zone" id="upload-zone">
+                            <input type="file" id="file-input" accept=".pdf" hidden>
+                            <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop PDF here or <a href="#"
+                                    id="browse-btn">Browse</a></p>
+                            <span id="file-name-display"></span>
+                        </div>
+                        <button id="upload-btn" class="action-btn" disabled>Upload File</button>
                     </div>
-                    <textarea id="user-input" placeholder="Message RAG Assistant..." rows="1"></textarea>
-                    <button id="send-btn">
-                        <i class="fas fa-arrow-up"></i>
-                    </button>
+
+                    <div class="db-section">
+                        <h3><i class="fas fa-sync"></i> Synchronize</h3>
+                        <p class="section-desc">Add newly uploaded PDFs to the search index.</p>
+                        <div class="button-group">
+                            <button id="stream-btn" class="action-btn warning-btn">
+                                <i class="fas fa-sync"></i> Quick Sync (Update)
+                            </button>
+                            <button id="fresh-stream-btn" class="action-btn danger-btn">
+                                <i class="fas fa-hammer"></i> Fresh Build (Reset Index)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Web Content -->
+            <div id="view-web" class="view-section">
+                <div class="section-container">
+                    <div class="db-section">
+                        <h3><i class="fas fa-globe"></i> Web Ingestion</h3>
+                        <p class="section-desc">Crawl website content to expand knowledge.</p>
+                        <div class="url-input-group">
+                            <input type="text" id="web-url-input" placeholder="https://example.com/about">
+                            <button id="web-ingest-btn" class="action-btn">
+                                <i class="fas fa-spider"></i> Crawl & Ingest
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: SQL Databases -->
+            <div id="view-db" class="view-section">
+                <div class="section-container">
+                    <div class="db-section">
+                        <h3><i class="fas fa-database"></i> SQL Database Ingestion</h3>
+                        <div class="db-resource-group">
+                            <div class="field-row">
+                                <label>Schema:</label>
+                                <select id="db-schema-select">
+                                    <option value="">Default / Loading...</option>
+                                </select>
+                            </div>
+                            <div class="field-row">
+                                <label>Tables:</label>
+                                <div id="db-tables-container" class="tables-checklist">
+                                    <p class="hint">Select schema to load tables...</p>
+                                </div>
+                            </div>
+                            <button id="db-ingest-btn" class="action-btn">
+                                <i class="fas fa-database"></i> Ingest Selected Tables
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Management -->
+            <div id="view-manage" class="view-section">
+                <div class="section-container">
+                    <div class="db-section">
+                        <h3><i class="fas fa-tasks"></i> Managed Resources</h3>
+                        <div id="resource-list-container" class="resource-management-list">
+                            <p class="hint">Loading managed resources...</p>
+                        </div>
+                    </div>
+
+                    <div class="db-section">
+                        <h3><i class="fas fa-exclamation-triangle"></i> System Operations</h3>
+                        <div class="danger-zone">
+                            <button id="reset-all-btn" class="action-btn delete-btn-full">
+                                <i class="fas fa-trash-alt"></i> Wipe All Data & Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="db-section">
+                        <h3><i class="fas fa-terminal"></i> System Logs</h3>
+                        <div id="console-output" class="terminal-window">
+                            <span class="log-line system">> View live ingestion logs here.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Settings -->
+            <div id="view-settings" class="view-section">
+                <div class="section-container">
+                    <div class="db-section">
+                        <h3><i class="fas fa-cog"></i> Global Settings</h3>
+
+                        <div class="setting-group">
+                            <label for="provider-select">LLM Provider</label>
+                            <select id="provider-select">
+                                <option value="openai">OpenAI</option>
+                                <option value="gemini">Google Gemini</option>
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="vllm">vLLM (Local)</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-group">
+                            <label for="embedding-provider-select">Embedding Provider</label>
+                            <select id="embedding-provider-select">
+                                <option value="openai">OpenAI</option>
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="vllm">vLLM (Local)</option>
+                            </select>
+                        </div>
+
+                        <div id="local-settings" class="provider-settings-group" style="display: none;">
+                            <div class="setting-group" id="vllm-url-group" style="display: none;">
+                                <label for="vllm-url">Provider Base URL (vLLM)</label>
+                                <input type="text" id="vllm-url" placeholder="http://localhost:9090/v1">
+                            </div>
+                            <div class="setting-group" id="llm-model-group">
+                                <label for="model-select">LLM Model</label>
+                                <select id="model-select">
+                                    <option value="" disabled selected>Select a model...</option>
+                                </select>
+                            </div>
+                            <div class="setting-group" id="embedding-model-group">
+                                <label for="embedding-model-select">Embedding Model</label>
+                                <select id="embedding-model-select">
+                                    <option value="" disabled selected>Select a model...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="cloud-settings" class="provider-settings-group" style="display: none;">
+                            <div class="setting-group" id="openai-key-group">
+                                <label for="openai-api-key">OpenAI API Key</label>
+                                <input type="password" id="openai-api-key" placeholder="sk-...">
+                            </div>
+                            <div class="setting-group" id="openai-url-group">
+                                <label for="openai-base-url">OpenAI Base URL</label>
+                                <input type="text" id="openai-base-url" placeholder="https://api.openai.com/v1">
+                            </div>
+                            <div class="setting-group" id="gemini-key-group">
+                                <label for="gemini-api-key">Gemini API Key</label>
+                                <input type="password" id="gemini-api-key" placeholder="AIza...">
+                            </div>
+                        </div>
+
+                        <button id="save-settings-btn" class="primary-btn" style="margin-top: 20px;">Save
+                            Changes</button>
+                    </div>
                 </div>
             </div>
         </main>
 
-        <!-- Settings Modal -->
-        <div id="settings-modal" class="modal">
-            <div class="modal-content">
-                <span class="close-btn">&times;</span>
-                <h2>Settings</h2>
-
-                <div class="modal-body">
-                    <div class="setting-group">
-                        <label for="provider-select">LLM Provider</label>
-                        <select id="provider-select">
-                            <option value="openai">OpenAI</option>
-                            <option value="gemini">Google Gemini</option>
-                            <option value="ollama">Ollama (Local)</option>
-                            <option value="vllm">vLLM (Local)</option>
-                        </select>
-                        <p class="setting-hint">Choose where your AI model is hosted.</p>
-                    </div>
-
-                    <div class="setting-group">
-                        <label for="embedding-provider-select">Embedding Provider</label>
-                        <select id="embedding-provider-select">
-                            <option value="openai">OpenAI</option>
-                            <option value="ollama">Ollama (Local)</option>
-                            <option value="vllm">vLLM (Local)</option>
-                        </select>
-                        <p class="setting-hint">Provider for document vectorization (FAISS).</p>
-                    </div>
-
-                    <div id="local-settings" class="provider-settings-group" style="display: none;">
-                        <div class="setting-group" id="vllm-url-group" style="display: none;">
-                            <label for="vllm-url">Provider Base URL (vLLM)</label>
-                            <input type="text" id="vllm-url" placeholder="http://localhost:9090/v1">
-                        </div>
-
-                        <div class="setting-group" id="llm-model-group">
-                            <label for="model-select">LLM Model</label>
-                            <select id="model-select">
-                                <option value="" disabled selected>Select a model...</option>
-                            </select>
-                            <p class="setting-hint" id="model-hint">Select the model for chat generation.</p>
-                        </div>
-
-                        <div class="setting-group" id="embedding-model-group">
-                            <label for="embedding-model-select">Embedding Model</label>
-                            <select id="embedding-model-select">
-                                <option value="" disabled selected>Select a model...</option>
-                            </select>
-                            <p class="setting-hint">Select the model for vector embeddings.</p>
-                        </div>
-                    </div>
-
-                    <div id="cloud-settings" class="provider-settings-group" style="display: none;">
-                        <div class="setting-group" id="openai-key-group">
-                            <label for="openai-api-key">OpenAI API Key</label>
-                            <input type="password" id="openai-api-key" placeholder="sk-...">
-                        </div>
-                        <div class="setting-group" id="openai-url-group">
-                            <label for="openai-base-url">OpenAI Base URL</label>
-                            <input type="text" id="openai-base-url" placeholder="https://api.openai.com/v1">
-                        </div>
-                        <div class="setting-group" id="gemini-key-group">
-                            <label for="gemini-api-key">Gemini API Key</label>
-                            <input type="password" id="gemini-api-key" placeholder="AIza...">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="modal-actions">
-                    <button id="save-settings-btn" class="primary-btn">Save Changes</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Database Modal -->
-    <div id="db-modal" class="modal">
-        <div class="modal-content wide-modal">
-            <span class="close-db-btn">&times;</span>
-            <h2><i class="fas fa-server"></i> Database Management</h2>
-
-            <!-- Section 1: Upload -->
-            <div class="db-section">
-                <h3>1. Upload Resource</h3>
-                <div class="upload-zone" id="upload-zone">
-                    <input type="file" id="file-input" accept=".pdf" hidden>
-                    <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop PDF here or <a href="#"
-                            id="browse-btn">Browse</a></p>
-                    <span id="file-name-display"></span>
-                </div>
-                <button id="upload-btn" class="action-btn" disabled>Upload File</button>
-            </div>
-
-            <!-- Section 2: Web Resource -->
-            <div class="db-section">
-                <h3>2. Web Resource</h3>
-                <div class="url-input-group">
-                    <input type="text" id="web-url-input" placeholder="https://example.com/about">
-                    <button id="web-ingest-btn" class="action-btn">
-                        <i class="fas fa-spider"></i> Crawl & Ingest
-                    </button>
-                </div>
-            </div>
-
-            <!-- Section 3: SQL Database Resource -->
-            <div class="db-section">
-                <h3>3. SQL Database Resource</h3>
-                <div class="db-resource-group">
-                    <div class="field-row">
-                        <label>Schema:</label>
-                        <select id="db-schema-select">
-                            <option value="">Default / Loading...</option>
-                        </select>
-                    </div>
-                    <div class="field-row">
-                        <label>Tables:</label>
-                        <div id="db-tables-container" class="tables-checklist">
-                            <p class="hint">Select schema to load tables...</p>
-                        </div>
-                    </div>
-                    <button id="db-ingest-btn" class="action-btn">
-                        <i class="fas fa-database"></i> Ingest Selected Tables
-                    </button>
-                </div>
-            </div>
-
-            <!-- Section 4: Resource Management -->
-            <div class="db-section">
-                <h3>4. Managed Resources</h3>
-                <div id="resource-list-container" class="resource-management-list">
-                    <p class="hint">Loading managed resources...</p>
-                </div>
-            </div>
-
-            <!-- Section 5: System Operations -->
-            <div class="db-section">
-                <h3>5. System Operations</h3>
-                <div class="button-group">
-                    <button id="stream-btn" class="action-btn warning-btn">
-                        <i class="fas fa-sync"></i> Quick Sync (Update)
-                    </button>
-                    <button id="fresh-stream-btn" class="action-btn danger-btn">
-                        <i class="fas fa-hammer"></i> Fresh Build (Reset Index)
-                    </button>
-                </div>
-                <div class="danger-zone"
-                    style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border-color);">
-                    <button id="reset-all-btn" class="action-btn delete-btn-full">
-                        <i class="fas fa-trash-alt"></i> Wipe All Data & Reset
-                    </button>
-                </div>
-            </div>
-
-            <!-- Section 3: Live Logs -->
-            <div class="db-section">
-                <h3>3. Live System Logs</h3>
-                <div id="console-output" class="terminal-window">
-                    <span class="log-line system">> System ready. Waiting for command...</span>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div id="toast" class="toast">
@@ -275,6 +293,37 @@
         function setQuery(query) {
             userInput.value = query;
             sendMessage();
+        }
+
+        function switchView(viewId, navItem) {
+            // Hide all views
+            document.querySelectorAll('.view-section').forEach(view => {
+                view.classList.remove('active');
+            });
+            // Show selected view
+            const activeView = document.getElementById(viewId);
+            if (activeView) activeView.classList.add('active');
+
+            // Update sidebar active state
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            if (navItem) navItem.classList.add('active');
+
+            // Trigger data fetching if needed
+            if (viewId === 'view-manage') loadResources();
+            if (viewId === 'view-db') {
+                loadSchemas();
+                loadTables("");
+            }
+
+            // Close sidebar on mobile after selection
+            if (window.innerWidth <= 768) {
+                document.querySelector('.sidebar').classList.remove('active');
+            }
+
+            // Log view change
+            console.log(`Switched to view: ${viewId}`);
         }
 
         function addMessage(content, isUser = false) {
@@ -392,17 +441,12 @@
             if (e.key === 'Enter') sendMessage();
         });
 
-        // Settings Modal Logic
-        const settingsBtn = document.getElementById('settings-btn');
-        const settingsModal = document.getElementById('settings-modal');
-        const closeModal = document.querySelector('.close-btn');
-        const modelSelect = document.getElementById('model-select');
-        const saveSettings = document.getElementById('save-settings-btn');
-
         const providerSelect = document.getElementById('provider-select');
         const embeddingProviderSelect = document.getElementById('embedding-provider-select');
         const localSettings = document.getElementById('local-settings');
+        const modelSelect = document.getElementById('model-select');
         const embeddingModelSelect = document.getElementById('embedding-model-select');
+        const saveSettings = document.getElementById('save-settings-btn');
         const cloudSettings = document.getElementById('cloud-settings');
         const openaiApiKeyInput = document.getElementById('openai-api-key');
         const openaiBaseUrlInput = document.getElementById('openai-base-url');
@@ -452,10 +496,7 @@
             }, 800);
         };
 
-        const openSettingsModal = async () => {
-            if (dbModal) dbModal.style.display = 'none';
-            settingsModal.style.display = 'block';
-
+        async function loadCurrentConfig() {
             try {
                 const response = await fetch(`${API_BASE}/config/current`);
                 currentConfig = await response.json();
@@ -475,10 +516,6 @@
             } catch (error) {
                 console.error('Failed to load current config:', error);
             }
-        };
-
-        closeModal.onclick = () => {
-            settingsModal.style.display = 'none';
         }
 
         async function loadModels(provider, baseUrl = null, targetSelect) {
@@ -594,41 +631,16 @@
             }
         }
         // ==========================================
-        // DATABASE & INGESTION LOGIC
+        // UI & NAVIGATION LOGIC
         // ==========================================
-        const dbModal = document.getElementById('db-modal');
         const dbBtn = document.getElementById('db-btn');
-        const closeDbBtn = document.querySelector('.close-db-btn'); // Note: changed class in HTML
-        const fileInput = document.getElementById('file-input');
-        const uploadZone = document.getElementById('upload-zone');
-        const uploadBtn = document.getElementById('upload-btn');
-        const fileNameDisplay = document.getElementById('file-name-display');
-        const browseBtn = document.getElementById('browse-btn');
-        const consoleOutput = document.getElementById('console-output');
-        const streamBtn = document.getElementById('stream-btn');
-        const freshStreamBtn = document.getElementById('fresh-stream-btn');
+        const settingsBtnHeader = document.getElementById('settings-btn');
 
-        // Open/Close Modal
-        const openDbModal = () => {
-            // Ensure mutual exclusion
-            if (settingsModal) settingsModal.style.display = 'none';
+        if (dbBtn) dbBtn.onclick = () => switchView('view-manage');
+        if (settingsBtnHeader) settingsBtnHeader.onclick = () => switchView('view-settings');
 
-            dbModal.style.display = 'block';
-            loadSchemas();
-            loadTables(""); // Load default schema tables
-            loadResources(); // Load handled resources
-        };
-
-        dbBtn.onclick = openDbModal;
-        settingsBtn.onclick = openSettingsModal;
-        document.getElementById('sidebar-db-btn').onclick = openDbModal;
-        document.getElementById('sidebar-settings-btn').onclick = openSettingsModal;
-
-        closeDbBtn.addEventListener('click', () => {
-            dbModal.style.display = 'none';
-        });
-
-        // Close on outside click is handled by window.onclick below
+        // Initial config load
+        loadCurrentConfig();
 
         // File Selection Logic
         browseBtn.addEventListener('click', (e) => {

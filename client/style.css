@@ -189,10 +189,28 @@ body {
 .main-content {
     flex: 1;
     height: 100vh;
-    display: flex;
-    flex-direction: column;
-    position: relative;
     background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.05), transparent 40%);
+    overflow: hidden;
+}
+
+.view-section {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    animation: fadeIn 0.4s ease-out;
+}
+
+.view-section.active {
+    display: flex;
+}
+
+.section-container {
+    padding: 40px;
+    max-width: 1000px;
+    margin: 0 auto;
+    width: 100%;
+    overflow-y: auto;
 }
 
 header {
@@ -286,6 +304,7 @@ header {
     margin-bottom: 16px;
     background: linear-gradient(to bottom, #fff, #94a3b8);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -423,8 +442,13 @@ header {
     }
 }
 
-.wide-modal {
-    max-width: 900px;
+/* Widening containers for full page views */
+.view-section .db-section {
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    margin-bottom: 24px;
+    backdrop-filter: blur(10px);
 }
 
 .modal-content h2 {
