@@ -137,6 +137,13 @@
                             </button>
                         </div>
                     </div>
+
+                    <div class="db-section">
+                        <h3><i class="fas fa-terminal"></i> Ingestion Logs</h3>
+                        <div id="pdf-console" class="mini-terminal">
+                            <span class="log-line system">> PDF synchronization updates appear here.</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -151,6 +158,13 @@
                             <button id="web-ingest-btn" class="action-btn">
                                 <i class="fas fa-spider"></i> Crawl & Ingest
                             </button>
+                        </div>
+                    </div>
+
+                    <div class="db-section">
+                        <h3><i class="fas fa-terminal"></i> Crawler Logs</h3>
+                        <div id="web-console" class="mini-terminal">
+                            <span class="log-line system">> Web crawling progress appear here.</span>
                         </div>
                     </div>
                 </div>
@@ -177,6 +191,12 @@
                             <button id="db-ingest-btn" class="action-btn">
                                 <i class="fas fa-database"></i> Ingest Selected Tables
                             </button>
+                        </div>
+                    </div>
+                    <div class="db-section">
+                        <h3><i class="fas fa-terminal"></i> Database Ingestion Logs</h3>
+                        <div id="db-console" class="mini-terminal">
+                            <span class="log-line system">> DB table ingestion updates appear here.</span>
                         </div>
                     </div>
                 </div>
@@ -252,6 +272,7 @@
                                     <option value="" disabled selected>Select a model...</option>
                                 </select>
                             </div>
+                            <p id="model-hint" class="setting-hint"></p>
                         </div>
 
                         <div id="cloud-settings" class="provider-settings-group" style="display: none;">
@@ -455,6 +476,21 @@
         const vllmUrlGroup = document.getElementById('vllm-url-group');
         const modelHint = document.getElementById('model-hint');
 
+        // Ingestion & Control elements
+        const fileInput = document.getElementById('file-input');
+        const uploadZone = document.getElementById('upload-zone');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const browseBtn = document.getElementById('browse-btn');
+        const consoleOutput = document.getElementById('console-output');
+        const streamBtn = document.getElementById('stream-btn');
+        const freshStreamBtn = document.getElementById('fresh-stream-btn');
+        const webUrlInput = document.getElementById('web-url-input');
+        const webIngestBtn = document.getElementById('web-ingest-btn');
+        const schemaSelect = document.getElementById('db-schema-select');
+        const tablesContainer = document.getElementById('db-tables-container');
+        const dbIngestBtn = document.getElementById('db-ingest-btn');
+
         let currentConfig = null;
 
         providerSelect.onchange = async () => {
@@ -618,7 +654,6 @@
                 });
 
                 if (response.ok) {
-                    settingsModal.style.display = 'none';
                     showToast(`Settings updated successfully`);
                 } else {
                     throw new Error('Failed to update');
@@ -723,12 +758,20 @@
         });
 
         // Console Logging Helper
-        function logToConsole(message, type = 'info') {
+        function logToConsole(message, type = 'info', targetId = 'console-output') {
+            const container = document.getElementById(targetId) || consoleOutput;
             const line = document.createElement('span');
             line.className = `log-line ${type}`;
             line.textContent = `> ${message}`;
-            consoleOutput.appendChild(line);
-            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            container.appendChild(line);
+            container.scrollTop = container.scrollHeight;
+
+            // Also log to main management console if it's not the target
+            if (targetId !== 'console-output') {
+                const mainLine = line.cloneNode(true);
+                consoleOutput.appendChild(mainLine);
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            }
         }
 
         // Streaming Logic
@@ -759,11 +802,11 @@
                             if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
                             if (line.includes('WARNING')) type = 'warning';
 
-                            logToConsole(line, type);
+                            logToConsole(line, type, 'pdf-console');
                         }
                     });
                 }
-                logToConsole('Process finished.', 'system');
+                logToConsole('Process finished.', 'system', 'pdf-console');
 
             } catch (error) {
                 logToConsole(`STREAM ERROR: ${error.message}`, 'error');
@@ -860,8 +903,6 @@
         };
 
         // Web Ingestion Logic
-        const webUrlInput = document.getElementById('web-url-input');
-        const webIngestBtn = document.getElementById('web-ingest-btn');
 
         async function startWebIngestionStream() {
             const url = webUrlInput.value.trim();
@@ -892,11 +933,11 @@
                             if (line.includes('ERROR') || line.includes('failed')) type = 'error';
                             if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
                             if (line.includes('WARNING')) type = 'warning';
-                            logToConsole(line, type);
+                            logToConsole(line, type, 'web-console');
                         }
                     });
                 }
-                logToConsole('Web ingestion finished.', 'system');
+                logToConsole('Web ingestion finished.', 'system', 'web-console');
             } catch (error) {
                 logToConsole(`WEB STREAM ERROR: ${error.message}`, 'error');
             } finally {
@@ -907,9 +948,6 @@
         webIngestBtn.addEventListener('click', startWebIngestionStream);
 
         // SQL Database Ingestion Logic
-        const schemaSelect = document.getElementById('db-schema-select');
-        const tablesContainer = document.getElementById('db-tables-container');
-        const dbIngestBtn = document.getElementById('db-ingest-btn');
 
         async function loadSchemas() {
             try {
@@ -988,11 +1026,11 @@
                             if (line.includes('ERROR') || line.includes('SKIP')) type = 'error';
                             if (line.includes('SUCCESS') || line.includes('Added')) type = 'success';
                             if (line.includes('WARNING')) type = 'warning';
-                            logToConsole(line, type);
+                            logToConsole(line, type, 'db-console');
                         }
                     });
                 }
-                logToConsole('Database ingestion finished.', 'system');
+                logToConsole('Database ingestion finished.', 'system', 'db-console');
             } catch (error) {
                 logToConsole(`DB STREAM ERROR: ${error.message}`, 'error');
             } finally {
@@ -1023,13 +1061,8 @@
         });
 
         // Update window click handler to close both modals AND sidebar
+        // Modal backdrop logic removed
         window.onclick = (event) => {
-            if (event.target == settingsModal) {
-                settingsModal.style.display = 'none';
-            }
-            if (event.target == dbModal) {
-                dbModal.style.display = 'none';
-            }
             if (event.target == sidebar && sidebar.classList.contains('mobile-active')) {
                 sidebar.classList.remove('mobile-active');
             }
