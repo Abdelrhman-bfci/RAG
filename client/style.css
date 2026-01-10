@@ -553,6 +553,10 @@ header {
     overflow: hidden;
     height: 450px;
     /* Fixed height for large lists */
+    flex: 1;
+    /* Take full available width in field-row */
+    width: 100%;
+    /* Ensure it spans if flex fails */
 }
 
 /* Toolbar Area */
@@ -699,10 +703,15 @@ header {
 }
 
 #db-ingest-btn {
-    width: auto;
-    padding: 0 22px;
-    /* make it look like a primary button */
-    margin: 0;
+    width: 100%;
+    /* Full width for better access */
+    padding: 14px 20px;
+    margin-top: 10px;
+    font-size: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
 }
 
 .tables-grid::-webkit-scrollbar-track {
