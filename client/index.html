@@ -342,6 +342,13 @@
             console.log(`Switched to view: ${viewId}`);
         }
 
+        // Helper function to detect text direction based on language
+        function detectLanguageDirection(text) {
+            // Check if text contains Arabic characters
+            const arabicPattern = /[\u0600-\u06FF]/;
+            return arabicPattern.test(text) ? 'rtl' : 'ltr';
+        }
+
         function addMessage(content, isUser = false) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
@@ -353,6 +360,11 @@
             const textDiv = document.createElement('div');
             textDiv.className = 'text';
             textDiv.innerText = content;
+
+            // Auto-detect and set text direction
+            if (content) {
+                textDiv.dir = detectLanguageDirection(content);
+            }
 
             msgDiv.appendChild(avatar);
             msgDiv.appendChild(textDiv);
@@ -369,6 +381,7 @@
             if (!question) return;
 
             userInput.value = '';
+            userInput.dir = 'ltr'; // Reset to LTR after sending
             addMessage(question, true);
 
             const botTextDiv = addMessage('', false);
@@ -455,6 +468,16 @@
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
+        });
+
+        // Auto-detect text direction as user types
+        userInput.addEventListener('input', (e) => {
+            const text = e.target.value;
+            if (text) {
+                e.target.dir = detectLanguageDirection(text);
+            } else {
+                e.target.dir = 'ltr'; // Default to LTR when empty
+            }
         });
 
         const providerSelect = document.getElementById('provider-select');
