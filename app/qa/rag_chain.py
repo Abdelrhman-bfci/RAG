@@ -124,21 +124,24 @@ def get_rag_chain(deep_thinking: bool = False):
             base_url=Config.OLLAMA_BASE_URL,
             model=Config.OLLAMA_LLM_MODEL,
             temperature=0.2 if deep_thinking else 0.1,
-            num_ctx=Config.OLLAMA_CONTEXT_WINDOW
+            num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
+            num_predict=8192  # Maximum tokens to generate in response
         )
     elif Config.LLM_PROVIDER == "vllm":
         llm = ChatOpenAI(
             base_url=Config.VLLM_BASE_URL,
             model=Config.VLLM_MODEL,
             temperature=0.2 if deep_thinking else 0.1,
-            api_key="none"
+            api_key="none",
+            max_tokens=8192  # Maximum tokens to generate in response
         )
     elif Config.LLM_PROVIDER == "openai":
         llm = ChatOpenAI(
             model=Config.OPENAI_LLM_MODEL,
             base_url=Config.OPENAI_BASE_URL,
             temperature=0.2 if deep_thinking else 0.1,
-            openai_api_key=Config.OPENAI_API_KEY
+            openai_api_key=Config.OPENAI_API_KEY,
+            max_tokens=8192  # Maximum tokens to generate in response
         )
     elif Config.LLM_PROVIDER == "gemini":
         if ChatGoogleGenerativeAI is None:
@@ -146,7 +149,8 @@ def get_rag_chain(deep_thinking: bool = False):
         llm = ChatGoogleGenerativeAI(
             model=Config.GEMINI_MODEL,
             google_api_key=Config.GEMINI_API_KEY,
-            temperature=0.2 if deep_thinking else 0.1
+            temperature=0.2 if deep_thinking else 0.1,
+            max_output_tokens=8192  # Maximum tokens to generate in response
         )
     else:
         # Default fallback to Ollama
@@ -154,7 +158,8 @@ def get_rag_chain(deep_thinking: bool = False):
             model=Config.OLLAMA_LLM_MODEL,
             base_url=Config.OLLAMA_BASE_URL,
             temperature=0.2 if deep_thinking else 0.1,
-            num_ctx=Config.OLLAMA_CONTEXT_WINDOW
+            num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
+            num_predict=8192  # Maximum tokens to generate in response
         )
 
     # 4. Construct the Chain
