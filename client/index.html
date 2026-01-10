@@ -994,6 +994,10 @@
                 if (data.tables) {
                     tablesContainer.innerHTML = `
                         <div class="table-controls">
+                            <div class="search-wrapper">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="table-search" placeholder="Search tables...">
+                            </div>
                             <label class="control-item">
                                 <input type="checkbox" id="select-all-tables" checked>
                                 <span>Select All</span>
@@ -1004,6 +1008,7 @@
 
                     const grid = tablesContainer.querySelector('.tables-grid');
                     const selectAllCheckbox = tablesContainer.querySelector('#select-all-tables');
+                    const searchInput = tablesContainer.querySelector('#table-search');
 
                     data.tables.forEach(table => {
                         const label = document.createElement('label');
@@ -1022,10 +1027,26 @@
                         });
                     });
 
+                    // Search Logic
+                    searchInput.addEventListener('input', (e) => {
+                        const term = e.target.value.toLowerCase();
+                        grid.querySelectorAll('.table-item').forEach(item => {
+                            const name = item.querySelector('.table-name').textContent.toLowerCase();
+                            item.style.display = name.includes(term) ? 'flex' : 'none';
+                        });
+                    });
+
                     // Select All Logic
                     selectAllCheckbox.addEventListener('change', (e) => {
                         const isChecked = e.target.checked;
-                        grid.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = isChecked);
+                        const items = grid.querySelectorAll('.table-item');
+
+                        items.forEach(item => {
+                            // Only select visible items if searching
+                            if (item.style.display !== 'none') {
+                                item.querySelector('input[type="checkbox"]').checked = isChecked;
+                            }
+                        });
                     });
                 }
             } catch (error) {
