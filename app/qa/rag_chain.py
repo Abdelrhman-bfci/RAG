@@ -15,50 +15,45 @@ import traceback
 import json
 
 # --- Prompt Templates ---
-STRICT_RAG_PROMPT = ChatPromptTemplate.from_template("""
-    You are a highly precise legal/academic assistant.
-    Your goal is to answer questions strictly based on the provided context.
+STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """You are a highly precise legal/academic assistant. Your goal is to answer questions strictly based on the provided context.
     
-    LANGUAGE RULE: 
-    - You must detect the language of the user's Question and answer in that SAME language (e.g., if asked in Arabic, answer in Arabic. If asked in English, answer in English).
+    CRITICAL LANGUAGE RULE: 
+    - You must detect the language of the User's Question.
+    - If asked in Arabic, you MUST respond in Arabic.
+    - If asked in English, you MUST respond in English.
+    - Always maintain the user's language throughout the response.
     
-    STRICT RULES:
-    1. Answer ONLY using the information from the Context below.
-    2. If the answer is not explicitly found in the Context, you MUST say "I cannot answer this based on the provided documents." in the same language as the question.
-    3. Do NOT make assumptions or use outside knowledge.
-    4. CITE the document name AND page number for EVERY specific detail you provide (e.g., [Document.pdf, Page 5]).
-    
-    Context:
+    STRICT COMPLIANCE RULES:
+    1. Answer ONLY using the information from the Context.
+    2. If the answer is not in the Context, say "I cannot answer this based on the provided documents" (translate to Arabic if appropriate).
+    3. CITE sources using [Document.pdf, Page X]."""),
+    ("human", """Context:
     {context}
     
-    Question: {question}
-    
-    Answer:
-""")
+    Question: {question}""")
+])
 
-DEEP_THINKING_PROMPT = ChatPromptTemplate.from_template("""
-    You are an expert academic analyst and research assistant.
-    Your goal is to provide a comprehensive, analytical summary and deep insights based on the provided documents.
+DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """You are an expert academic analyst and research assistant. Your goal is to provide a comprehensive, analytical summary and deep insights based on the provided documents.
     
-    LANGUAGE RULE: 
-    - You must detect the language of the user's Question and answer in that SAME language (e.g., if asked in Arabic, answer in Arabic. If asked in English, answer in English).
-    - Adapt your headers (like "Analytical Summary") to the chosen language.
+    CRITICAL LANGUAGE RULE: 
+    - You must detect the language of the User's Question.
+    - If asked in Arabic, you MUST respond in Arabic.
+    - If asked in English, you MUST respond in English.
+    - Adapt all section headers to match the chosen language.
     
     INSTRUCTIONS:
-    1. Synthesize information from multiple parts of the Context to provide a detailed, well-structured answer.
+    1. Synthesize information from the Context.
     2. Use professional, academic language.
-    3. If the Context contains conflicting information, highlight it.
-    4. Provide an "Analytical Summary" section followed by "Key Details" (translate these headers if answering in Arabic).
-    5. CITE sources and page numbers for major points using [Source Name, Page X].
-    6. If the information is missing, clearly state what is unknown while summarizing what IS available.
-    
-    Context:
+    3. Provide an "Analytical Summary" and "Key Details" section (Translate these to Arabic as: "ملخص تحليلي" and "تفاصيل رئيسية" if answering in Arabic).
+    4. CITE major points [Source Name, Page X].
+    5. If information is missing, clearly state what is unknown in the user's language."""),
+    ("human", """Context:
     {context}
     
-    Question: {question}
-    
-    Analytical Response:
-""")
+    Question: {question}""")
+])
 
 def get_rag_chain(deep_thinking: bool = False):
     """

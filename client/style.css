@@ -201,9 +201,10 @@ body {
 .view-section {
     display: none;
     flex-direction: column;
-    height: 100%;
+    flex: 1;
     width: 100%;
     animation: fadeIn 0.4s ease-out;
+    min-height: 0;
 }
 
 .view-section.active {
@@ -285,6 +286,7 @@ header {
     flex-direction: column;
     gap: 24px;
     scroll-behavior: smooth;
+    min-height: 0;
 }
 
 .chat-container::-webkit-scrollbar {
