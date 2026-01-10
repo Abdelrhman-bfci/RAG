@@ -27,7 +27,9 @@ STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
     STRICT COMPLIANCE RULES:
     1. Answer ONLY using the information from the Context.
     2. If the answer is not in the Context, say "I cannot answer this based on the provided documents" (translate to Arabic if appropriate).
-    3. CITE sources using [Document.pdf, Page X]."""),
+    3. CITE sources using [Document.pdf, Page X].
+    4. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
+    5. If the answer requires a long response, provide the FULL answer without cutting it short."""),
     ("human", """Context:
     {context}
     
@@ -50,7 +52,9 @@ DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
        - For Arabic questions: Start with "ملخص تحليلي" (Analytical Summary) followed by "تفاصيل رئيسية" (Key Details)
        - For English questions: Start with "Analytical Summary" followed by "Key Details"
     4. CITE major points using [Source Name, Page X].
-    5. If information is missing, clearly state what is unknown in the user's language."""),
+    5. If information is missing, clearly state what is unknown in the user's language.
+    6. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
+    7. If the answer requires a long response, provide the FULL answer without cutting it short. You have sufficient token capacity."""),
     ("human", """Context:
     {context}
     
@@ -125,7 +129,9 @@ def get_rag_chain(deep_thinking: bool = False):
             model=Config.OLLAMA_LLM_MODEL,
             temperature=0.2 if deep_thinking else 0.1,
             num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
-            num_predict=8192  # Maximum tokens to generate in response
+            num_predict=-1,  # Unlimited tokens - generate until naturally complete
+            stop=[],  # Remove default stop sequences to allow complete responses
+            repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
         )
     elif Config.LLM_PROVIDER == "vllm":
         llm = ChatOpenAI(
@@ -159,7 +165,9 @@ def get_rag_chain(deep_thinking: bool = False):
             base_url=Config.OLLAMA_BASE_URL,
             temperature=0.2 if deep_thinking else 0.1,
             num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
-            num_predict=8192  # Maximum tokens to generate in response
+            num_predict=-1,  # Unlimited tokens - generate until naturally complete
+            stop=[],  # Remove default stop sequences to allow complete responses
+            repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
         )
 
     # 4. Construct the Chain
