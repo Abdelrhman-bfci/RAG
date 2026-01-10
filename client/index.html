@@ -96,7 +96,7 @@
                 </div>
 
                 <div class="input-area-wrapper">
-                    <div class="input-area">
+                    <div class="input-container">
                         <div class="mode-dropdown-container">
                             <select id="chat-mode" class="mode-select-compact">
                                 <option value="normal">🔘 Normal</option>
@@ -115,25 +115,20 @@
             <div id="view-pdf" class="view-section">
                 <div class="section-container">
                     <div class="db-section">
-                        <h3><i class="fas fa-file-pdf"></i> PDF Upload</h3>
+                        <h3><i class="fas fa-file-pdf"></i> PDF Management</h3>
                         <div class="upload-zone" id="upload-zone">
                             <input type="file" id="file-input" accept=".pdf" hidden>
                             <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop PDF here or <a href="#"
                                     id="browse-btn">Browse</a></p>
                             <span id="file-name-display"></span>
                         </div>
-                        <button id="upload-btn" class="action-btn" disabled>Upload File</button>
-                    </div>
-
-                    <div class="db-section">
-                        <h3><i class="fas fa-sync"></i> Synchronize</h3>
-                        <p class="section-desc">Add newly uploaded PDFs to the search index.</p>
-                        <div class="button-group">
+                        <div class="pdf-controls-row">
+                            <button id="upload-btn" class="action-btn" disabled>Upload File</button>
                             <button id="stream-btn" class="action-btn warning-btn">
-                                <i class="fas fa-sync"></i> Quick Sync (Update)
+                                <i class="fas fa-sync"></i> Quick Sync
                             </button>
                             <button id="fresh-stream-btn" class="action-btn danger-btn">
-                                <i class="fas fa-hammer"></i> Fresh Build (Reset Index)
+                                <i class="fas fa-hammer"></i> Fresh Build
                             </button>
                         </div>
                     </div>
