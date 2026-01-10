@@ -19,9 +19,12 @@ STRICT_RAG_PROMPT = ChatPromptTemplate.from_template("""
     You are a highly precise legal/academic assistant.
     Your goal is to answer questions strictly based on the provided context.
     
+    LANGUAGE RULE: 
+    - You must detect the language of the user's Question and answer in that SAME language (e.g., if asked in Arabic, answer in Arabic. If asked in English, answer in English).
+    
     STRICT RULES:
     1. Answer ONLY using the information from the Context below.
-    2. If the answer is not explicitly found in the Context, you MUST say "I cannot answer this based on the provided documents."
+    2. If the answer is not explicitly found in the Context, you MUST say "I cannot answer this based on the provided documents." in the same language as the question.
     3. Do NOT make assumptions or use outside knowledge.
     4. CITE the document name AND page number for EVERY specific detail you provide (e.g., [Document.pdf, Page 5]).
     
@@ -37,11 +40,15 @@ DEEP_THINKING_PROMPT = ChatPromptTemplate.from_template("""
     You are an expert academic analyst and research assistant.
     Your goal is to provide a comprehensive, analytical summary and deep insights based on the provided documents.
     
+    LANGUAGE RULE: 
+    - You must detect the language of the user's Question and answer in that SAME language (e.g., if asked in Arabic, answer in Arabic. If asked in English, answer in English).
+    - Adapt your headers (like "Analytical Summary") to the chosen language.
+    
     INSTRUCTIONS:
     1. Synthesize information from multiple parts of the Context to provide a detailed, well-structured answer.
     2. Use professional, academic language.
     3. If the Context contains conflicting information, highlight it.
-    4. Provide an "Analytical Summary" section followed by "Key Details".
+    4. Provide an "Analytical Summary" section followed by "Key Details" (translate these headers if answering in Arabic).
     5. CITE sources and page numbers for major points using [Source Name, Page X].
     6. If the information is missing, clearly state what is unknown while summarizing what IS available.
     
@@ -74,7 +81,15 @@ def get_rag_chain(deep_thinking: bool = False):
             initial_docs = self.vectorstore.similarity_search(query, k=300)
             
             # 2. Extract priority terms
-            keywords = [w.lower() for w in query.split() if len(w) > 3]
+            # Improve keyword extraction: keep words > 3 chars for EN, and all words for AR (as Arabic words can be short)
+            import re
+            is_arabic = bool(re.search('[\u0600-\u06FF]', query))
+            
+            if is_arabic:
+                # For Arabic, filter out very common stop words if possible, or just keep all moderately long words
+                keywords = [w.lower() for w in query.split() if len(w) >= 2]
+            else:
+                keywords = [w.lower() for w in query.split() if len(w) > 3]
             
             website_docs = []
             priority_docs = []
@@ -87,9 +102,12 @@ def get_rag_chain(deep_thinking: bool = False):
                 # Boost website sources as they are usually more specific to recent queries
                 is_website = source.startswith("http")
                 
+                # Check for keyword matches (handling both languages)
+                has_keywords = any(kw in content_lower for kw in keywords)
+                
                 if is_website:
                     website_docs.append(d)
-                elif any(kw in content_lower for kw in keywords):
+                elif has_keywords:
                     priority_docs.append(d)
                 else:
                     other_docs.append(d)
