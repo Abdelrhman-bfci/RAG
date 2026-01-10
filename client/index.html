@@ -992,15 +992,40 @@
                 const response = await fetch(url);
                 const data = await response.json();
                 if (data.tables) {
-                    tablesContainer.innerHTML = '';
+                    tablesContainer.innerHTML = `
+                        <div class="table-controls">
+                            <label class="control-item">
+                                <input type="checkbox" id="select-all-tables" checked>
+                                <span>Select All</span>
+                            </label>
+                        </div>
+                        <div class="tables-grid"></div>
+                    `;
+
+                    const grid = tablesContainer.querySelector('.tables-grid');
+                    const selectAllCheckbox = tablesContainer.querySelector('#select-all-tables');
+
                     data.tables.forEach(table => {
                         const label = document.createElement('label');
                         label.className = 'table-item';
                         label.innerHTML = `
                             <input type="checkbox" value="${table}" checked>
-                            <span>${table}</span>
+                            <span class="table-name">${table}</span>
                         `;
-                        tablesContainer.appendChild(label);
+                        grid.appendChild(label);
+
+                        // Uncheck "Select All" if any item is unchecked
+                        label.querySelector('input').addEventListener('change', () => {
+                            const allChecked = Array.from(grid.querySelectorAll('input[type="checkbox"]')).every(cb => cb.checked);
+                            selectAllCheckbox.checked = allChecked;
+                            selectAllCheckbox.indeterminate = !allChecked && Array.from(grid.querySelectorAll('input[type="checkbox"]')).some(cb => cb.checked);
+                        });
+                    });
+
+                    // Select All Logic
+                    selectAllCheckbox.addEventListener('change', (e) => {
+                        const isChecked = e.target.checked;
+                        grid.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = isChecked);
                     });
                 }
             } catch (error) {
