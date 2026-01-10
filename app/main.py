@@ -303,6 +303,20 @@ async def reset_all_resources():
         
     return {"status": "success", "message": "All resources reset successfully"}
 
+@app.get("/ingest/web/stream")
+async def stream_web_ingestion(url: str):
+    """
+    Stream web ingestion progress for a single URL in real-time.
+    """
+    return StreamingResponse(
+        ingest_websites(urls=[url] if url else None), 
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
 @app.post("/ingest/web")
 async def trigger_web_ingestion(background_tasks: BackgroundTasks):
     """
@@ -314,6 +328,7 @@ async def trigger_web_ingestion(background_tasks: BackgroundTasks):
             
     background_tasks.add_task(run_ingest)
     return {"status": "accepted", "message": "Website ingestion started in background"}
+
 
 @app.get("/")
 async def get_chat_interface():
