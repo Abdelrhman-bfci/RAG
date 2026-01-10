@@ -211,7 +211,12 @@ async def list_resources():
         except: pass
         
     # Databases
-    resources["databases"] = Config.INGEST_TABLES
+    # Databases
+    if os.path.exists(DB_TRACKING):
+        try:
+            with open(DB_TRACKING, "r") as f:
+                resources["databases"] = json.load(f)
+        except: pass
     
     return resources
 
@@ -246,8 +251,32 @@ async def delete_resource(res_type: str, name: str):
                 json.dump(tracking, f, indent=4)
             
             # Remove from FAISS
+            # Remove from FAISS
             faiss_store.delete_source(path_to_remove)
             return {"status": "success", "message": f"Deleted PDF {name}"}
+            
+    elif res_type == "databases":
+        # Handle database table deletion
+        tracking = []
+        if os.path.exists(DB_TRACKING):
+            with open(DB_TRACKING, "r") as f:
+                try:
+                    tracking = json.load(f)
+                except: tracking = []
+        
+        if name in tracking:
+            # Delete from tracking
+            tracking.remove(name)
+            with open(DB_TRACKING, "w") as f:
+                json.dump(tracking, f)
+            
+            # Delete from FAISS
+            # Metadata source format defined in db_ingest.py: f"Table: {table}"
+            faiss_store.delete_source(f"Table: {name}")
+            
+            return {"status": "success", "message": f"Deleted Table {name}"}
+        else:
+             raise HTTPException(status_code=404, detail="Table not found in tracking")
             
     elif res_type == "websites":
         tracking = {}
@@ -288,7 +317,7 @@ async def reset_all_resources():
                 os.remove(path)
     
     # 2. Clear Tracking Files
-    for tracking in [PDF_TRACKING, WEB_TRACKING, "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json"]:
+    for tracking in [PDF_TRACKING, WEB_TRACKING, DB_TRACKING, "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json"]:
         if os.path.exists(tracking):
             os.remove(tracking)
             

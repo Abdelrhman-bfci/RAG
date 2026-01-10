@@ -1,4 +1,5 @@
 from sqlalchemy import create_engine, text, inspect
+import os
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
@@ -8,6 +9,23 @@ import json
 import time
 
 STATUS_FILE = "db_ingestion_status.json"
+DB_TRACKING_FILE = "ingested_tables.json"
+
+def get_ingested_tables():
+    if os.path.exists(DB_TRACKING_FILE):
+        try:
+            with open(DB_TRACKING_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_ingested_table(table_name):
+    tables = get_ingested_tables()
+    if table_name not in tables:
+        tables.append(table_name)
+        with open(DB_TRACKING_FILE, "w") as f:
+            json.dump(tables, f)
 
 def update_db_status(status, current=0, total=0, message=""):
     """Update the DB ingestion status file."""
@@ -127,6 +145,7 @@ def ingest_database(tables: list = None, schema: str = None):
                     faiss_store.add_documents(split_batch)
                     
                 total_ingested_all += table_total
+                save_ingested_table(table)
                 yield f"  - Added {table_total} records.\n"
             else:
                 yield f"  - Table '{table}' is empty.\n"
