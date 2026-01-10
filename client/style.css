@@ -1,3 +1,72 @@
+/* Resource Management Styles */
+.resource-management-list {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    padding: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+}
+
+.res-section h4 {
+    margin: 10px 0 5px 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.res-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 6px;
+    margin-bottom: 5px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+
+.res-item:hover {
+    border-color: var(--accent-color);
+    transform: translateX(2px);
+}
+
+.res-item span {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.delete-res-btn {
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.delete-res-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    transform: scale(1.1);
+}
+
+.delete-btn-full {
+    background: #ef4444 !important;
+    width: 100%;
+}
+
+.delete-btn-full:hover {
+    background: #dc2626 !important;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* Original Styles... */
 :root {
     --primary: #6366f1;
     --primary-light: #818cf8;
@@ -1149,6 +1218,7 @@ textarea {
     color: var(--primary-light);
     font-weight: 600;
 }
+
 /* Database Resource Styles */
 .db-resource-group {
     display: flex;

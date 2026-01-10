@@ -223,15 +223,29 @@
                 </div>
             </div>
 
-            <!-- Section 4: Ingestion Controls -->
+            <!-- Section 4: Resource Management -->
             <div class="db-section">
-                <h3>4. Ingestion Operations</h3>
+                <h3>4. Managed Resources</h3>
+                <div id="resource-list-container" class="resource-management-list">
+                    <p class="hint">Loading managed resources...</p>
+                </div>
+            </div>
+
+            <!-- Section 5: System Operations -->
+            <div class="db-section">
+                <h3>5. System Operations</h3>
                 <div class="button-group">
                     <button id="stream-btn" class="action-btn warning-btn">
                         <i class="fas fa-sync"></i> Quick Sync (Update)
                     </button>
                     <button id="fresh-stream-btn" class="action-btn danger-btn">
-                        <i class="fas fa-hammer"></i> Fresh Build (Reset)
+                        <i class="fas fa-hammer"></i> Fresh Build (Reset Index)
+                    </button>
+                </div>
+                <div class="danger-zone"
+                    style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border-color);">
+                    <button id="reset-all-btn" class="action-btn delete-btn-full">
+                        <i class="fas fa-trash-alt"></i> Wipe All Data & Reset
                     </button>
                 </div>
             </div>
@@ -602,6 +616,7 @@
             dbModal.style.display = 'block';
             loadSchemas();
             loadTables(""); // Load default schema tables
+            loadResources(); // Load handled resources
         };
 
         dbBtn.onclick = openDbModal;
@@ -748,6 +763,89 @@
 
         streamBtn.addEventListener('click', () => startIngestionStream(false));
         freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
+
+        // Resource Management Logic
+        async function loadResources() {
+            const container = document.getElementById('resource-list-container');
+            try {
+                const response = await fetch(`${API_BASE}/resources`);
+                const data = await response.json();
+
+                container.innerHTML = '';
+
+                const sections = [
+                    { title: '📑 PDFs', key: 'pdfs', type: 'pdfs' },
+                    { title: '🌐 Websites', key: 'websites', type: 'websites' },
+                    { title: '📁 DB Tables', key: 'databases', type: 'databases' }
+                ];
+
+                let totalItems = 0;
+                sections.forEach(sec => {
+                    if (data[sec.key] && data[sec.key].length > 0) {
+                        const secDiv = document.createElement('div');
+                        secDiv.className = 'res-section';
+                        secDiv.innerHTML = `<h4>${sec.title}</h4>`;
+
+                        data[sec.key].forEach(item => {
+                            totalItems++;
+                            const itemDiv = document.createElement('div');
+                            itemDiv.className = 'res-item';
+                            itemDiv.innerHTML = `
+                                <span>${item}</span>
+                                <button onclick="deleteResource('${sec.type}', '${item}')" class="delete-res-btn" title="Remove Archive">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            `;
+                            secDiv.appendChild(itemDiv);
+                        });
+                        container.appendChild(secDiv);
+                    }
+                });
+
+                if (totalItems === 0) {
+                    container.innerHTML = '<p class="hint">No resources ingested yet.</p>';
+                }
+            } catch (error) {
+                container.innerHTML = '<p class="hint error">Failed to load resources.</p>';
+            }
+        }
+
+        async function deleteResource(type, name) {
+            if (!confirm(`Are you sure you want to remove "${name}"? This will delete the source file and associations.`)) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/resources/${type}/${encodeURIComponent(name)}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showToast(result.message);
+                    loadResources();
+                } else {
+                    throw new Error(result.detail || 'Delete failed');
+                }
+            } catch (error) {
+                showToast(error.message, true);
+            }
+        }
+
+        document.getElementById('reset-all-btn').onclick = async () => {
+            if (!confirm("CRITICAL ACTION: This will delete ALL uploaded PDFs, clear the entire search index, and reset configurations. Proceed?")) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/resources/reset`, { method: 'POST' });
+                const result = await response.json();
+                if (response.ok) {
+                    showToast("System reset successfully");
+                    loadResources();
+                    logToConsole("SYSTEM RESET: All data wiped.", "warning");
+                } else {
+                    throw new Error('Reset failed');
+                }
+            } catch (error) {
+                showToast(error.message, true);
+            }
+        };
 
         // Web Ingestion Logic
         const webUrlInput = document.getElementById('web-url-input');

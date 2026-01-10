@@ -59,3 +59,30 @@ class FAISSStore:
             
         self.save_index(vectorstore)
         return vectorstore
+
+    def delete_source(self, source_name: str):
+        """
+        Remove all documents associated with a specific source from the FAISS index.
+        """
+        vectorstore = self.load_index()
+        if not vectorstore:
+            return False
+
+        # Filter out documents where metadata['source'] matches source_name
+        # Note: FAISS doesn't have a direct 'delete by metadata' easily in LangChain's version
+        # So we reconstruct the index if it's small, or use docstore IDs if possible.
+        # For our local scale, reconstructing or filtering in memory is fine.
+        
+        docstore = vectorstore.docstore._dict
+        ids_to_delete = [
+            doc_id for doc_id, doc in docstore.items() 
+            if doc.metadata.get("source") == source_name or 
+               doc.metadata.get("table") == source_name or 
+               os.path.basename(doc.metadata.get("source", "")) == source_name
+        ]
+
+        if ids_to_delete:
+            vectorstore.delete(ids_to_delete)
+            self.save_index(vectorstore)
+            return True
+        return False

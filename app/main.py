@@ -10,9 +10,9 @@ import os
 import shutil
 import asyncio
 
-from app.ingestion.pdf_ingest import ingest_pdfs
+from app.ingestion.pdf_ingest import ingest_pdfs, TRACKING_FILE as PDF_TRACKING
 from app.ingestion.db_ingest import ingest_database
-from app.ingestion.web_ingest import ingest_websites
+from app.ingestion.web_ingest import ingest_websites, TRACKING_FILE as WEB_TRACKING
 from app.qa.rag_chain import answer_question, stream_answer
 from app.config import Config # Assuming Config is needed for RESOURCE_DIR
 
@@ -169,44 +169,13 @@ async def ask_question_stream(question: str, deep_thinking: bool = False):
         }
     )
 
-@app.get("/db/schemas")
-async def list_db_schemas():
-    """List available database schemas."""
-    from sqlalchemy import create_engine, inspect
-    from app.config import Config
-    if not Config.DATABASE_URL:
-        return {"schemas": []}
-    try:
-        engine = create_engine(Config.DATABASE_URL)
-        inspector = inspect(engine)
-        return {"schemas": inspector.get_schema_names()}
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/db/tables")
-async def list_db_tables(schema: Optional[str] = None):
-    """List available tables for a selected schema."""
-    from sqlalchemy import create_engine, inspect
-    from app.config import Config
-    if not Config.DATABASE_URL:
-        return {"tables": []}
-    try:
-        engine = create_engine(Config.DATABASE_URL)
-        inspector = inspect(engine)
-        return {"tables": inspector.get_table_names(schema=schema)}
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/ingest/web/stream")
-async def stream_web_ingestion(url: Optional[str] = None):
+@app.get("/ingest/pdf/stream")
+async def stream_pdf_ingestion(fresh: bool = False):
     """
-    Stream Website ingestion progress in real-time.
-    - url: Optional specific URL to ingest.
+    Stream PDF ingestion progress in real-time.
     """
-    from app.ingestion.web_ingest import ingest_websites
-    urls = [url] if url else None
     return StreamingResponse(
-        ingest_websites(urls=urls), 
+        ingest_pdfs(force_fresh=fresh), 
         media_type="text/plain",
         headers={
             "Cache-Control": "no-cache",
@@ -214,75 +183,125 @@ async def stream_web_ingestion(url: Optional[str] = None):
         }
     )
 
-@app.get("/ingest/db/stream")
-async def stream_db_ingestion(tables: Optional[str] = None, schema: Optional[str] = None):
+@app.get("/resources")
+async def list_resources():
     """
-    Stream Database ingestion progress in real-time.
-    - tables: Comma-separated list of tables.
-    - schema: Optional schema name.
+    List all ingested resources by type.
     """
-    from app.ingestion.db_ingest import ingest_database
-    table_list = tables.split(",") if tables else None
-    return StreamingResponse(
-        ingest_database(tables=table_list, schema=schema), 
-        media_type="text/plain",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"
-        }
-    )
+    resources = {
+        "pdfs": [],
+        "websites": [],
+        "databases": []
+    }
+    
+    # PDFs
+    if os.path.exists(PDF_TRACKING):
+        try:
+            with open(PDF_TRACKING, "r") as f:
+                tracking = json.load(f)
+                resources["pdfs"] = [os.path.basename(path) for path in tracking.keys()]
+        except: pass
+    
+    # Websites
+    if os.path.exists(WEB_TRACKING):
+        try:
+            with open(WEB_TRACKING, "r") as f:
+                tracking = json.load(f)
+                resources["websites"] = list(tracking.keys())
+        except: pass
+        
+    # Databases
+    resources["databases"] = Config.INGEST_TABLES
+    
+    return resources
 
-@app.post("/ingest/pdf")
-async def trigger_pdf_ingestion(background_tasks: BackgroundTasks):
+@app.delete("/resources/{res_type}/{name}")
+async def delete_resource(res_type: str, name: str):
     """
-    Trigger PDF ingestion in the background.
+    Delete a specific resource.
     """
-    def run_ingest():
-        # Consume the generator in background
-        for _ in ingest_pdfs():
-            pass
+    from app.vectorstore.faiss_store import FAISSStore
+    faiss_store = FAISSStore()
+    
+    if res_type == "pdfs":
+        # Find path in tracking
+        path_to_remove = None
+        tracking = {}
+        if os.path.exists(PDF_TRACKING):
+            with open(PDF_TRACKING, "r") as f:
+                tracking = json.load(f)
+            for path in tracking.keys():
+                if os.path.basename(path) == name:
+                    path_to_remove = path
+                    break
+        
+        if path_to_remove:
+            # Delete file
+            if os.path.exists(path_to_remove):
+                os.remove(path_to_remove)
             
-    background_tasks.add_task(run_ingest)
-    return {"status": "accepted", "message": "PDF ingestion started in background"}
+            # Remove from tracking
+            del tracking[path_to_remove]
+            with open(PDF_TRACKING, "w") as f:
+                json.dump(tracking, f, indent=4)
+            
+            # Remove from FAISS
+            faiss_store.delete_source(path_to_remove)
+            return {"status": "success", "message": f"Deleted PDF {name}"}
+            
+    elif res_type == "websites":
+        tracking = {}
+        if os.path.exists(WEB_TRACKING):
+            with open(WEB_TRACKING, "r") as f:
+                tracking = json.load(f)
+            
+            if name in tracking:
+                del tracking[name]
+                with open(WEB_TRACKING, "w") as f:
+                    json.dump(tracking, f, indent=4)
+                
+                # Remove from FAISS
+                faiss_store.delete_source(name)
+                return {"status": "success", "message": f"Deleted website {name}"}
 
-@app.get("/ingest/db/stream")
-@app.post("/ingest/db")
-async def stream_db_ingestion():
-    """
-    Stream Database ingestion progress in real-time.
-    Ingests all tables configured in Config.INGEST_TABLES.
-    """
-    return StreamingResponse(
-        ingest_database(), 
-        media_type="text/plain",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"
-        }
-    )
+    elif res_type == "databases":
+        if name in Config.INGEST_TABLES:
+            new_tables = [t for t in Config.INGEST_TABLES if t != name]
+            Config.update_config({"INGEST_TABLES": ",".join(new_tables)})
+            
+            # Remove from FAISS
+            faiss_store.delete_source(name)
+            return {"status": "success", "message": f"Deleted table {name}"}
 
-@app.get("/ingest/db/status")
-async def get_database_status():
-    """
-    Get the status of ingested tables and their relations.
-    """
-    from app.ingestion.db_ingest import get_db_status
-    return get_db_status()
+    raise HTTPException(status_code=404, detail="Resource not found")
 
-@app.get("/ingest/web/stream")
-async def stream_web_ingestion(fresh: bool = False):
+@app.post("/resources/reset")
+async def reset_all_resources():
     """
-    Stream Website ingestion progress in real-time.
-    - Set fresh=true to clear tracking for configured links.
+    Wipe all ingested data and reset the system.
     """
-    return StreamingResponse(
-        ingest_websites(force_fresh=fresh), 
-        media_type="text/plain",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"
-        }
-    )
+    # 1. Clear PDFs
+    if os.path.exists(Config.RESOURCE_DIR):
+        for f in os.listdir(Config.RESOURCE_DIR):
+            path = os.path.join(Config.RESOURCE_DIR, f)
+            if os.path.isfile(path):
+                os.remove(path)
+    
+    # 2. Clear Tracking Files
+    for tracking in [PDF_TRACKING, WEB_TRACKING, "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json"]:
+        if os.path.exists(tracking):
+            os.remove(tracking)
+            
+    # 3. Clear Config Tables
+    Config.update_config({"INGEST_TABLES": ""})
+    
+    # 4. Clear FAISS Index
+    from app.vectorstore.faiss_store import FAISSStore
+    faiss_store = FAISSStore()
+    if os.path.exists(faiss_store.vector_db_path):
+        shutil.rmtree(faiss_store.vector_db_path)
+        
+    return {"status": "success", "message": "All resources reset successfully"}
 
 @app.post("/ingest/web")
 async def trigger_web_ingestion(background_tasks: BackgroundTasks):
