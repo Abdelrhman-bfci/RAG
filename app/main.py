@@ -11,7 +11,7 @@ import shutil
 import asyncio
 
 from app.ingestion.pdf_ingest import ingest_pdfs, TRACKING_FILE as PDF_TRACKING
-from app.ingestion.db_ingest import ingest_database
+from app.ingestion.db_ingest import ingest_database, DB_TRACKING_FILE as DB_TRACKING
 from app.ingestion.web_ingest import ingest_websites, TRACKING_FILE as WEB_TRACKING
 from app.qa.rag_chain import answer_question, stream_answer
 from app.config import Config # Assuming Config is needed for RESOURCE_DIR
