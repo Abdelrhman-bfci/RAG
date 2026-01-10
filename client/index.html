@@ -994,16 +994,18 @@
                 if (data.tables) {
                     tablesContainer.innerHTML = `
                         <div class="table-controls">
-                            <div class="search-wrapper">
+                            <div class="search-wrapper full-width">
                                 <i class="fas fa-search"></i>
                                 <input type="text" id="table-search" placeholder="Search tables...">
                             </div>
-                            <label class="control-item">
-                                <input type="checkbox" id="select-all-tables" checked>
-                                <span>Select All</span>
-                            </label>
+                            <div class="control-header">
+                                <label class="control-item">
+                                    <input type="checkbox" id="select-all-tables" checked>
+                                    <span>Select All <span id="selected-count" class="count-badge"></span></span>
+                                </label>
+                            </div>
                         </div>
-                        <div class="tables-grid"></div>
+                        <div class="tables-grid two-columns"></div>
                     `;
 
                     const grid = tablesContainer.querySelector('.tables-grid');

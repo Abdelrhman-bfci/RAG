@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, text, inspect
 from langchain_core.documents import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
 
@@ -107,11 +108,23 @@ def ingest_database(tables: list = None, schema: str = None):
             
             if table_docs:
                 # Batch processing to avoid "context length exceeded" errors
+                # Batch processing to avoid "context length exceeded" errors
                 batch_size = 100
                 table_total = len(table_docs)
+                
+                # Initialize splitter for large records
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=2000,  # Safe limit for embedding models
+                    chunk_overlap=200
+                )
+
                 for i in range(0, table_total, batch_size):
                     batch = table_docs[i:i + batch_size]
-                    faiss_store.add_documents(batch)
+                    
+                    # Split large documents into chunks if necessary
+                    split_batch = text_splitter.split_documents(batch)
+                    
+                    faiss_store.add_documents(split_batch)
                     
                 total_ingested_all += table_total
                 yield f"  - Added {table_total} records.\n"

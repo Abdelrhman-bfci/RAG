@@ -542,13 +542,22 @@ header {
     margin-bottom: 12px;
     border-bottom: 1px solid var(--glass-border);
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    /* Stack search and controls */
+    gap: 12px;
 }
 
 .search-wrapper {
     position: relative;
-    width: 200px;
+    width: 100%;
+    /* Full width */
+}
+
+.control-header {
+    display: flex;
+    justify-content: flex-end;
+    /* Align Select All to right */
+    width: 100%;
 }
 
 .search-wrapper i {
@@ -566,9 +575,10 @@ header {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--glass-border);
     border-radius: 6px;
-    padding: 6px 10px 6px 30px;
+    padding: 8px 10px 8px 34px;
+    /* Increased padding */
     color: var(--text-primary);
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     outline: none;
     transition: all 0.2s;
 }
@@ -588,6 +598,12 @@ header {
     user-select: none;
 }
 
+.count-badge {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-left: 4px;
+}
+
 .control-item input[type="checkbox"] {
     accent-color: var(--primary);
     width: 16px;
@@ -596,7 +612,8 @@ header {
 
 .tables-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: 1fr 1fr;
+    /* Two columns */
     gap: 12px;
     max-height: 300px;
     overflow-y: auto;
