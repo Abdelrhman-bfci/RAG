@@ -104,6 +104,19 @@
                             </select>
                         </div>
                         <textarea id="user-input" placeholder="Message RAG Assistant..." rows="1"></textarea>
+
+                        <div class="voice-controls"
+                            style="margin-right: 8px; display: flex; align-items: center; gap: 5px;">
+                            <select id="voice-lang-select" title="Voice Language"
+                                style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; border-radius: 6px; padding: 4px; font-size: 0.8rem; outline: none;">
+                                <option value="ar-SA">🇸🇦 Arabic</option>
+                                <option value="en-US">🇺🇸 English</option>
+                            </select>
+                            <button id="mic-btn" class="icon-btn" title="Speak" style="width: 32px; height: 32px;">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                        </div>
+
                         <button id="send-btn">
                             <i class="fas fa-arrow-up"></i>
                         </button>
@@ -837,7 +850,111 @@
         streamBtn.addEventListener('click', () => startIngestionStream(false));
         freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
 
-        // Resource Management Logic
+        // Initial load
+        loadResources();
+
+        // Initialize Chat Controls
+        setupInputheightAdjust();
+        setupVoiceInput();
+
+        // ---------------------------------------------------------
+        // VOICE INPUT LOGIC
+        // ---------------------------------------------------------
+        function setupVoiceInput() {
+            const micBtn = document.getElementById('mic-btn');
+            const langSelect = document.getElementById('voice-lang-select');
+            const userInput = document.getElementById('user-input');
+
+            // Check browser support
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                if (micBtn) micBtn.style.display = 'none';
+                if (langSelect) langSelect.style.display = 'none';
+                console.warn('Web Speech API not supported in this browser.');
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+
+            // Set initial language logic
+            const setLang = () => {
+                const lang = langSelect.value;
+                if (lang === 'auto') {
+                    recognition.lang = '';
+                } else {
+                    recognition.lang = lang;
+                }
+            };
+            if (langSelect) setLang();
+
+            let isRecording = false;
+
+            // Toggle Recording logic
+            if (micBtn) {
+                micBtn.addEventListener('click', () => {
+                    if (isRecording) {
+                        recognition.stop();
+                    } else {
+                        setLang();
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            console.error('Recognition start error:', e);
+                        }
+                    }
+                });
+            }
+
+            // Update language dynamically
+            if (langSelect) {
+                langSelect.addEventListener('change', (e) => {
+                    setLang();
+                    if (isRecording) {
+                        recognition.stop();
+                    }
+                });
+            }
+
+            // Events
+            recognition.onstart = () => {
+                isRecording = true;
+                micBtn.classList.add('recording');
+                micBtn.innerHTML = '<i class="fas fa-stop"></i>';
+            };
+
+            recognition.onend = () => {
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+
+                // Append text
+                const currentText = userInput.value;
+                userInput.value = currentText ? `${currentText} ${transcript}` : transcript;
+
+                // Trigger input event
+                userInput.dispatchEvent(new Event('input'));
+                userInput.focus();
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error', event.error);
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+
+                if (event.error === 'not-allowed') {
+                    alert('Microphone access denied. Please allow microphone permissions.');
+                }
+            };
+        }
+
         async function loadResources() {
             const container = document.getElementById('resource-list-container');
             try {
