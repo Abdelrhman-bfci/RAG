@@ -858,6 +858,24 @@
         setupVoiceInput();
 
         // ---------------------------------------------------------
+        // UI HELPERS
+        // ---------------------------------------------------------
+        function setupInputheightAdjust() {
+            const textarea = document.getElementById('user-input');
+            if (!textarea) return;
+
+            const adjustHeight = () => {
+                textarea.style.height = 'auto'; // Reset height
+                textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px'; // Set new height, max 150px
+            };
+
+            textarea.addEventListener('input', adjustHeight);
+
+            // Also adjust on window resize
+            window.addEventListener('resize', adjustHeight);
+        }
+
+        // ---------------------------------------------------------
         // VOICE INPUT LOGIC
         // ---------------------------------------------------------
         function setupVoiceInput() {
