@@ -199,7 +199,7 @@ def ingest_database(tables: list = None, schema: str = None):
                 }
                 # Add foreign keys to metadata for better retrieval logic if needed
                 for k, v in row_dict.items():
-                    if k in relation_map and v is not None:
+                    if k in column_to_table_map and v is not None:
                         metadata[k] = v
 
                 table_docs.append(Document(page_content=content, metadata=metadata))
