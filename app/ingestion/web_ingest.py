@@ -76,7 +76,7 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     
     # Configure crawling limits
     max_depth = kwargs.get('depth', 10)
-    max_pages = kwargs.get('max_pages', -1) # -1 implies unlimited
+    max_pages = kwargs.get('max_pages', 250) # -1 implies unlimited
     
     yield f"Found {len(links)} seed links. Starting crawl (Max Depth: {max_depth}, Max Pages: {'Unlimited' if max_pages == -1 else max_pages})...\n"
 

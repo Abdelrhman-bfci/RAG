@@ -107,11 +107,7 @@
 
                         <div class="voice-controls"
                             style="margin-right: 8px; display: flex; align-items: center; gap: 5px;">
-                            <select id="voice-lang-select" title="Voice Language"
-                                style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #aaa; border-radius: 6px; padding: 4px; font-size: 0.8rem; outline: none;">
-                                <option value="ar-SA">🇸🇦 Arabic</option>
-                                <option value="en-US">🇺🇸 English</option>
-                            </select>
+                            <!-- Language selector removed -->
                             <button id="mic-btn" class="icon-btn" title="Speak" style="width: 32px; height: 32px;">
                                 <i class="fas fa-microphone"></i>
                             </button>
@@ -343,7 +339,7 @@
             if (viewId === 'view-manage') loadResources();
             if (viewId === 'view-db') {
                 loadSchemas();
-                loadTables("");
+                // loadTables(""); // Wait for user selection
             }
 
             // Close sidebar on mobile after selection
@@ -898,7 +894,12 @@
             recognition.interimResults = false;
 
             // Set initial language logic
+            // Set initial language logic
             const setLang = () => {
+                if (!langSelect) {
+                    recognition.lang = ''; // Default to auto/browser default
+                    return;
+                }
                 const lang = langSelect.value;
                 if (lang === 'auto') {
                     recognition.lang = '';
@@ -906,7 +907,7 @@
                     recognition.lang = lang;
                 }
             };
-            if (langSelect) setLang();
+            setLang(); // Safe to call now
 
             let isRecording = false;
 
@@ -926,7 +927,7 @@
                 });
             }
 
-            // Update language dynamically
+            // Update language dynamically only if selector exists
             if (langSelect) {
                 langSelect.addEventListener('change', (e) => {
                     setLang();
@@ -1121,9 +1122,13 @@
         }
 
         async function loadTables(schema) {
+            if (!schema) {
+                tablesContainer.innerHTML = '<p class="hint">Please select a schema to view tables.</p>';
+                return;
+            }
             tablesContainer.innerHTML = '<p class="hint">Loading tables...</p>';
             try {
-                const url = schema ? `${API_BASE}/db/tables?schema=${encodeURIComponent(schema)}` : `${API_BASE}/db/tables`;
+                const url = `${API_BASE}/db/tables?schema=${encodeURIComponent(schema)}`;
                 const response = await fetch(url);
                 const data = await response.json();
                 if (data.tables) {
