@@ -333,12 +333,13 @@ async def reset_all_resources():
     return {"status": "success", "message": "All resources reset successfully"}
 
 @app.get("/ingest/web/stream")
-async def stream_web_ingestion(url: str):
+async def stream_web_ingestion(url: str, depth: int = 10, max_pages: int = -1):
     """
     Stream web ingestion progress for a single URL in real-time.
+    Defaults to depth 10 and unlimited pages (-1).
     """
     return StreamingResponse(
-        ingest_websites(urls=[url] if url else None), 
+        ingest_websites(urls=[url] if url else None, depth=depth, max_pages=max_pages), 
         media_type="text/plain",
         headers={
             "Cache-Control": "no-cache",

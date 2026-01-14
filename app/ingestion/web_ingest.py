@@ -49,7 +49,7 @@ def update_status(status, current=0, total=0, message="", start_time=None):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
-def ingest_websites(urls: list = None, force_fresh: bool = False):
+def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     """
     Ingest website content from the given urls or Config.WEBSITE_LINKS.
     Only processes links that haven't been successfully indexed recently.
@@ -73,66 +73,121 @@ def ingest_websites(urls: list = None, force_fresh: bool = False):
     tracking_data = load_tracking_data()
     new_documents = []
     processed_links = []
-
-    yield f"Found {len(links)} links. Starting extraction...\n"
+    
+    # Configure crawling limits
+    max_depth = kwargs.get('depth', 10)
+    max_pages = kwargs.get('max_pages', -1) # -1 implies unlimited
+    
+    yield f"Found {len(links)} seed links. Starting crawl (Max Depth: {max_depth}, Max Pages: {'Unlimited' if max_pages == -1 else max_pages})...\n"
 
     for url in links:
         try:
+            # Check if main URL was recently indexed (unless forced)
             last_indexed = tracking_data.get(url, 0)
             if not force_fresh and (time.time() - last_indexed < 86400): 
                 yield f"Skipping (indexed recently): {url}\n"
                 continue
-
-            yield f"Discovering links on: {url}\n"
-            base_url = url.rstrip('/')
-            domain = urlparse(url).netloc
             
-            try:
-                response = requests.get(url, timeout=10)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Find links that are on the same domain and look interesting
-                found_links = set()
-                found_links.add(url) # Include the main URL
-                
-                for a in soup.find_all('a', href=True):
-                    href = a['href']
-                    text = a.get_text().lower().strip()
-                    full_url = urljoin(url, href)
-                    parsed_full = urlparse(full_url)
-                    
-                    if parsed_full.netloc == domain:
-                        # Focus on likely informative pages by path OR by link text
-                        path = parsed_full.path.lower()
-                        keywords = ["about", "history", "vision", "mission", "leader", "academic", "program", "department"]
-                        if any(kw in path for kw in keywords) or any(kw in text for kw in keywords):
-                            found_links.add(full_url)
-                
-                target_urls = list(found_links)[:10] 
-                yield f"Discovered {len(target_urls)} relevant pages:\n"
-                for t_url in target_urls:
-                    yield f" - {t_url}\n"
-                
-                yield "Starting extraction...\n"
-                loader = WebBaseLoader(target_urls)
-                docs = loader.load()
-                
-                # Filter out empty or failed docs
-                valid_docs = []
-                for d in docs:
-                    if len(d.page_content.strip()) > 300:
-                        valid_docs.append(d)
-                        source_url = d.metadata.get("source", "Unknown URL")
-                        yield f"Successfully extracted: {source_url}\n"
-                
-                new_documents.extend(valid_docs)
-                processed_links.append(url)
+            # BFS Initialization
+            # Queue stores tuples: (url, current_depth)
+            queue = [(url, 0)]
+            visited = set([url])
+            target_urls = []
+            
+            domain = urlparse(url).netloc
+            base_url = url.rstrip('/')
 
-            except Exception as e:
-                yield f"Discovery FAILED for {url}: {e}\n"
+            yield f"Starting crawl on: {url}\n"
+
+            while queue:
+                # Check for max_pages limit if not unlimited
+                if max_pages != -1 and len(target_urls) >= max_pages:
+                    break
+
+                current_url, current_depth = queue.pop(0)
+                
+                if current_depth > max_depth:
+                    continue
+                
+                # Add to targets if it's not the seed URL (or if seed needs re-indexing which is checked above)
+                # For the seed URL itself, we adding it to targets to be loaded
+                target_urls.append(current_url)
+                
+                # Stop if we reached max depth, no need to parse for links
+                if current_depth >= max_depth:
+                    continue
+
+                try:
+                    yield f"Scanning [Depth {current_depth}]: {current_url}\n"
+                    response = requests.get(current_url, timeout=10)
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    found_on_page = 0
+                    for a in soup.find_all('a', href=True):
+                        if max_pages != -1 and len(target_urls) >= max_pages:
+                            break
+                            
+                        href = a['href']
+                        text = a.get_text().lower().strip()
+                        full_url = urljoin(current_url, href)
+                        
+                        # Remove fragment identifier to avoid duplicate crawling
+                        full_url = full_url.split('#')[0]
+                        parsed_full = urlparse(full_url)
+                        
+                        if parsed_full.netloc == domain and full_url not in visited:
+                            # Heuristic filter for relevance (optional, but good to keep to reduce noise)
+                            path = parsed_full.path.lower()
+                            keywords = ["about", "history", "vision", "mission", "leader", "academic", "program", "department", "news", "blog", "service", "product"]
+                            
+                            # We can be a bit more lenient with deep crawling or keep strict
+                            if any(kw in path for kw in keywords) or any(kw in text for kw in keywords) or current_depth == 0:
+                                visited.add(full_url)
+                                queue.append((full_url, current_depth + 1))
+                                found_on_page += 1
+                    
+                    # Yield progress occasionally
+                    # yield f" - Found {found_on_page} new links on {current_url}\n"
+
+                except Exception as e:
+                    yield f"Failed to crawl {current_url}: {e}\n"
+
+            
+            yield f"Discovered {len(target_urls)} pages to process for {url}\n"
+
+            # Batch process the discovered URLs
+            if target_urls:
+                yield "Starting extraction...\n"
+                # Load in batches to avoid overwhelming
+                batch_size = 10
+                for i in range(0, len(target_urls), batch_size):
+                    batch_urls = target_urls[i:i+batch_size]
+                    yield f"Loading batch {i//batch_size + 1} ({len(batch_urls)} urls)...\n"
+                    
+                    try:
+                        loader = WebBaseLoader(batch_urls)
+                        # Set requests timeout or other loader parameters if possible in this version of langchain
+                        # loader.requests_kwargs = {'timeout': 10} 
+                        
+                        docs = loader.load()
+                        
+                        # Filter valid docs
+                        valid_batched_docs = []
+                        for d in docs:
+                            if len(d.page_content.strip()) > 300:
+                                valid_batched_docs.append(d)
+                                source_url = d.metadata.get("source", "Unknown URL")
+                                yield f" - Extracted: {source_url}\n"
+                        
+                        new_documents.extend(valid_batched_docs)
+                        
+                    except Exception as e:
+                        yield f"Batch extraction failed: {e}\n"
+    
+            processed_links.append(url)
 
         except Exception as e:
-            yield f"FAILED to load {url}: {e}\n"
+            yield f"FAILED to process hierarchy for {url}: {e}\n"
 
     if not new_documents:
         yield "No new website content to index.\n"
