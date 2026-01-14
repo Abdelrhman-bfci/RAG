@@ -103,35 +103,30 @@ def get_rag_chain(deep_thinking: bool = False):
             is_arabic = bool(re.search('[\u0600-\u06FF]', query))
             
             if is_arabic:
-                # For Arabic, filter out very common stop words if possible, or just keep all moderately long words
                 keywords = [w.lower() for w in query.split() if len(w) >= 2]
             else:
                 keywords = [w.lower() for w in query.split() if len(w) > 3]
             
-            website_docs = []
+            # Simple re-ranking: Boost documents that contain exact keywords
+            # We want to maintain diversity, so we won't strictly segregate.
+            
             priority_docs = []
             other_docs = []
             
             for d in initial_docs:
                 content_lower = d.page_content.lower()
-                source = d.metadata.get("source", "").lower()
                 
-                # Boost website sources as they are usually more specific to recent queries
-                is_website = source.startswith("http")
-                
-                # Check for keyword matches (handling both languages)
+                # Check for keyword matches
                 has_keywords = any(kw in content_lower for kw in keywords)
                 
-                if is_website:
-                    website_docs.append(d)
-                elif has_keywords:
+                if has_keywords:
                     priority_docs.append(d)
                 else:
                     other_docs.append(d)
             
-            # Order: Websites first, then keyword matches, then others
-            combined = website_docs + priority_docs + other_docs
-            return combined[:30] # Increased Top-K to 30 (approx 12k tokens) for very large context synthesisf
+            # Return priority matches first, then others, but don't filter out non-web sources
+            combined = priority_docs + other_docs
+            return combined[:30] # Top 30 documents
 
     retriever = HybridRetriever(vectorstore)
 
