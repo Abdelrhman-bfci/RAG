@@ -68,13 +68,66 @@ def ingest_database(tables: list = None, schema: str = None):
         inspector = inspect(engine)
         existing_tables = inspector.get_table_names(schema=schema)
         
-        # Build relation map: {column_name: table_name} 
-        # e.g., {'institute_id': 'institutes', 'department_id': 'departments'}
-        relation_map = {}
+        # --- Smart Foreign Key Resolution Setup --- 
+        # 1. Identify all foreign keys in the tables we are about to ingest
+        # 2. Pre-fetch the 'name' mapping for those referred tables
+        
+        fk_lookup_cache = {} # {'departments': {1: 'CS', 2: 'IT'}, 'institutes': {..}}
+        column_to_table_map = {} # {'department_id': 'departments', 'institute_id': 'institutes'}
+        
+        yield "Analyzing foreign keys for semantic enrichment...\n"
+        
+        # Analyze potential FKs
         for table in tables_to_ingest:
-            if table.endswith('s'):
-                rel_col = table[:-1] + "_id"
-                relation_map[rel_col] = table
+            # We need to know the columns of this table to find _id columns.
+            # Getting columns for every table might be slow if many tables, but necessary for dynamic resolution.
+            try:
+                columns = inspector.get_columns(table, schema=schema)
+                for col in columns:
+                    col_name = col['name']
+                    if col_name.endswith('_id') and col_name != 'id':
+                        # Infer target table name: department_id -> departments
+                        base_name = col_name[:-3]
+                        target_table = base_name + 's'
+                        
+                        # Verify target table exists
+                        if target_table in existing_tables:
+                            column_to_table_map[col_name] = target_table
+                            
+            except Exception as e:
+                print(f"Error analyzing columns for {table}: {e}")
+
+        # Pre-fetch Mappings
+        for col_name, target_table in column_to_table_map.items():
+            if target_table in fk_lookup_cache:
+                continue # Already fetched
+                
+            try:
+                # Find a suitable "name" column
+                target_cols = [c['name'] for c in inspector.get_columns(target_table, schema=schema)]
+                name_col = next((c for c in target_cols if c in ['name', 'name_en', 'title', 'label', 'description']), None)
+                
+                # If no strict match, try looser match
+                if not name_col:
+                    name_col = next((c for c in target_cols if 'name' in c or 'title' in c), None)
+
+                if name_col:
+                    yield f"  - Caching names from '{target_table}' for '{col_name}' resolving...\n"
+                    full_target = f"{schema}.{target_table}" if schema else target_table
+                    # Limit to 5000 to prevent OOM on huge tables, usually lookup tables are small
+                    res = connection.execute(text(f"SELECT id, {name_col} FROM {full_target} LIMIT 5000"))
+                    
+                    mapping = {}
+                    for row in res.fetchall():
+                        # row[0] is id, row[1] is name
+                        mapping[row[0]] = str(row[1])
+                    
+                    fk_lookup_cache[target_table] = mapping
+                else:
+                    # yield f"  - No name column found for {target_table}, skipping resolution.\n"
+                    pass
+            except Exception as e:
+                print(f"Error fetching cache for {target_table}: {e}")
 
         total_tables = len(tables_to_ingest)
         yield f"Starting ingestion for {total_tables} tables{' in schema ' + schema if schema else ''}...\n"
@@ -101,17 +154,44 @@ def ingest_database(tables: list = None, schema: str = None):
             for row in rows:
                 row_dict = dict(zip(keys, row))
                 
-                # Build content parts, noting relations
+                # Build content parts
                 content_parts = []
+                resolved_relations = []
+                
                 for k, v in row_dict.items():
                     if v is None: continue
                     
-                    line = f"{k}: {v}"
-                    if k in relation_map:
-                        line += f" (Link to {relation_map[k]})"
+                    val_str = str(v).strip()
+                    line = f"{k}: {val_str}"
                     content_parts.append(line)
+                    
+                    # Resolve FK
+                    if k in column_to_table_map:
+                        target_tbl = column_to_table_map[k]
+                        if target_tbl in fk_lookup_cache:
+                            # Try to find the name for this ID
+                            # Ensure v matches type of keys in mapping (usually int or str)
+                            if v in fk_lookup_cache[target_tbl]:
+                                resolved_name = fk_lookup_cache[target_tbl][v]
+                                # Add a semantic line
+                                # e.g. "department_resolved: Computer Science"
+                                pretty_key = k.replace('_id', '')
+                                enriched_line = f"{pretty_key}_name: {resolved_name}"
+                                content_parts.append(enriched_line)
+                                resolved_relations.append(f"{pretty_key}={resolved_name}")
+                            elif str(v) in fk_lookup_cache[target_tbl]:
+                                resolved_name = fk_lookup_cache[target_tbl][str(v)]
+                                pretty_key = k.replace('_id', '')
+                                enriched_line = f"{pretty_key}_name: {resolved_name}"
+                                content_parts.append(enriched_line)
+                                resolved_relations.append(f"{pretty_key}={resolved_name}")
+
+                # Create rich text representation
+                # content = "\n".join(content_parts)
                 
-                content = "\n".join(content_parts)
+                # OPTIMIZED FORMAT FOR RAG
+                # We group the main fields and then the resolved relations
+                content = f"Table: {table}\n" + "\n".join(content_parts)
                 metadata = {
                     "source": f"Table: {table}", 
                     "type": "database_record", 

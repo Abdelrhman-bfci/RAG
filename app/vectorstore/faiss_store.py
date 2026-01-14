@@ -86,3 +86,39 @@ class FAISSStore:
             self.save_index(vectorstore)
             return True
         return False
+
+    def delete_sources(self, source_names: list):
+        """
+        Remove documents associated with multiple sources efficiently.
+        """
+        if not source_names:
+            return False
+            
+        vectorstore = self.load_index()
+        if not vectorstore:
+            return False
+
+        docstore = vectorstore.docstore._dict
+        ids_to_delete = []
+        
+        # Optimize by converting source_names to set for O(1) lookup ?? 
+        # Actually metadata check is scanning all docs anyway.
+        source_set = set(source_names)
+        
+        for doc_id, doc in docstore.items():
+            src = doc.metadata.get("source")
+            tbl = doc.metadata.get("table")
+            # Check exact matches
+            if src in source_set or tbl in source_set:
+                ids_to_delete.append(doc_id)
+                continue
+                
+            # Check basename matches (for files)
+            if src and os.path.basename(src) in source_set:
+                ids_to_delete.append(doc_id)
+
+        if ids_to_delete:
+            vectorstore.delete(ids_to_delete)
+            self.save_index(vectorstore)
+            return True
+        return False

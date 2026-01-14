@@ -31,9 +31,14 @@ STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
     STRICT COMPLIANCE RULES:
     1. Answer ONLY using the information from the Context.
     2. If the answer is not in the Context, say "I cannot answer this based on the provided documents" (translate to Arabic if question is Arabic).
-    3. CITE sources using [Document.pdf, Page X].
+    3. CITE sources using [Document.pdf, Page X] or [Table: TableName].
     4. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
-    5. If the answer requires a long response, provide the FULL answer without cutting it short."""),
+    5. If the answer requires a long response, provide the FULL answer without cutting it short.
+
+    DATABASE & RELATION RULES:
+    1. **Resolved Foreign Keys**: If you see fields like `department_id` and `department_name`, they are linked. Use the `_name` field for human-readable answers.
+    2. **Implicit Relations**: If a user asks about "Courses in Computer Science", look for `department_name: Computer Science` in the `courses` table context.
+    3. **Schema Awareness**: `institutes` table refers to "Faculties" or "Colleges". `departments` refers to academic departments."""),
     ("human", """Context:
     {context}
     
@@ -57,10 +62,15 @@ DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
     3. Structure your response with clear sections:
        - For Arabic questions: Start with "ملخص تحليلي" (Analytical Summary) followed by "تفاصيل رئيسية" (Key Details)
        - For English questions: Start with "Analytical Summary" followed by "Key Details"
-    4. CITE major points using [Source Name, Page X].
+    4. CITE major points using [Source Name, Page X] or [Table: TableName].
     5. If information is missing, clearly state what is unknown in the user's language.
     6. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
-    7. If the answer requires a long response, provide the FULL answer without cutting it short. You have sufficient token capacity."""),
+    7. If the answer requires a long response, provide the FULL answer without cutting it short. You have sufficient token capacity.
+    
+    RELATIONAL DATA LOGIC:
+    - **Connect the Dots**: Data might be spread across tables (e.g., Course -> Department -> Faculty). Use the enriched `_name` fields (like `department_name`) to bridge these connections.
+    - **Terminology**: Treat `institutes` as Faculties/Colleges.
+    - **Aggregation**: If analyzing data from a database, summarize trends or groupings where appropriate."""),
     ("human", """Context:
     {context}
     

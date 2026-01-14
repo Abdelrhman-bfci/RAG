@@ -204,6 +204,17 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     splitted_docs = text_splitter.split_documents(new_documents)
     total_chunks = len(splitted_docs)
     yield f"Generated {total_chunks} chunks. Starting vectorization...\n"
+    
+    # Clean up old versions of these pages to prevent duplicates
+    try:
+        # Extract unique source URLs from the new documents
+        current_sources = list(set([d.metadata.get("source") for d in new_documents if d.metadata.get("source")]))
+        if current_sources:
+            yield f"Syncing index for {len(current_sources)} pages...\n"
+            temp_store = FAISSStore()
+            temp_store.delete_sources(current_sources)
+    except Exception as e:
+        yield f"WARNING: Failed to sync old index: {e}\n"
 
     faiss_store = FAISSStore()
     vectorstore = faiss_store.load_index() # Load once

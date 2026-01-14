@@ -54,14 +54,15 @@ def ingest_pdfs(force_fresh: bool = False):
     Yields progress updates as strings.
     """
     if force_fresh:
-        yield "Fresh start requested. Clearing existing index...\n"
+        yield "Fresh start requested. Clearing PDF tracking data...\n"
         if os.path.exists(TRACKING_FILE):
             os.remove(TRACKING_FILE)
-        faiss_store = FAISSStore()
-        if os.path.exists(faiss_store.vector_db_path):
-            import shutil
-            shutil.rmtree(faiss_store.vector_db_path)
-            yield "Old index deleted.\n"
+        # We do NOT delete the entire vector_db_path because it contains data from other sources (Web, DB)
+        # faiss_store = FAISSStore()
+        # if os.path.exists(faiss_store.vector_db_path):
+        #     import shutil
+        #     shutil.rmtree(faiss_store.vector_db_path)
+        #     yield "Old index deleted.\n"
 
     yield "Scanning files...\n"
     update_status("running", message="Scanning files...")
@@ -96,6 +97,15 @@ def ingest_pdfs(force_fresh: bool = False):
                 continue
 
             yield f"Reading: {os.path.basename(pdf_path)}\n"
+            
+            # Ensure we remove old versions of this file from the index before adding new ones
+            # This prevents duplicates if the file content changed but filename is same
+            try:
+                faiss_store = FAISSStore()
+                faiss_store.delete_source(pdf_path)
+            except Exception as e:
+                print(f"Warning: Failed to clear old index for {pdf_path}: {e}")
+
             loader = PyMuPDFLoader(pdf_path)
             docs = loader.load()
             new_documents.extend(docs)
