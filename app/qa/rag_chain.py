@@ -259,6 +259,15 @@ def answer_question(question: str, deep_thinking: bool = False):
         docs = retriever.invoke(question)
         sources = sorted(list(set([doc.metadata.get("source", "Unknown") for doc in docs])))
         
+        # Capture used docs with content
+        used_docs = []
+        for doc in docs:
+            used_docs.append({
+                "source": doc.metadata.get("source", "Unknown"),
+                "content": doc.page_content,
+                "page": doc.metadata.get("page", 0)
+            })
+
         # 2. Invoke the chain
         start_llm = time.time()
         answer = chain.invoke(question)
@@ -275,7 +284,8 @@ def answer_question(question: str, deep_thinking: bool = False):
         return {
             "answer": answer,
             "sources": relevant_sources,
-            "performance": performance
+            "performance": performance,
+            "used_docs": used_docs 
         }
     except ValueError as e:
         return {"error": str(e)}
@@ -298,6 +308,15 @@ def stream_answer(question: str, deep_thinking: bool = False):
         end_retrieval = time.time()
         
         sources = sorted(list(set([doc.metadata.get("source", "Unknown") for doc in docs])))
+        
+        # Capture used docs with content
+        used_docs = []
+        for doc in docs:
+            used_docs.append({
+                "source": doc.metadata.get("source", "Unknown"),
+                "content": doc.page_content,
+                "page": doc.metadata.get("page", 0)
+            })
         
         # Send ALL sources first so frontend can build the link map
         yield json.dumps({"type": "sources", "sources": sources}) + "\n"
@@ -334,7 +353,8 @@ def stream_answer(question: str, deep_thinking: bool = False):
             "sources": relevant_sources, 
             "performance": performance,
             "tokens": estimated_tokens,
-            "model": current_model
+            "model": current_model,
+            "used_docs": used_docs
         }) + "\n"
         
         yield json.dumps({"type": "done"}) + "\n"

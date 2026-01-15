@@ -10,9 +10,40 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=7">
+    <link rel="stylesheet" href="style.css?v=8">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        .chunk-used {
+            border: 2px solid var(--accent-color, #00A3E0) !important;
+            background-color: rgba(0, 163, 224, 0.05) !important;
+            position: relative;
+        }
+
+        .chunk-used::after {
+            content: "Used in Answer";
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: var(--accent-color, #00A3E0);
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .citation-link {
+            cursor: pointer;
+            color: var(--primary-color, #8C1D40);
+            text-decoration: underline;
+            font-weight: 500;
+        }
+
+        .source-badge {
+            cursor: pointer;
+        }
+    </style>
 </head>
 
 <body>
@@ -436,6 +467,7 @@
                 const decoder = new TextDecoder();
                 let accumulatedAnswer = '';
                 let sourceMap = {}; // Initialize source map
+                let usedDocs = []; // Store used chunks
 
                 botTextDiv.innerHTML = ''; // Clear thinking state
 
@@ -452,7 +484,7 @@
                             const data = JSON.parse(line);
                             if (data.type === 'sources') {
                                 // Optional: display sources separately
-                                console.log('Sources:', data.sources);
+                                // console.log('Sources:', data.sources);
                                 // Populate source map
                                 data.sources.forEach(src => {
                                     const name = src.startsWith('http') ? src : src.split('/').pop();
@@ -477,27 +509,14 @@
 
                                         // heuristic: ends with .pdf or is in our source list
                                         if (possibleFile.toLowerCase().endsWith('.pdf') || sourceMap[possibleFile]) {
-                                            let url = "";
-                                            let page = 1;
+                                            // Prepare arguments for previewIndexSource
+                                            // We need to pass sourceName and explicitly usedDocs (captured later, or empty initially)
+                                            // Since marked is called repeatedly, usedDocs might be populated by the end
 
-                                            // Try to find the full path from our sourceMap
-                                            // If it's a web link, use it directly
-                                            if (possibleFile.startsWith('http')) {
-                                                url = possibleFile;
-                                            } else {
-                                                // It's likely a file served from /files
-                                                url = `${API_BASE}/files/${possibleFile}`;
-                                            }
+                                            // We'll use a globally accessible way or dynamic onclick handler
+                                            const clickHandler = `previewIndexSource('${possibleFile.replace(/'/g, "\\'")}', window.currentUsedDocs || [])`;
 
-                                            // Check for page number
-                                            const pagePart = parts.find(p => p.toLowerCase().startsWith('page'));
-                                            if (pagePart) {
-                                                const pNum = parseInt(pagePart.split(/\s+/)[1]);
-                                                if (!isNaN(pNum)) page = pNum;
-                                                url += `#page=${page}`;
-                                            }
-
-                                            return `<a href="${url}" target="_blank" class="citation-link"><i class="fas fa-external-link-alt"></i> ${match}</a>`;
+                                            return `<span class="citation-link" onclick="${clickHandler}"><i class="fas fa-file-alt"></i> ${match}</span>`;
                                         }
                                         return match;
                                     });
@@ -506,6 +525,13 @@
                                 botTextDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
                             } else if (data.type === 'metadata') {
+                                // Capture used docs
+                                if (data.used_docs) {
+                                    usedDocs = data.used_docs;
+                                    // Store in window for onclick handlers to access
+                                    window.currentUsedDocs = usedDocs;
+                                }
+
                                 // Add performance metrics and sources
                                 const metaDiv = document.createElement('div');
                                 metaDiv.className = 'message-meta';
@@ -530,14 +556,15 @@
                                     data.sources.forEach(src => {
                                         const isUrl = src.startsWith('http');
                                         const name = isUrl ? new URL(src).hostname : src.split('/').pop();
-                                        const url = isUrl ? src : `${API_BASE}/files/${name}`;
 
-                                        const badge = document.createElement('a'); // Changed to anchor
+                                        const badge = document.createElement('span');
                                         badge.className = 'source-badge';
-                                        badge.href = url;
-                                        badge.target = "_blank";
+
+                                        // On click, open preview with highlighted chunks
+                                        badge.onclick = () => previewIndexSource(name, usedDocs);
+
                                         badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
-                                        badge.title = "Click to open source";
+                                        badge.title = "Click to preview source content";
                                         sourceContainer.appendChild(badge);
                                     });
                                     metaDiv.appendChild(sourceContainer);
@@ -1193,7 +1220,7 @@
             }
         }
 
-        async function previewIndexSource(sourceName) {
+        async function previewIndexSource(sourceName, usedDocs = []) {
             let previewModal = document.getElementById('preview-modal');
             if (!previewModal) {
                 previewModal = document.createElement('div');
@@ -1267,10 +1294,24 @@
                     return;
                 }
 
+                // Prepare set of used content for O(1) lookup
+                // We'll use a simplified check or exact match
+                const usedContents = new Set(usedDocs.filter(d => d.source === sourceName).map(d => d.content.trim()));
+
+                let firstUsedChunk = null;
+
                 // Render all chunks
                 chunks.forEach((chunk, index) => {
                     const card = document.createElement('div');
                     card.className = 'chunk-card';
+
+                    // Check if this chunk was used
+                    // We check if the content maps to one of our used docs
+                    if (usedContents.has(chunk.content.trim())) {
+                        card.classList.add('chunk-used');
+                        if (!firstUsedChunk) firstUsedChunk = card;
+                    }
+
                     card.innerHTML = `
                         <div class="chunk-header">
                             <span>#${index + 1}</span>
@@ -1280,6 +1321,13 @@
                     `;
                     container.appendChild(card);
                 });
+
+                // Scroll to first used chunk
+                if (firstUsedChunk) {
+                    setTimeout(() => {
+                        firstUsedChunk.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 300);
+                }
 
             } catch (error) {
                 document.getElementById('preview-content-loader').textContent = 'Failed to load content.';
