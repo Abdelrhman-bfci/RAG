@@ -149,3 +149,34 @@ class FAISSStore:
             
         stats["total_documents"] = len(stats["sources"])
         return stats
+
+    def get_source_content(self, source_name: str, limit: int = 50):
+        """
+        Retrieve content chunks for a specific source.
+        """
+        vectorstore = self.load_index()
+        if not vectorstore:
+            return []
+            
+        docstore = vectorstore.docstore._dict
+        chunks = []
+        
+        for doc_id, doc in docstore.items():
+            src = doc.metadata.get("source", "Unknown")
+            basename = os.path.basename(src) if "/" in src or "\\" in src else src
+            
+            # loose match to handle full paths vs basenames
+            if basename == source_name or src == source_name:
+                chunks.append({
+                    "content": doc.page_content,
+                    "page": doc.metadata.get("page", "N/A"),
+                    "id": doc_id
+                })
+                
+        # Sort by page number if possible
+        try:
+            chunks.sort(key=lambda x: int(x["page"]) if isinstance(x["page"], int) or (isinstance(x["page"], str) and x["page"].isdigit()) else 9999)
+        except:
+            pass
+            
+        return chunks[:limit]

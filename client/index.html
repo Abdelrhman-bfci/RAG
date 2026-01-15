@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=6">
+    <link rel="stylesheet" href="style.css?v=7">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -1171,7 +1171,10 @@
                     itemDiv.innerHTML = `
                         <span class="health-name" title="${name}">${name}</span>
                         <span class="health-status"><i class="fas ${statusIcon}"></i> ${status}</span>
-                        <span class="health-chunks">${chunks} chunks</span>
+                        <div class="health-actions" style="display:flex; align-items:center;">
+                            ${isIndexed ? `<button onclick="previewIndexSource('${name}')" class="preview-btn" title="Preview Content"><i class="fas fa-eye"></i></button>` : ''}
+                            <span class="health-chunks">${chunks} chunks</span>
+                        </div>
                     `;
                     list.appendChild(itemDiv);
                 });
@@ -1187,6 +1190,76 @@
             } catch (error) {
                 console.error("Health check failed", error);
                 list.innerHTML = '<p class="hint error">Failed to load index stats.</p>';
+            }
+        }
+
+        async function previewIndexSource(sourceName) {
+            // Show modal with loading state
+            const modal = document.getElementById('base-modal'); // Reusing existing modal structure if possible?
+            // Actually, let's create a specific modal container if it doesn't exist or modify the existing Settings modal isn't great.
+            // Let's assume we use the same modal structure but change content.
+
+            const modalOverlay = document.getElementById('settings-modal');
+            // We'll hijack the settings modal for now or create a new one. Best to check if we have a generic one.
+            // Looking at the code, we have 'settings-modal'. Let's create a new 'preview-modal' dynamically or statically.
+
+            let previewModal = document.getElementById('preview-modal');
+            if (!previewModal) {
+                previewModal = document.createElement('div');
+                previewModal.id = 'preview-modal';
+                previewModal.className = 'modal-overlay';
+                previewModal.style.display = 'none'; // Initially hidden
+                previewModal.innerHTML = `
+                    <div class="modal-content" style="max-width: 800px; width: 90%;">
+                        <div class="modal-header">
+                            <h3 id="preview-modal-title">Index Content</h3>
+                            <button class="close-modal" onclick="document.getElementById('preview-modal').style.display='none'"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="preview-content-loader" class="hint">Loading chunks...</div>
+                            <div id="preview-chunks" class="content-chunks-container"></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="action-btn secondary-btn" onclick="document.getElementById('preview-modal').style.display='none'">Close</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(previewModal);
+            }
+
+            document.getElementById('preview-modal-title').textContent = `Index Content: ${sourceName}`;
+            document.getElementById('preview-chunks').innerHTML = '';
+            document.getElementById('preview-content-loader').style.display = 'block';
+            previewModal.style.display = 'flex';
+
+            try {
+                const response = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(sourceName)}`);
+                const chunks = await response.json();
+
+                document.getElementById('preview-content-loader').style.display = 'none';
+                const container = document.getElementById('preview-chunks');
+
+                if (chunks.length === 0) {
+                    container.innerHTML = '<p class="hint">No content found for this source.</p>';
+                    return;
+                }
+
+                chunks.forEach((chunk, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'chunk-card';
+                    card.innerHTML = `
+                        <div class="chunk-header">
+                            <span>Chunk #${index + 1}</span>
+                            <span>Page: ${chunk.page}</span>
+                        </div>
+                        <div class="chunk-text">${chunk.content}</div>
+                    `;
+                    container.appendChild(card);
+                });
+
+            } catch (error) {
+                document.getElementById('preview-content-loader').textContent = 'Failed to load content.';
+                console.error(error);
             }
         }
 

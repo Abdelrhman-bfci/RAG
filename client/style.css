@@ -219,6 +219,36 @@ body {
     overflow-y: auto;
 }
 
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+}
+
+/* Specific show state for dynamic modals that use style.display */
+#preview-modal[style*="display: flex"],
+#preview-modal[style*="display: block"] {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
 header {
     padding: 24px 40px;
     display: flex;
@@ -1568,6 +1598,7 @@ header {
     font-size: 0.8rem;
     color: var(--text-muted);
 }
+
 /* --- New Styles for Citations & Resources --- */
 
 /* Resource Item Layout Update */
@@ -1737,14 +1768,72 @@ header {
     margin-right: 6px;
 }
 
-.status-ok .health-status { color: #10b981; }
-.status-missing .health-status { color: #f43f5e; }
-.status-orphan .health-status { color: #f59e0b; }
+.status-ok .health-status {
+    color: #10b981;
+}
+
+.status-missing .health-status {
+    color: #f43f5e;
+}
+
+.status-orphan .health-status {
+    color: #f59e0b;
+}
 
 .health-item.status-missing {
     background: rgba(244, 63, 94, 0.05);
 }
 
 #sync-btn {
-    display: flex; /* Hidden by default via JS if clean */
+    display: flex;
+    /* Hidden by default via JS if clean */
+}
+
+/* Index Preview Modal */
+.content-chunks-container {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.chunk-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.chunk-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.chunk-text {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    font-family: monospace;
+}
+
+.preview-btn {
+    background: none;
+    border: none;
+    color: var(--primary-light);
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 8px;
+}
+
+.preview-btn:hover {
+    color: var(--primary);
+    transform: scale(1.1);
 }

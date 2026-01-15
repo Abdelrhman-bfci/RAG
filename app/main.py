@@ -475,5 +475,23 @@ async def sync_resources(background_tasks: BackgroundTasks):
         }
     )
 
+    return StreamingResponse(
+        ingest_pdfs(force_fresh=False), 
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+@app.get("/index/preview")
+async def preview_index_content(source: str):
+    """
+    Get content chunks for a specific source from the index.
+    """
+    from app.vectorstore.faiss_store import FAISSStore
+    faiss_store = FAISSStore()
+    return faiss_store.get_source_content(source)
+
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=80, reload=True)
