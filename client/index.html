@@ -435,9 +435,10 @@
 
                                 // Configure marked options for link generation
                                 const renderer = new marked.Renderer();
-                                const originalLink = renderer.link;
-                                renderer.text = function (text) {
-                                    if (typeof text !== 'string') return text || '';
+                                renderer.text = function (token) {
+                                    const text = typeof token === 'string' ? token : token.text;
+                                    if (!text) return '';
+
                                     // Regex for [Doc.pdf, Page X] or [Doc.pdf]
                                     // We'll replace it with a link
                                     return text.replace(/\[([^\]]+)\]/g, (match, content) => {
@@ -472,9 +473,8 @@
                                         return match;
                                     });
                                 };
-                                marked.use({ renderer });
 
-                                botTextDiv.innerHTML = marked.parse(accumulatedAnswer);
+                                botTextDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
                             } else if (data.type === 'metadata') {
                                 // Add performance metrics and sources
