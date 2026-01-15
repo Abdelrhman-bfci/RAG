@@ -406,6 +406,7 @@
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let accumulatedAnswer = '';
+                let sourceMap = {}; // Initialize source map
 
                 botTextDiv.innerHTML = ''; // Clear thinking state
 
@@ -423,14 +424,14 @@
                             if (data.type === 'sources') {
                                 // Optional: display sources separately
                                 console.log('Sources:', data.sources);
-                            } else if (data.type === 'chunk') {
-                                accumulatedAnswer += data.content;
-                                // Prepare source map for easy lookup
-                                const sourceMap = {};
+                                // Populate source map
                                 data.sources.forEach(src => {
                                     const name = src.startsWith('http') ? src : src.split('/').pop();
                                     sourceMap[name] = src;
                                 });
+                            } else if (data.type === 'chunk') {
+                                accumulatedAnswer += data.content;
+                                // sourceMap is already populated if sources came first
 
                                 // Configure marked options for link generation
                                 const renderer = new marked.Renderer();
