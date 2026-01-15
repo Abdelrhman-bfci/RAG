@@ -437,6 +437,7 @@
                                 const renderer = new marked.Renderer();
                                 const originalLink = renderer.link;
                                 renderer.text = function (text) {
+                                    if (typeof text !== 'string') return text || '';
                                     // Regex for [Doc.pdf, Page X] or [Doc.pdf]
                                     // We'll replace it with a link
                                     return text.replace(/\[([^\]]+)\]/g, (match, content) => {
