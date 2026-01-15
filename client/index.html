@@ -482,106 +482,114 @@
                 // Clear thinking state
                 contentDiv.innerHTML = '';
 
+                let buffer = '';
+
+                // Helper to process a single JSON line
+                const processLine = (line) => {
+                    if (!line.trim()) return;
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.type === 'sources') {
+                            data.sources.forEach(src => {
+                                const name = src.startsWith('http') ? src : src.split('/').pop();
+                                sourceMap[name] = src;
+                            });
+                        } else if (data.type === 'chunk') {
+                            accumulatedAnswer += data.content;
+
+                            const renderer = new marked.Renderer();
+                            renderer.text = function (token) {
+                                const text = typeof token === 'string' ? token : token.text;
+                                if (!text) return '';
+
+                                return text.replace(/\[([^\]]+)\]/g, (match, content) => {
+                                    const parts = content.split(',').map(s => s.trim());
+                                    const possibleFile = parts[0];
+
+                                    if (possibleFile.toLowerCase().endsWith('.pdf') || sourceMap[possibleFile]) {
+                                        const safeName = possibleFile.replace(/'/g, "\\'");
+                                        const clickHandler = `previewIndexSource('${safeName}', window.currentUsedDocs || [])`;
+                                        return `<span class="citation-link" onclick="${clickHandler}"><i class="fas fa-file-alt"></i> ${match}</span>`;
+                                    }
+                                    return match;
+                                });
+                            };
+
+                            contentDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                        } else if (data.type === 'metadata') {
+                            if (data.used_docs) {
+                                usedDocs = data.used_docs;
+                                window.currentUsedDocs = usedDocs;
+                            }
+
+                            const metaDiv = document.createElement('div');
+                            metaDiv.className = 'message-meta';
+                            metaDiv.style.display = 'flex';
+
+                            const stats = [
+                                { label: 'Model', value: data.model, icon: 'fa-robot' },
+                                { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
+                                { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
+                                { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
+                            ];
+
+                            stats.forEach(stat => {
+                                const item = document.createElement('div');
+                                item.className = 'meta-item';
+                                item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
+                                metaDiv.appendChild(item);
+                            });
+
+                            if (data.sources && data.sources.length > 0) {
+                                const sourceContainer = document.createElement('div');
+                                sourceContainer.className = 'source-badges';
+                                data.sources.forEach(src => {
+                                    const isUrl = src.startsWith('http');
+                                    const name = isUrl ? new URL(src).hostname : src.split('/').pop();
+
+                                    const badge = document.createElement('span');
+                                    badge.className = 'source-badge';
+                                    badge.onclick = () => previewIndexSource(name, usedDocs);
+
+                                    badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
+                                    badge.title = "Click to preview source content";
+                                    sourceContainer.appendChild(badge);
+                                });
+                                metaDiv.appendChild(sourceContainer);
+                            }
+
+                            metaContainerDiv.innerHTML = '';
+                            metaContainerDiv.appendChild(metaDiv);
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                        } else if (data.type === 'error') {
+                            contentDiv.innerText += `\nError: ${data.content}`;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing JSON chunk', e);
+                    }
+                };
+
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
 
                     const chunk = decoder.decode(value, { stream: true });
-                    const lines = chunk.split('\n');
+                    buffer += chunk;
+
+                    const lines = buffer.split('\n');
+                    // Keep the last line in the buffer as it might be incomplete
+                    buffer = lines.pop();
 
                     for (const line of lines) {
-                        if (!line.trim()) continue;
-                        try {
-                            const data = JSON.parse(line);
-                            if (data.type === 'sources') {
-                                data.sources.forEach(src => {
-                                    const name = src.startsWith('http') ? src : src.split('/').pop();
-                                    sourceMap[name] = src;
-                                });
-                            } else if (data.type === 'chunk') {
-                                accumulatedAnswer += data.content;
-
-                                const renderer = new marked.Renderer();
-                                renderer.text = function (token) {
-                                    const text = typeof token === 'string' ? token : token.text;
-                                    if (!text) return '';
-
-                                    return text.replace(/\[([^\]]+)\]/g, (match, content) => {
-                                        const parts = content.split(',').map(s => s.trim());
-                                        const possibleFile = parts[0];
-
-                                        if (possibleFile.toLowerCase().endsWith('.pdf') || sourceMap[possibleFile]) {
-                                            // Escape filename for string literal
-                                            const safeName = possibleFile.replace(/'/g, "\\'");
-                                            // Using a unique ID for this message's docs would be better, but for now allow direct lookup
-                                            // We'll rely on the badge for full interaction or update this to use a robust registry if needed.
-                                            // For inline links, we use a simple approach:
-                                            const clickHandler = `previewIndexSource('${safeName}', window.currentUsedDocs || [])`;
-                                            return `<span class="citation-link" onclick="${clickHandler}"><i class="fas fa-file-alt"></i> ${match}</span>`;
-                                        }
-                                        return match;
-                                    });
-                                };
-
-                                contentDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
-                                chatContainer.scrollTop = chatContainer.scrollHeight;
-
-                            } else if (data.type === 'metadata') {
-                                // Capture used docs
-                                if (data.used_docs) {
-                                    usedDocs = data.used_docs;
-                                    window.currentUsedDocs = usedDocs; // Update global for inline links
-                                }
-
-                                const metaDiv = document.createElement('div');
-                                metaDiv.className = 'message-meta';
-                                // Ensure it's visible
-                                metaDiv.style.display = 'flex';
-
-                                const stats = [
-                                    { label: 'Model', value: data.model, icon: 'fa-robot' },
-                                    { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
-                                    { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
-                                    { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
-                                ];
-
-                                stats.forEach(stat => {
-                                    const item = document.createElement('div');
-                                    item.className = 'meta-item';
-                                    item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
-                                    metaDiv.appendChild(item);
-                                });
-
-                                if (data.sources && data.sources.length > 0) {
-                                    const sourceContainer = document.createElement('div');
-                                    sourceContainer.className = 'source-badges';
-                                    data.sources.forEach(src => {
-                                        const isUrl = src.startsWith('http');
-                                        const name = isUrl ? new URL(src).hostname : src.split('/').pop();
-
-                                        const badge = document.createElement('span');
-                                        badge.className = 'source-badge';
-
-                                        // This closure correctly captures 'usedDocs' for this specific message
-                                        badge.onclick = () => previewIndexSource(name, usedDocs);
-
-                                        badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
-                                        badge.title = "Click to preview source content";
-                                        sourceContainer.appendChild(badge);
-                                    });
-                                    metaDiv.appendChild(sourceContainer);
-                                }
-
-                                metaContainerDiv.innerHTML = ''; // Clear any existing meta
-                                metaContainerDiv.appendChild(metaDiv);
-                                chatContainer.scrollTop = chatContainer.scrollHeight;
-                            } else if (data.type === 'error') {
-                                contentDiv.innerText += `\nError: ${data.content}`;
-                            }
-                        } catch (e) {
-                            console.error('Error parsing JSON chunk', e);
-                        }
+                        processLine(line);
                     }
+                }
+
+                // Process remaining buffer
+                if (buffer.trim()) {
+                    processLine(buffer);
                 }
             } catch (error) {
                 contentDiv.innerText = `Error: ${error.message}`;
