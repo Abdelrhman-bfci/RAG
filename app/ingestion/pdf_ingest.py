@@ -123,14 +123,14 @@ def ingest_pdfs(force_fresh: bool = False):
     update_status("running", message="Splitting documents...")
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHUNK_SIZE,
-        chunk_overlap=Config.CHUNK_OVERLAP
+        chunk_overlap=Config.CHUNK_OVERLAP,
+        separators=["\n\n", "\n", " ", ""] # Explicit separators for better context
     )
     
     splitted_docs = text_splitter.split_documents(new_documents)
     total_chunks = len(splitted_docs)
     yield f"Generated {total_chunks} new chunks. Starting vectorization...\n"
 
-    # Create/Load vectorstore
     # Create/Load vectorstore
     faiss_store = FAISSStore()
     vectorstore = faiss_store.load_index() # Load once
@@ -140,7 +140,6 @@ def ingest_pdfs(force_fresh: bool = False):
     start_time = time.time()
     
     import gc
-
     import traceback
     
     try:
@@ -148,16 +147,26 @@ def ingest_pdfs(force_fresh: bool = False):
         for i, doc in enumerate(splitted_docs):
             current_num = i + 1
             
-            # 1. Add single document
-            try:
-                if vectorstore:
-                    vectorstore.add_documents([doc])
-                else:
-                    from langchain_community.vectorstores import FAISS
-                    vectorstore = FAISS.from_documents([doc], faiss_store.embeddings)
-            except Exception as e:
-                yield f"ERROR processing chunk {current_num}: {e}\n"
-                print(f"CRITICAL ERROR embedding chunk {current_num}: {traceback.format_exc()}")
+            # 1. Add single document with simple retry
+            max_retries = 2
+            success = False
+            for attempt in range(max_retries):
+                try:
+                    if vectorstore:
+                        vectorstore.add_documents([doc])
+                    else:
+                        from langchain_community.vectorstores import FAISS
+                        vectorstore = FAISS.from_documents([doc], faiss_store.embeddings)
+                    success = True
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        time.sleep(1) # wait a bit before retry
+                        continue
+                    yield f"ERROR processing chunk {current_num} after retries: {e}\n"
+                    print(f"CRITICAL ERROR embedding chunk {current_num}: {traceback.format_exc()}")
+            
+            if not success:
                 continue
             
             # 2. Yield progress every single chunk to keep connection alive

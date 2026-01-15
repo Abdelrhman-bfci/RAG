@@ -150,9 +150,10 @@ class FAISSStore:
         stats["total_documents"] = len(stats["sources"])
         return stats
 
-    def get_source_content(self, source_name: str, limit: int = 50):
+    def get_source_content(self, source_name: str, limit: int = None):
         """
         Retrieve content chunks for a specific source.
+        If limit is None or -1, returns all chunks.
         """
         vectorstore = self.load_index()
         if not vectorstore:
@@ -179,4 +180,6 @@ class FAISSStore:
         except:
             pass
             
-        return chunks[:limit]
+        if limit and limit > 0:
+            return chunks[:limit]
+        return chunks

@@ -1194,29 +1194,24 @@
         }
 
         async function previewIndexSource(sourceName) {
-            // Show modal with loading state
-            const modal = document.getElementById('base-modal'); // Reusing existing modal structure if possible?
-            // Actually, let's create a specific modal container if it doesn't exist or modify the existing Settings modal isn't great.
-            // Let's assume we use the same modal structure but change content.
-
-            const modalOverlay = document.getElementById('settings-modal');
-            // We'll hijack the settings modal for now or create a new one. Best to check if we have a generic one.
-            // Looking at the code, we have 'settings-modal'. Let's create a new 'preview-modal' dynamically or statically.
-
             let previewModal = document.getElementById('preview-modal');
             if (!previewModal) {
                 previewModal = document.createElement('div');
                 previewModal.id = 'preview-modal';
                 previewModal.className = 'modal-overlay';
-                previewModal.style.display = 'none'; // Initially hidden
+                previewModal.style.display = 'none';
                 previewModal.innerHTML = `
-                    <div class="modal-content" style="max-width: 800px; width: 90%;">
+                    <div class="modal-content" style="max-width: 900px; width: 95%;">
                         <div class="modal-header">
-                            <h3 id="preview-modal-title">Index Content</h3>
+                            <div>
+                                <h3 id="preview-modal-title" style="margin-bottom: 4px;">Index Content</h3>
+                                <p id="preview-subtitle" style="font-size: 0.85rem; color: var(--text-muted); margin:0;">0 chunks loaded</p>
+                            </div>
                             <button class="close-modal" onclick="document.getElementById('preview-modal').style.display='none'"><i class="fas fa-times"></i></button>
                         </div>
                         <div class="modal-body">
-                            <div id="preview-content-loader" class="hint">Loading chunks...</div>
+                            <input type="text" id="preview-search" class="modal-search-bar" placeholder="Search chunks...">
+                            <div id="preview-content-loader" class="hint">Loading entire index for file...</div>
                             <div id="preview-chunks" class="content-chunks-container"></div>
                         </div>
                         <div class="modal-footer">
@@ -1225,32 +1220,58 @@
                     </div>
                 `;
                 document.body.appendChild(previewModal);
+
+                // Add search listener
+                const searchInput = document.getElementById('preview-search');
+                searchInput.addEventListener('input', (e) => {
+                    const term = e.target.value.toLowerCase();
+                    const cards = document.querySelectorAll('.chunk-card');
+                    let visibleCount = 0;
+                    cards.forEach(card => {
+                        const text = card.innerText.toLowerCase();
+                        if (text.includes(term)) {
+                            card.style.display = 'block';
+                            visibleCount++;
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                    document.getElementById('preview-subtitle').innerHTML = `${visibleCount} chunks visible (of ${cards.length} total)`;
+                });
             }
 
-            document.getElementById('preview-modal-title').textContent = `Index Content: ${sourceName}`;
+            document.getElementById('preview-modal-title').textContent = sourceName;
+            document.getElementById('preview-subtitle').textContent = "Loading...";
             document.getElementById('preview-chunks').innerHTML = '';
             document.getElementById('preview-content-loader').style.display = 'block';
+            document.getElementById('preview-search').value = '';
+
             previewModal.style.display = 'flex';
 
             try {
+                // Now returns ALL chunks (limit removed on backend)
                 const response = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(sourceName)}`);
                 const chunks = await response.json();
 
                 document.getElementById('preview-content-loader').style.display = 'none';
                 const container = document.getElementById('preview-chunks');
+                const subtitle = document.getElementById('preview-subtitle');
+
+                subtitle.textContent = `${chunks.length} chunks stored in index`;
 
                 if (chunks.length === 0) {
-                    container.innerHTML = '<p class="hint">No content found for this source.</p>';
+                    container.innerHTML = '<p class="hint">No content found for this source inside the index.</p>';
                     return;
                 }
 
+                // Render all chunks
                 chunks.forEach((chunk, index) => {
                     const card = document.createElement('div');
                     card.className = 'chunk-card';
                     card.innerHTML = `
                         <div class="chunk-header">
-                            <span>Chunk #${index + 1}</span>
-                            <span>Page: ${chunk.page}</span>
+                            <span>#${index + 1}</span>
+                            <span class="chunk-badge">Page ${chunk.page}</span>
                         </div>
                         <div class="chunk-text">${chunk.content}</div>
                     `;

@@ -1796,32 +1796,69 @@ header {
     padding: 10px;
     background: rgba(0, 0, 0, 0.2);
     border-radius: 8px;
+    margin-top: 10px;
 }
 
 .chunk-card {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.08);
+    /* Lighter background */
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    padding: 12px;
+    padding: 16px;
     margin-bottom: 12px;
+    transition: all 0.2s;
+}
+
+.chunk-card:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--primary-light);
 }
 
 .chunk-header {
     display: flex;
     justify-content: space-between;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-bottom: 8px;
+    font-size: 0.85rem;
+    color: var(--primary-light);
+    margin-bottom: 10px;
     padding-bottom: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-weight: 600;
 }
 
 .chunk-text {
-    font-size: 0.9rem;
-    line-height: 1.5;
-    color: var(--text-secondary);
+    font-size: 0.95rem;
+    /* Larger font */
+    line-height: 1.6;
+    color: var(--text-primary);
+    /* Brighter text */
     white-space: pre-wrap;
-    font-family: monospace;
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.chunk-badge {
+    background: rgba(99, 102, 241, 0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: white;
+    font-size: 0.75rem;
+}
+
+.modal-search-bar {
+    width: 100%;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.modal-search-bar:focus {
+    border-color: var(--primary);
+    outline: none;
 }
 
 .preview-btn {
