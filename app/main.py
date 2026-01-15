@@ -30,6 +30,11 @@ app.add_middleware(
 # --- Static Files ---
 app.mount("/client", StaticFiles(directory="client"), name="client")
 
+# Ensure resource directory exists
+if not os.path.exists(Config.RESOURCE_DIR):
+    os.makedirs(Config.RESOURCE_DIR)
+app.mount("/files", StaticFiles(directory=Config.RESOURCE_DIR), name="files")
+
 # --- Pydantic Models ---
 class QuestionRequest(BaseModel):
     question: str

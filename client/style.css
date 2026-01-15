@@ -1568,3 +1568,101 @@ header {
     font-size: 0.8rem;
     color: var(--text-muted);
 }
+/* --- New Styles for Citations & Resources --- */
+
+/* Resource Item Layout Update */
+.res-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.res-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.view-res-btn {
+    background: none;
+    border: none;
+    color: var(--primary-light);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.view-res-btn:hover {
+    background: rgba(99, 102, 241, 0.1);
+    transform: scale(1.1);
+    color: var(--primary);
+}
+
+/* Chat Citations */
+.citation-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary-light);
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    margin: 0 2px;
+}
+
+.citation-link:hover {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: var(--primary);
+    color: white;
+}
+
+.citation-link i {
+    font-size: 0.8em;
+}
+
+/* Source Badges in Metadata */
+.source-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.source-badge:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border-color: var(--primary);
+}
+
+.source-badge i {
+    color: var(--primary);
+}

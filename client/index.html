@@ -425,6 +425,53 @@
                                 console.log('Sources:', data.sources);
                             } else if (data.type === 'chunk') {
                                 accumulatedAnswer += data.content;
+                                // Prepare source map for easy lookup
+                                const sourceMap = {};
+                                data.sources.forEach(src => {
+                                    const name = src.startsWith('http') ? src : src.split('/').pop();
+                                    sourceMap[name] = src;
+                                });
+
+                                // Configure marked options for link generation
+                                const renderer = new marked.Renderer();
+                                const originalLink = renderer.link;
+                                renderer.text = function (text) {
+                                    // Regex for [Doc.pdf, Page X] or [Doc.pdf]
+                                    // We'll replace it with a link
+                                    return text.replace(/\[([^\]]+)\]/g, (match, content) => {
+                                        // Check if it looks like a citation
+                                        const parts = content.split(',').map(s => s.trim());
+                                        const possibleFile = parts[0];
+
+                                        // heuristic: ends with .pdf or is in our source list
+                                        if (possibleFile.toLowerCase().endsWith('.pdf') || sourceMap[possibleFile]) {
+                                            let url = "";
+                                            let page = 1;
+
+                                            // Try to find the full path from our sourceMap
+                                            // If it's a web link, use it directly
+                                            if (possibleFile.startsWith('http')) {
+                                                url = possibleFile;
+                                            } else {
+                                                // It's likely a file served from /files
+                                                url = `${API_BASE}/files/${possibleFile}`;
+                                            }
+
+                                            // Check for page number
+                                            const pagePart = parts.find(p => p.toLowerCase().startsWith('page'));
+                                            if (pagePart) {
+                                                const pNum = parseInt(pagePart.split(/\s+/)[1]);
+                                                if (!isNaN(pNum)) page = pNum;
+                                                url += `#page=${page}`;
+                                            }
+
+                                            return `<a href="${url}" target="_blank" class="citation-link"><i class="fas fa-external-link-alt"></i> ${match}</a>`;
+                                        }
+                                        return match;
+                                    });
+                                };
+                                marked.use({ renderer });
+
                                 botTextDiv.innerHTML = marked.parse(accumulatedAnswer);
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
                             } else if (data.type === 'metadata') {
@@ -450,10 +497,16 @@
                                     const sourceContainer = document.createElement('div');
                                     sourceContainer.className = 'source-badges';
                                     data.sources.forEach(src => {
-                                        const badge = document.createElement('span');
+                                        const isUrl = src.startsWith('http');
+                                        const name = isUrl ? new URL(src).hostname : src.split('/').pop();
+                                        const url = isUrl ? src : `${API_BASE}/files/${name}`;
+
+                                        const badge = document.createElement('a'); // Changed to anchor
                                         badge.className = 'source-badge';
-                                        badge.innerText = src.startsWith('http') ? new URL(src).hostname : src.split('/').pop();
-                                        badge.title = src;
+                                        badge.href = url;
+                                        badge.target = "_blank";
+                                        badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
+                                        badge.title = "Click to open source";
                                         sourceContainer.appendChild(badge);
                                     });
                                     metaDiv.appendChild(sourceContainer);
@@ -999,12 +1052,20 @@
                             totalItems++;
                             const itemDiv = document.createElement('div');
                             itemDiv.className = 'res-item';
+                            const name = item;
+                            const isPdf = sec.type === 'pdfs';
                             itemDiv.innerHTML = `
-                                <span>${item}</span>
-                                <button onclick="deleteResource('${sec.type}', '${item}')" class="delete-res-btn" title="Remove Archive">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            `;
+                                    <div class="res-info">
+                                        <i class="fas ${isPdf ? 'fa-file-pdf' : (sec.type === 'websites' ? 'fa-globe' : 'fa-table')}"></i>
+                                        <span>${name}</span>
+                                    </div>
+                                    <div class="res-actions">
+                                        ${isPdf ? `<a href="${API_BASE}/files/${name}" target="_blank" class="view-res-btn" title="View PDF"><i class="fas fa-external-link-alt"></i></a>` : ''}
+                                        <button onclick="deleteResource('${sec.type}', '${item}')" class="delete-res-btn" title="Remove Archive">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </div>
+                                `;
                             secDiv.appendChild(itemDiv);
                         });
                         container.appendChild(secDiv);
