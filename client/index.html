@@ -1204,7 +1204,10 @@
                     <div class="modal-content" style="max-width: 900px; width: 95%;">
                         <div class="modal-header">
                             <div>
-                                <h3 id="preview-modal-title" style="margin-bottom: 4px;">Index Content</h3>
+                                <h3 id="preview-modal-title" style="margin-bottom: 4px; display: flex; align-items: center; gap: 10px;">
+                                    <i class="fas fa-database" style="-webkit-text-fill-color: var(--primary); font-size: 1.2rem;"></i> 
+                                    <span>Index Content</span>
+                                </h3>
                                 <p id="preview-subtitle" style="font-size: 0.85rem; color: var(--text-muted); margin:0;">0 chunks loaded</p>
                             </div>
                             <button class="close-modal" onclick="document.getElementById('preview-modal').style.display='none'"><i class="fas fa-times"></i></button>
@@ -1240,7 +1243,7 @@
                 });
             }
 
-            document.getElementById('preview-modal-title').textContent = sourceName;
+            document.querySelector('#preview-modal-title span').textContent = sourceName;
             document.getElementById('preview-subtitle').textContent = "Loading...";
             document.getElementById('preview-chunks').innerHTML = '';
             document.getElementById('preview-content-loader').style.display = 'block';

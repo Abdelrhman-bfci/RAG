@@ -1874,3 +1874,44 @@ header {
     color: var(--primary);
     transform: scale(1.1);
 }
+/* --- Enhanced Preview Modal Header --- */
+#preview-modal .modal-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    background: linear-gradient(to right, rgba(99, 102, 241, 0.05), transparent);
+    border-radius: 8px 8px 0 0;
+    padding: 20px;
+    align-items: flex-start;
+}
+
+#preview-modal-title {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px !important;
+    text-shadow: 0 2px 10px rgba(99, 102, 241, 0.2);
+}
+
+#preview-subtitle {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.9rem !important;
+    color: var(--text-secondary) !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#preview-subtitle::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--primary);
+}

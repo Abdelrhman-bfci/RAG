@@ -198,7 +198,8 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     update_status("running", message="Splitting documents...")
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHUNK_SIZE,
-        chunk_overlap=Config.CHUNK_OVERLAP
+        chunk_overlap=Config.CHUNK_OVERLAP,
+        separators=["\n\n", "\n", " ", ""] # Explicit separators
     )
     
     splitted_docs = text_splitter.split_documents(new_documents)
@@ -219,25 +220,55 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     faiss_store = FAISSStore()
     vectorstore = faiss_store.load_index() # Load once
     
-    batch_size = 100 # Increased from 10
-    total_batches = (total_chunks + batch_size - 1) // batch_size
+    # PROCESS ONE BY ONE FOR STABILITY (copied pattern from pdf_ingest)
     start_time = time.time()
     
-    for i in range(0, total_chunks, batch_size):
-        current_batch_num = i // batch_size + 1
-        batch_msg = f"Ingesting batch {current_batch_num}/{total_batches} (Chunks {i+1}-{min(i+batch_size, total_chunks)})"
-        
-        update_status("running", current=current_batch_num, total=total_batches, message=batch_msg, start_time=start_time)
-        yield f"{batch_msg}\n"
-        
-        batch = splitted_docs[i:i + batch_size]
-        
-        # Add documents to memory
-        if vectorstore:
-            vectorstore.add_documents(batch)
-        else:
-            from langchain_community.vectorstores import FAISS
-            vectorstore = FAISS.from_documents(batch, faiss_store.embeddings)
+    import gc
+    import traceback
+
+    try:
+        for i, doc in enumerate(splitted_docs):
+            current_num = i + 1
+            
+            # 1. Add single document with simple retry
+            max_retries = 2
+            success = False
+            for attempt in range(max_retries):
+                try:
+                    if vectorstore:
+                        vectorstore.add_documents([doc])
+                    else:
+                        from langchain_community.vectorstores import FAISS
+                        vectorstore = FAISS.from_documents([doc], faiss_store.embeddings)
+                    success = True
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    yield f"ERROR processing chunk {current_num} after retries: {e}\n"
+                    print(f"CRITICAL ERROR embedding chunk {current_num}: {traceback.format_exc()}")
+            
+            if not success:
+                continue
+
+            # 2. Yield progress occasionally
+            if current_num % 10 == 0:
+                msg = f"Ingesting chunk {current_num}/{total_chunks}"
+                yield f"{msg}\n"
+                update_status("running", current=current_num, total=total_chunks, message=msg, start_time=start_time)
+                gc.collect()
+
+            # 3. Checkpoint occasionally
+            if current_num % 100 == 0:
+                try:
+                    faiss_store.save_index(vectorstore)
+                except Exception as e:
+                     yield f"WARNING: Failed to save checkpoint at chunk {current_num}: {e}\n"
+
+    except Exception as e:
+        yield f"FATAL ERROR during ingestion loop: {e}\n"
+
 
     # Save once at the end
     faiss_store.save_index(vectorstore)

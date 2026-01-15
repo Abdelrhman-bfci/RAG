@@ -212,8 +212,9 @@ def ingest_database(tables: list = None, schema: str = None):
                 
                 # Initialize splitter for large records
                 text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=2000,  # Safe limit for embedding models
-                    chunk_overlap=200
+                    chunk_size=2000,
+                    chunk_overlap=200,
+                    separators=["\n\n", "\n", " ", ""] # Explicit separators
                 )
 
                 for i in range(0, table_total, batch_size):
@@ -222,7 +223,17 @@ def ingest_database(tables: list = None, schema: str = None):
                     # Split large documents into chunks if necessary
                     split_batch = text_splitter.split_documents(batch)
                     
-                    faiss_store.add_documents(split_batch)
+                    # Add documents with retry
+                    max_retries = 2
+                    for attempt in range(max_retries):
+                        try:
+                            faiss_store.add_documents(split_batch)
+                            break
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                time.sleep(1)
+                                continue
+                            yield f"  - ERROR processing batch in {table} after retries: {e}\n"
                     
                 total_ingested_all += table_total
                 save_ingested_table(table)
