@@ -447,5 +447,33 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Failed to upload file: {str(e)}"})
 
+@app.get("/index/stats")
+async def get_index_statistics():
+    """
+    Get statistics about the FAISS index content.
+    """
+    from app.vectorstore.faiss_store import FAISSStore
+    faiss_store = FAISSStore()
+    return faiss_store.get_index_stats()
+
+@app.post("/index/sync")
+async def sync_resources(background_tasks: BackgroundTasks):
+    """
+    Trigger ingestion for any resources that are missing from the index.
+    Currently triggers a standard PDF ingestion which naturally adds missing files.
+    """
+    # For now, simply triggering ingest_pdfs without forcing fresh will 
+    # add any new files that aren't in the tracking file.
+    # This matches the user's "Sync" intent.
+    
+    return StreamingResponse(
+        ingest_pdfs(force_fresh=False), 
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=80, reload=True)

@@ -19,14 +19,15 @@ import json
 STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are a highly precise legal/academic assistant. Your goal is to answer questions strictly based on the provided context.
     
+    CRITICAL INSTRUCTION: {language_instruction}
+    
     CRITICAL LANGUAGE RULES (ABSOLUTE PRIORITY):
-    1. **Language Detection**: Immediately identify the language of the User's Question.
-    2. **Strict Matching**: 
+    1. **Strict Matching**: 
        - IF Question is in **English** -> Answer MUST be in **English**.
        - IF Question is in **Arabic** -> Answer MUST be in **Arabic**.
        - IF Question is in **Mixed** -> Answer in the DOMINANT language of the question.
-    3. **Context Independence**: The language of the *Context* documents implies NOTHING about the answer language. Ignore context language when deciding output language.
-    4. **No Translation Explanations**: Do NOT say "I am translating this". Just answer directly in the correct language.
+    2. **Context Independence**: The language of the *Context* documents implies NOTHING about the answer language. Ignore context language when deciding output language.
+    3. **No Translation Explanations**: Do NOT say "I am translating this". Just answer directly in the correct language.
 
     STRICT COMPLIANCE RULES:
     1. Answer ONLY using the information from the Context.
@@ -46,8 +47,8 @@ STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """FIRST AND MOST IMPORTANT: LANGUAGE MATCHING RULE
-    - **Identify Question Language**: Look at the user's input.
+    ("system", """FIRST AND MOST IMPORTANT: {language_instruction}
+    
     - **Enforce Output Language**:
         - Question in **English** -> Response in **English**.
         - Question in **Arabic** -> Response in **Arabic**.
@@ -196,14 +197,55 @@ def get_rag_chain(deep_thinking: bool = False):
         
         return "\n\n".join(context_parts)
 
+    def detect_language_instruction(question):
+        import re
+        # Stronger check: if any arabic char exists, treat as Arabic
+        is_arabic = bool(re.search('[\u0600-\u06FF]', question))
+        if is_arabic:
+            return "THE USER ASKED IN ARABIC. YOU MUST ANSWER IN ARABIC. TRANSLATE CONTEXT IF NEEDED."
+        else:
+            return "THE USER ASKED IN ENGLISH. YOU MUST ANSWER IN ENGLISH. TRANSLATE ARABIC CONTEXT TO ENGLISH."
+
     rag_chain = (
-        {"context": RunnableLambda(lambda x: retriever.invoke(x)) | format_docs, "question": RunnablePassthrough()}
+        {
+            "context": RunnableLambda(lambda x: retriever.invoke(x)) | format_docs, 
+            "question": RunnablePassthrough(),
+            "language_instruction": RunnableLambda(detect_language_instruction)
+        }
         | prompt
         | llm
         | StrOutputParser()
     )
 
     return rag_chain, retriever
+
+def filter_cited_sources(answer: str, all_sources: list) -> list:
+    """
+    Filters the list of all retrieved sources to return only those that are explicitly 
+    cited in the answer text (e.g., [Document.pdf]).
+    """
+    import re
+    # Extract text in brackets [source, ...]
+    # We look for patterns like [Doc.pdf] or [Doc.pdf, Page X]
+    citations = re.findall(r'\[(.*?)\]', answer)
+    cited_filenames = set()
+    for c in citations:
+        # Take first part "File.pdf" from "File.pdf, Page 2"
+        part = c.split(',')[0].strip()
+        cited_filenames.add(part.lower())
+    
+    final_sources = []
+    for src in all_sources:
+        # Check if src matches any cited filename
+        # We compare basenames to handle paths/URLs
+        basename = os.path.basename(src).lower()
+        if basename in cited_filenames or src.lower() in cited_filenames:
+            final_sources.append(src)
+            
+    # If no sources are cited but we have an answer, we might strictly want to return nothing,
+    # or fallback. The user request implies "just resource that i get information from".
+    # If LLM didn't cite, we show nothing (strict).
+    return sorted(list(set(final_sources)))
 
 def answer_question(question: str, deep_thinking: bool = False):
     """
@@ -222,6 +264,9 @@ def answer_question(question: str, deep_thinking: bool = False):
         answer = chain.invoke(question)
         end_time = time.time()
         
+        # 3. Filter sources based on citation
+        relevant_sources = filter_cited_sources(answer, sources)
+        
         total_time = end_time - start_total
         llm_time = end_time - start_llm
         
@@ -229,7 +274,7 @@ def answer_question(question: str, deep_thinking: bool = False):
         
         return {
             "answer": answer,
-            "sources": sources,
+            "sources": relevant_sources,
             "performance": performance
         }
     except ValueError as e:
@@ -254,7 +299,7 @@ def stream_answer(question: str, deep_thinking: bool = False):
         
         sources = sorted(list(set([doc.metadata.get("source", "Unknown") for doc in docs])))
         
-        # Send sources first
+        # Send ALL sources first so frontend can build the link map
         yield json.dumps({"type": "sources", "sources": sources}) + "\n"
         
         # 2. Stream the chain
@@ -265,6 +310,9 @@ def stream_answer(question: str, deep_thinking: bool = False):
             yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
         
         end_time = time.time()
+        
+        # 3. Filter sources for distinct display
+        relevant_sources = filter_cited_sources(accumulated_text, sources)
         
         total_time = end_time - start_total
         llm_time = end_time - start_llm
@@ -283,7 +331,7 @@ def stream_answer(question: str, deep_thinking: bool = False):
         
         yield json.dumps({
             "type": "metadata", 
-            "sources": sources, 
+            "sources": relevant_sources, 
             "performance": performance,
             "tokens": estimated_tokens,
             "model": current_model

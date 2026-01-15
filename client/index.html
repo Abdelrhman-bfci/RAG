@@ -217,6 +217,35 @@
                     </div>
 
                     <div class="db-section">
+                        <h3><i class="fas fa-heartbeat"></i> Index Health</h3>
+                        <div class="health-container">
+                            <div class="health-header">
+                                <div class="health-stat">
+                                    <span class="label">Total Documents</span>
+                                    <span class="value" id="health-total-docs">-</span>
+                                </div>
+                                <div class="health-stat">
+                                    <span class="label">Total Chunks</span>
+                                    <span class="value" id="health-total-chunks">-</span>
+                                </div>
+                                <button id="sync-btn" class="action-btn warning-btn">
+                                    <i class="fas fa-sync-alt"></i> Sync Missing
+                                </button>
+                            </div>
+
+                            <div class="health-list-header">
+                                <span>Source Name</span>
+                                <span>Status</span>
+                                <span>Chunks</span>
+                            </div>
+                            <div id="health-list" class="health-list">
+                                <!-- Health items -->
+                                <p class="hint">Checking index...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="db-section">
                         <h3><i class="fas fa-exclamation-triangle"></i> System Operations</h3>
                         <div class="danger-zone">
                             <button id="reset-all-btn" class="action-btn delete-btn-full">
@@ -1077,8 +1106,127 @@
                 if (totalItems === 0) {
                     container.innerHTML = '<p class="hint">No resources ingested yet.</p>';
                 }
+
+                // After loading resources, check health if we are in management view
+                loadIndexHealth(data);
+
             } catch (error) {
                 container.innerHTML = '<p class="hint error">Failed to load resources.</p>';
+            }
+        }
+
+        async function loadIndexHealth(resourceData) {
+            const list = document.getElementById('health-list');
+            const totalDocsEl = document.getElementById('health-total-docs');
+            const totalChunksEl = document.getElementById('health-total-chunks');
+
+            try {
+                const response = await fetch(`${API_BASE}/index/stats`);
+                const indexData = await response.json();
+
+                totalDocsEl.textContent = indexData.total_documents;
+                totalChunksEl.textContent = indexData.total_chunks;
+
+                list.innerHTML = '';
+
+                // Combine all resources into a set for lookup
+                const allResources = new Set();
+                if (resourceData) {
+                    if (resourceData.pdfs) resourceData.pdfs.forEach(r => allResources.add(r));
+                    if (resourceData.websites) resourceData.websites.forEach(r => allResources.add(r));
+                    if (resourceData.databases) resourceData.databases.forEach(r => allResources.add(`Table: ${r}`));
+                }
+
+                const indexedSources = indexData.sources || {};
+                const allKeys = new Set([...allResources, ...Object.keys(indexedSources)]);
+
+                let hasMissing = false;
+
+                allKeys.forEach(name => {
+                    const isIndexed = indexedSources.hasOwnProperty(name);
+                    const isResource = allResources.has(name);
+
+                    // Logic to handle "Table: Name" matching if needed, but strict string match first
+
+                    let status = 'ok';
+                    let statusIcon = 'fa-check-circle';
+                    let statusClass = 'status-ok';
+                    let chunks = indexedSources[name] || 0;
+
+                    if (isIndexed && isResource) {
+                        // Healthy
+                    } else if (isResource && !isIndexed) {
+                        status = 'Missing from Index';
+                        statusIcon = 'fa-exclamation-circle';
+                        statusClass = 'status-missing';
+                        hasMissing = true;
+                    } else if (!isResource && isIndexed) {
+                        status = 'Orphaned (Index only)';
+                        statusIcon = 'fa-ghost';
+                        statusClass = 'status-orphan';
+                    }
+
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'health-item ' + statusClass;
+                    itemDiv.innerHTML = `
+                        <span class="health-name" title="${name}">${name}</span>
+                        <span class="health-status"><i class="fas ${statusIcon}"></i> ${status}</span>
+                        <span class="health-chunks">${chunks} chunks</span>
+                    `;
+                    list.appendChild(itemDiv);
+                });
+
+                const syncBtn = document.getElementById('sync-btn');
+                if (hasMissing) {
+                    syncBtn.style.display = 'inline-flex';
+                    syncBtn.onclick = () => performSync();
+                } else {
+                    syncBtn.style.display = 'none';
+                }
+
+            } catch (error) {
+                console.error("Health check failed", error);
+                list.innerHTML = '<p class="hint error">Failed to load index stats.</p>';
+            }
+        }
+
+        async function performSync() {
+            const syncBtn = document.getElementById('sync-btn');
+            syncBtn.disabled = true;
+            syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+
+            try {
+                // Determine if we need to sync files or websites. 
+                // Currently backend sync only supports ingest_pdfs logic (local files).
+                const response = await fetch(`${API_BASE}/index/sync`, { method: 'POST' });
+
+                // We're expecting a stream or similiar.
+                // For simplicity, we just notify "Started" and listen to log.
+                // Better: consume stream like other ingestions.
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                logToConsole("Started Resource Sync...", "system");
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    lines.forEach(line => {
+                        if (line.trim()) logToConsole(line, 'info');
+                    });
+                }
+
+                showToast("Sync completed");
+                loadResources(); // Reloads both resources and health
+
+            } catch (error) {
+                showToast("Sync failed: " + error.message, true);
+            } finally {
+                syncBtn.disabled = false;
+                syncBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync Missing';
             }
         }
 

@@ -122,3 +122,30 @@ class FAISSStore:
             self.save_index(vectorstore)
             return True
         return False
+
+    def get_index_stats(self):
+        """
+        Analyze the index and return statistics about ingested documents.
+        """
+        vectorstore = self.load_index()
+        if not vectorstore:
+            return {"total_documents": 0, "total_chunks": 0, "sources": {}}
+            
+        docstore = vectorstore.docstore._dict
+        stats = {
+            "total_documents": 0, # Unique sources
+            "total_chunks": len(docstore),
+            "sources": {}
+        }
+        
+        for doc_id, doc in docstore.items():
+            source = doc.metadata.get("source", "Unknown")
+            # Handle table names or file paths
+            source_name = os.path.basename(source) if "/" in source or "\\" in source else source
+            
+            if source_name not in stats["sources"]:
+                stats["sources"][source_name] = 0
+            stats["sources"][source_name] += 1
+            
+        stats["total_documents"] = len(stats["sources"])
+        return stats
