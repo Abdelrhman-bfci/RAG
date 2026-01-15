@@ -453,8 +453,18 @@
             userInput.dir = 'ltr'; // Reset to LTR after sending
             addMessage(question, true);
 
-            const botTextDiv = addMessage('', false);
-            botTextDiv.innerHTML = '<div class="typing">AI Assistant is thinking...</div>';
+            const botMsgDiv = addMessage('', false);
+            // Create separate containers for content and metadata
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = '<div class="typing">AI Assistant is thinking...</div>';
+
+            const metaContainerDiv = document.createElement('div');
+            metaContainerDiv.className = 'message-meta-container';
+
+            botMsgDiv.innerHTML = '';
+            botMsgDiv.appendChild(contentDiv);
+            botMsgDiv.appendChild(metaContainerDiv);
 
             try {
                 const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}&deep_thinking=${isDeepThinking}`);
@@ -466,10 +476,11 @@
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let accumulatedAnswer = '';
-                let sourceMap = {}; // Initialize source map
-                let usedDocs = []; // Store used chunks
+                let sourceMap = {};
+                let usedDocs = [];
 
-                botTextDiv.innerHTML = ''; // Clear thinking state
+                // Clear thinking state
+                contentDiv.innerHTML = '';
 
                 while (true) {
                     const { value, done } = await reader.read();
@@ -483,58 +494,49 @@
                         try {
                             const data = JSON.parse(line);
                             if (data.type === 'sources') {
-                                // Optional: display sources separately
-                                // console.log('Sources:', data.sources);
-                                // Populate source map
                                 data.sources.forEach(src => {
                                     const name = src.startsWith('http') ? src : src.split('/').pop();
                                     sourceMap[name] = src;
                                 });
                             } else if (data.type === 'chunk') {
                                 accumulatedAnswer += data.content;
-                                // sourceMap is already populated if sources came first
 
-                                // Configure marked options for link generation
                                 const renderer = new marked.Renderer();
                                 renderer.text = function (token) {
                                     const text = typeof token === 'string' ? token : token.text;
                                     if (!text) return '';
 
-                                    // Regex for [Doc.pdf, Page X] or [Doc.pdf]
-                                    // We'll replace it with a link
                                     return text.replace(/\[([^\]]+)\]/g, (match, content) => {
-                                        // Check if it looks like a citation
                                         const parts = content.split(',').map(s => s.trim());
                                         const possibleFile = parts[0];
 
-                                        // heuristic: ends with .pdf or is in our source list
                                         if (possibleFile.toLowerCase().endsWith('.pdf') || sourceMap[possibleFile]) {
-                                            // Prepare arguments for previewIndexSource
-                                            // We need to pass sourceName and explicitly usedDocs (captured later, or empty initially)
-                                            // Since marked is called repeatedly, usedDocs might be populated by the end
-
-                                            // We'll use a globally accessible way or dynamic onclick handler
-                                            const clickHandler = `previewIndexSource('${possibleFile.replace(/'/g, "\\'")}', window.currentUsedDocs || [])`;
-
+                                            // Escape filename for string literal
+                                            const safeName = possibleFile.replace(/'/g, "\\'");
+                                            // Using a unique ID for this message's docs would be better, but for now allow direct lookup
+                                            // We'll rely on the badge for full interaction or update this to use a robust registry if needed.
+                                            // For inline links, we use a simple approach:
+                                            const clickHandler = `previewIndexSource('${safeName}', window.currentUsedDocs || [])`;
                                             return `<span class="citation-link" onclick="${clickHandler}"><i class="fas fa-file-alt"></i> ${match}</span>`;
                                         }
                                         return match;
                                     });
                                 };
 
-                                botTextDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
+                                contentDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
+
                             } else if (data.type === 'metadata') {
                                 // Capture used docs
                                 if (data.used_docs) {
                                     usedDocs = data.used_docs;
-                                    // Store in window for onclick handlers to access
-                                    window.currentUsedDocs = usedDocs;
+                                    window.currentUsedDocs = usedDocs; // Update global for inline links
                                 }
 
-                                // Add performance metrics and sources
                                 const metaDiv = document.createElement('div');
                                 metaDiv.className = 'message-meta';
+                                // Ensure it's visible
+                                metaDiv.style.display = 'flex';
 
                                 const stats = [
                                     { label: 'Model', value: data.model, icon: 'fa-robot' },
@@ -560,7 +562,7 @@
                                         const badge = document.createElement('span');
                                         badge.className = 'source-badge';
 
-                                        // On click, open preview with highlighted chunks
+                                        // This closure correctly captures 'usedDocs' for this specific message
                                         badge.onclick = () => previewIndexSource(name, usedDocs);
 
                                         badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
@@ -570,10 +572,11 @@
                                     metaDiv.appendChild(sourceContainer);
                                 }
 
-                                botTextDiv.appendChild(metaDiv);
+                                metaContainerDiv.innerHTML = ''; // Clear any existing meta
+                                metaContainerDiv.appendChild(metaDiv);
                                 chatContainer.scrollTop = chatContainer.scrollHeight;
                             } else if (data.type === 'error') {
-                                botTextDiv.innerText = `Error: ${data.content}`;
+                                contentDiv.innerText += `\nError: ${data.content}`;
                             }
                         } catch (e) {
                             console.error('Error parsing JSON chunk', e);
@@ -581,7 +584,7 @@
                     }
                 }
             } catch (error) {
-                botTextDiv.innerText = `Error: ${error.message}`;
+                contentDiv.innerText = `Error: ${error.message}`;
             }
         }
 
