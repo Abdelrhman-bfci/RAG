@@ -550,65 +550,64 @@
                             contentDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
                             chatContainer.scrollTop = chatContainer.scrollHeight;
 
-                            if (data.type === 'done' || data.type === 'metadata') {
-                                lastBotResponse = accumulatedAnswer;
+                        } else if (data.type === 'metadata') {
+                            lastBotResponse = accumulatedAnswer;
+
+                            if (data.used_docs) {
+                                usedDocs = data.used_docs;
+                                window.currentUsedDocs = usedDocs;
                             }
 
-                            if (data.type === 'metadata') {
-                                if (data.used_docs) {
-                                    usedDocs = data.used_docs;
-                                    window.currentUsedDocs = usedDocs;
-                                }
+                            const metaDiv = document.createElement('div');
+                            metaDiv.className = 'message-meta';
+                            metaDiv.style.display = 'flex';
 
-                                const metaDiv = document.createElement('div');
-                                metaDiv.className = 'message-meta';
-                                metaDiv.style.display = 'flex';
+                            const stats = [
+                                { label: 'Model', value: data.model, icon: 'fa-robot' },
+                                { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
+                                { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
+                                { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
+                            ];
 
-                                const stats = [
-                                    { label: 'Model', value: data.model, icon: 'fa-robot' },
-                                    { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
-                                    { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
-                                    { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
-                                ];
+                            stats.forEach(stat => {
+                                const item = document.createElement('div');
+                                item.className = 'meta-item';
+                                item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
+                                metaDiv.appendChild(item);
+                            });
 
-                                stats.forEach(stat => {
-                                    const item = document.createElement('div');
-                                    item.className = 'meta-item';
-                                    item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
-                                    metaDiv.appendChild(item);
+                            // Add Continue Button
+                            const continueBtn = document.createElement('div');
+                            continueBtn.className = 'meta-item continue-btn';
+                            continueBtn.style.cursor = 'pointer';
+                            continueBtn.style.color = 'var(--primary-light)';
+                            continueBtn.innerHTML = `<i class="fas fa-play"></i> Continue Answer`;
+                            continueBtn.onclick = () => sendMessage(true);
+                            metaDiv.appendChild(continueBtn);
+
+                            if (data.sources && data.sources.length > 0) {
+                                const sourceContainer = document.createElement('div');
+                                sourceContainer.className = 'source-badges';
+                                data.sources.forEach(src => {
+                                    const isUrl = src.startsWith('http');
+                                    const name = isUrl ? new URL(src).hostname : src.split('/').pop();
+
+                                    const badge = document.createElement('span');
+                                    badge.className = 'source-badge';
+                                    badge.onclick = () => previewIndexSource(name, usedDocs);
+
+                                    badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
+                                    badge.title = "Click to preview source content";
+                                    sourceContainer.appendChild(badge);
                                 });
-
-                                // Add Continue Button
-                                const continueBtn = document.createElement('div');
-                                continueBtn.className = 'meta-item continue-btn';
-                                continueBtn.style.cursor = 'pointer';
-                                continueBtn.style.color = 'var(--primary-light)';
-                                continueBtn.innerHTML = `<i class="fas fa-play"></i> Continue Answer`;
-                                continueBtn.onclick = () => sendMessage(true);
-                                metaDiv.appendChild(continueBtn);
-
-                                if (data.sources && data.sources.length > 0) {
-                                    const sourceContainer = document.createElement('div');
-                                    sourceContainer.className = 'source-badges';
-                                    data.sources.forEach(src => {
-                                        const isUrl = src.startsWith('http');
-                                        const name = isUrl ? new URL(src).hostname : src.split('/').pop();
-
-                                        const badge = document.createElement('span');
-                                        badge.className = 'source-badge';
-                                        badge.onclick = () => previewIndexSource(name, usedDocs);
-
-                                        badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
-                                        badge.title = "Click to preview source content";
-                                        sourceContainer.appendChild(badge);
-                                    });
-                                    metaDiv.appendChild(sourceContainer);
-                                }
-
-                                metaContainerDiv.innerHTML = '';
-                                metaContainerDiv.appendChild(metaDiv);
-                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                                metaDiv.appendChild(sourceContainer);
                             }
+
+                            metaContainerDiv.innerHTML = '';
+                            metaContainerDiv.appendChild(metaDiv);
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                        } else if (data.type === 'done') {
+                            lastBotResponse = accumulatedAnswer;
                         } else if (data.type === 'error') {
                             contentDiv.innerText += `\nError: ${data.content}`;
                         }
