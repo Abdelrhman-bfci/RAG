@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=10">
+    <link rel="stylesheet" href="style.css?v=11">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
@@ -519,7 +519,19 @@
                                         const icon = isUrl ? 'fa-globe' : (possibleFile.includes('Table:') ? 'fa-table' : 'fa-file-alt');
                                         const clickHandler = `previewIndexSource('${safeName}', window.currentUsedDocs || [])`;
 
-                                        return `<span class="citation-link" onclick="${clickHandler}" title="View Index: ${possibleFile}"><i class="fas ${icon}"></i> ${possibleFile}</span>`;
+                                        // Handle local file vs URL for direct button
+                                        const openHandler = isUrl ? `window.open('${sourcePath}', '_blank')` : `window.open('${API_BASE}/files/${possibleFile}', '_blank')`;
+
+                                        return `
+                                            <span class="citation-group">
+                                                <span class="citation-link" onclick="${clickHandler}" title="View Index: ${possibleFile}">
+                                                    <i class="fas ${icon}"></i> ${possibleFile}
+                                                </span>
+                                                <button class="citation-direct-btn" onclick="${openHandler}" title="Open Original ${isUrl ? 'Website' : 'File'}">
+                                                    <i class="fas fa-external-link-alt"></i>
+                                                </button>
+                                            </span>
+                                        `;
                                     }
                                     return match;
                                 });

@@ -32,7 +32,10 @@ STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
     STRICT COMPLIANCE RULES:
     1. Answer ONLY using the information from the Context.
     2. If the answer is not in the Context, say "I cannot answer this based on the provided documents" (translate to Arabic if question is Arabic).
-    3. **Inline Citations**: You MUST cite sources INLINE (directly after the relevant information) using [Document.pdf, Page X] or [Table: TableName]. DO NOT just list them at the end.
+    3. **MANDATORY PER-ITEM CITATIONS**: Every single fact, claim, or item in a list MUST be followed immediately by its source in brackets. 
+       - EXAMPLE: "1. Software Engineering [Computer_Course.pdf, Page 12]"
+       - EXAMPLE: "2. Database Systems [CS_Manual.pdf, Page 5]"
+       - Failure to cite every item is a violation of protocol.
     4. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
     5. If the answer requires a long response, provide the FULL answer without cutting it short.
 
@@ -60,10 +63,10 @@ DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
     INSTRUCTIONS:
     1. Synthesize information from the Context.
     2. Use professional, academic language in the SAME language as the question.
-    3. Structure your response with clear sections:
-       - For Arabic questions: Start with "ملخص تحليلي" (Analytical Summary) followed by "تفاصيل رئيسية" (Key Details)
-       - For English questions: Start with "Analytical Summary" followed by "Key Details"
-    4. **Inline Citations**: Cite major points INLINE (immediately after the fact or claim) using [Source Name, Page X] or [Table: TableName].
+    3. Structure your response with clear sections.
+    4. **MANDATORY PER-ITEM CITATIONS**: Every major statement and EVERY single item in a list MUST have an inline citation. 
+       - FORMAT: [Source Name, Page X] or [Table: TableName].
+       - CRITICAL: Do not group citations at the end. Attach them to each specific point.
     5. If information is missing, clearly state what is unknown in the user's language.
     6. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
     7. If the answer requires a long response, provide the FULL answer without cutting it short. You have sufficient token capacity.
@@ -188,14 +191,14 @@ def get_rag_chain(deep_thinking: bool = False):
         for i, doc in enumerate(docs):
             source = os.path.basename(doc.metadata.get("source", "Unknown"))
             page = doc.metadata.get("page", "N/A")
-            # PyMuPDF uses 0-indexed pages, making it 1-indexed for the LLM/user
             if isinstance(page, int):
                 page = page + 1
             
-            header = f"--- Document: {source} | Page: {page} ---"
-            context_parts.append(f"{header}\n{doc.page_content}")
+            # Use a more explicit header that the LLM can easily pluck source names from
+            header = f"\n[SOURCE: {source} | PAGE: {page}]"
+            context_parts.append(f"{header}\nCONTENT: {doc.page_content}")
         
-        return "\n\n".join(context_parts)
+        return "\n" + "-"*30 + "\n".join(context_parts)
 
     def detect_language_instruction(question):
         import re

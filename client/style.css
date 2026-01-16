@@ -1671,6 +1671,42 @@ header {
     color: var(--primary-light);
 }
 
+.citation-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    margin: 0 4px;
+    vertical-align: middle;
+}
+
+.citation-group .citation-link {
+    margin: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+}
+
+.citation-direct-btn {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--glass-border);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    border-radius: 0 100px 100px 0;
+    cursor: pointer;
+    font-size: 10px;
+    transition: all 0.2s;
+    height: 22px;
+    /* Match citation-link approx */
+    display: flex;
+    align-items: center;
+}
+
+.citation-direct-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+
 /* Source Badges in Metadata */
 .source-badges {
     display: flex;
