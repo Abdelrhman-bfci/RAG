@@ -194,7 +194,7 @@ async def list_resources():
     List all ingested resources by type.
     """
     resources = {
-        "pdfs": [],
+        "documents": [],
         "websites": [],
         "databases": []
     }

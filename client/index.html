@@ -1129,7 +1129,7 @@
                             const isDoc = sec.type === 'documents';
                             itemDiv.innerHTML = `
                                     <div class="res-info">
-                                        <i class="fas ${isPdf ? 'fa-file-pdf' : (sec.type === 'websites' ? 'fa-globe' : 'fa-table')}"></i>
+                                        <i class="fas ${isDoc ? 'fa-file-alt' : (sec.type === 'websites' ? 'fa-globe' : 'fa-table')}"></i>
                                         <span>${name}</span>
                                     </div>
                                     <div class="res-actions">
@@ -1163,8 +1163,12 @@
             const totalChunksEl = document.getElementById('health-total-chunks');
 
             try {
+                console.log("Fetching index stats...");
                 const response = await fetch(`${API_BASE}/index/stats`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
                 const indexData = await response.json();
+                console.log("Index statistics received:", indexData);
 
                 totalDocsEl.textContent = indexData.total_documents;
                 totalChunksEl.textContent = indexData.total_chunks;
