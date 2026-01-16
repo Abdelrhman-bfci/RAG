@@ -81,7 +81,7 @@ DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
     Question: {question}""")
 ])
 
-def get_rag_chain(deep_thinking: bool = False):
+def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
     """
     Creates and returns the RAG chain for Question Answering.
     """
@@ -202,17 +202,27 @@ def get_rag_chain(deep_thinking: bool = False):
 
     def detect_language_instruction(question):
         import re
-        # Stronger check: if any arabic char exists, treat as Arabic
         is_arabic = bool(re.search('[\u0600-\u06FF]', question))
         if is_arabic:
-            return "THE USER ASKED IN ARABIC. YOU MUST ANSWER IN ARABIC. TRANSLATE CONTEXT IF NEEDED."
+            return """THE USER ASKED IN ARABIC. YOU MUST ANSWER IN ARABIC. 
+            قواعد الاستشهاد (MANDATORY CITATIONS): 
+            يجب وضع المرجع بجانب كل حقيقة أو دورة تدريبية أو ملف بصيغة [اسم_الملف.pdf, صفحة X]. 
+            لا تكتفي بذكر المراجع في النهاية، بل ضعها بجانب كل نقطة."""
         else:
-            return "THE USER ASKED IN ENGLISH. YOU MUST ANSWER IN ENGLISH. TRANSLATE ARABIC CONTEXT TO ENGLISH."
+            return """THE USER ASKED IN ENGLISH. YOU MUST ANSWER IN ENGLISH.
+            CITATION RULES (MANDATORY): 
+            Every single fact or item must have an inline reference like [Document.pdf, Page X]. 
+            Do not just list them at the end; place them next to the specific information."""
+
+    def process_question(q):
+        if is_continuation and last_answer:
+            return f"CONTINUE YOUR PREVIOUS ANSWER. Below is your previous partial response. Pick up exactly where you left off without repeating yourself and complete the answer.\n\nPREVIOUS PARTIAL ANSWER:\n{last_answer}\n\nUSER'S ORIGINAL QUESTION: {q}\n\nCONTINUATION:"
+        return f"{q} [MANDATORY: Cite every single course/item in brackets like (Document.pdf, Page X)]"
 
     rag_chain = (
         {
             "context": RunnableLambda(lambda x: retriever.invoke(x)) | format_docs, 
-            "question": RunnablePassthrough(),
+            "question": RunnableLambda(process_question),
             "language_instruction": RunnableLambda(detect_language_instruction)
         }
         | prompt
@@ -253,13 +263,13 @@ def filter_cited_sources(answer: str, all_sources: list) -> list:
     
     return sorted(list(set(final_sources)))
 
-def answer_question(question: str, deep_thinking: bool = False):
+def answer_question(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
     """
     Entry point to answer a question with performance metrics and source citations.
     """
     start_total = time.time()
     try:
-        chain, retriever = get_rag_chain(deep_thinking=deep_thinking)
+        chain, retriever = get_rag_chain(deep_thinking=deep_thinking, is_continuation=is_continuation, last_answer=last_answer)
         
         # 1. Retrieve documents manually to get metadata for citations
         docs = retriever.invoke(question)
@@ -299,14 +309,14 @@ def answer_question(question: str, deep_thinking: bool = False):
         print(f"DEBUG ERROR: {traceback.format_exc()}")
         return {"error": f"An unexpected error occurred: {str(e)}"}
 
-def stream_answer(question: str, deep_thinking: bool = False):
+def stream_answer(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
     """
     Entry point to stream chunks of the LLM response.
     Yields JSON strings containing either chunks or final metadata.
     """
     start_total = time.time()
     try:
-        chain, retriever = get_rag_chain(deep_thinking=deep_thinking)
+        chain, retriever = get_rag_chain(deep_thinking=deep_thinking, is_continuation=is_continuation, last_answer=last_answer)
         
         # 1. Pre-retrieve docs just to get sources early (optional but better for UX)
         start_retrieval = time.time()

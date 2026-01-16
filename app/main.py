@@ -39,6 +39,8 @@ app.mount("/files", StaticFiles(directory=Config.RESOURCE_DIR), name="files")
 class QuestionRequest(BaseModel):
     question: str
     deep_thinking: bool = False
+    is_continuation: bool = False
+    last_answer: str = ""
 
 class ModelUpdateRequest(BaseModel):
     model: str
@@ -144,7 +146,12 @@ async def ask_question(request: QuestionRequest):
         except:
             pass
 
-    result = answer_question(request.question, deep_thinking=request.deep_thinking)
+    result = answer_question(
+        request.question, 
+        deep_thinking=request.deep_thinking,
+        is_continuation=request.is_continuation,
+        last_answer=request.last_answer
+    )
     
     if "error" in result:
         return {"question": request.question, "answer": result["error"] + status_msg}
@@ -157,7 +164,7 @@ async def ask_question(request: QuestionRequest):
     }
 
 @app.get("/ask/stream")
-async def ask_question_stream(question: str, deep_thinking: bool = False):
+async def ask_question_stream(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
     """
     Answer a question using the RAG system with streaming.
     """
@@ -165,7 +172,12 @@ async def ask_question_stream(question: str, deep_thinking: bool = False):
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
     return StreamingResponse(
-        stream_answer(question, deep_thinking=deep_thinking), 
+        stream_answer(
+            question, 
+            deep_thinking=deep_thinking,
+            is_continuation=is_continuation,
+            last_answer=last_answer
+        ), 
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

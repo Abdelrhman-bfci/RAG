@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=11">
+    <link rel="stylesheet" href="style.css?v=12">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
@@ -445,16 +445,22 @@
             return textDiv;
         }
 
-        async function sendMessage() {
-            const question = userInput.value.trim();
+        async function sendMessage(isContinuation = false) {
+            const question = isContinuation ? lastUserQuestion : userInput.value.trim();
             const chatMode = document.getElementById('chat-mode').value;
             const isDeepThinking = chatMode === 'deep';
 
             if (!question) return;
 
-            userInput.value = '';
-            userInput.dir = 'ltr'; // Reset to LTR after sending
-            addMessage(question, true);
+            if (!isContinuation) {
+                lastUserQuestion = question;
+                userInput.value = '';
+                userInput.dir = 'ltr'; // Reset to LTR after sending
+                addMessage(question, true);
+            } else {
+                // For continuation, add a system-like hint to the UI or just start bot message
+                addMessage("Continuing response...", true);
+            }
 
             const botMsgDiv = addMessage('', false);
             // Create separate containers for content and metadata
@@ -470,7 +476,11 @@
             botMsgDiv.appendChild(metaContainerDiv);
 
             try {
-                const response = await fetch(`${API_BASE}/ask/stream?question=${encodeURIComponent(question)}&deep_thinking=${isDeepThinking}`);
+                const url = isContinuation
+                    ? `${API_BASE}/ask/stream?question=${encodeURIComponent(question)}&deep_thinking=${isDeepThinking}&is_continuation=true&last_answer=${encodeURIComponent(lastBotResponse)}`
+                    : `${API_BASE}/ask/stream?question=${encodeURIComponent(question)}&deep_thinking=${isDeepThinking}`;
+
+                const response = await fetch(url);
 
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
@@ -540,51 +550,65 @@
                             contentDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
                             chatContainer.scrollTop = chatContainer.scrollHeight;
 
-                        } else if (data.type === 'metadata') {
-                            if (data.used_docs) {
-                                usedDocs = data.used_docs;
-                                window.currentUsedDocs = usedDocs;
+                            if (data.type === 'done' || data.type === 'metadata') {
+                                lastBotResponse = accumulatedAnswer;
                             }
 
-                            const metaDiv = document.createElement('div');
-                            metaDiv.className = 'message-meta';
-                            metaDiv.style.display = 'flex';
+                            if (data.type === 'metadata') {
+                                if (data.used_docs) {
+                                    usedDocs = data.used_docs;
+                                    window.currentUsedDocs = usedDocs;
+                                }
 
-                            const stats = [
-                                { label: 'Model', value: data.model, icon: 'fa-robot' },
-                                { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
-                                { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
-                                { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
-                            ];
+                                const metaDiv = document.createElement('div');
+                                metaDiv.className = 'message-meta';
+                                metaDiv.style.display = 'flex';
 
-                            stats.forEach(stat => {
-                                const item = document.createElement('div');
-                                item.className = 'meta-item';
-                                item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
-                                metaDiv.appendChild(item);
-                            });
+                                const stats = [
+                                    { label: 'Model', value: data.model, icon: 'fa-robot' },
+                                    { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
+                                    { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
+                                    { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
+                                ];
 
-                            if (data.sources && data.sources.length > 0) {
-                                const sourceContainer = document.createElement('div');
-                                sourceContainer.className = 'source-badges';
-                                data.sources.forEach(src => {
-                                    const isUrl = src.startsWith('http');
-                                    const name = isUrl ? new URL(src).hostname : src.split('/').pop();
-
-                                    const badge = document.createElement('span');
-                                    badge.className = 'source-badge';
-                                    badge.onclick = () => previewIndexSource(name, usedDocs);
-
-                                    badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
-                                    badge.title = "Click to preview source content";
-                                    sourceContainer.appendChild(badge);
+                                stats.forEach(stat => {
+                                    const item = document.createElement('div');
+                                    item.className = 'meta-item';
+                                    item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
+                                    metaDiv.appendChild(item);
                                 });
-                                metaDiv.appendChild(sourceContainer);
-                            }
 
-                            metaContainerDiv.innerHTML = '';
-                            metaContainerDiv.appendChild(metaDiv);
-                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                                // Add Continue Button
+                                const continueBtn = document.createElement('div');
+                                continueBtn.className = 'meta-item continue-btn';
+                                continueBtn.style.cursor = 'pointer';
+                                continueBtn.style.color = 'var(--primary-light)';
+                                continueBtn.innerHTML = `<i class="fas fa-play"></i> Continue Answer`;
+                                continueBtn.onclick = () => sendMessage(true);
+                                metaDiv.appendChild(continueBtn);
+
+                                if (data.sources && data.sources.length > 0) {
+                                    const sourceContainer = document.createElement('div');
+                                    sourceContainer.className = 'source-badges';
+                                    data.sources.forEach(src => {
+                                        const isUrl = src.startsWith('http');
+                                        const name = isUrl ? new URL(src).hostname : src.split('/').pop();
+
+                                        const badge = document.createElement('span');
+                                        badge.className = 'source-badge';
+                                        badge.onclick = () => previewIndexSource(name, usedDocs);
+
+                                        badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
+                                        badge.title = "Click to preview source content";
+                                        sourceContainer.appendChild(badge);
+                                    });
+                                    metaDiv.appendChild(sourceContainer);
+                                }
+
+                                metaContainerDiv.innerHTML = '';
+                                metaContainerDiv.appendChild(metaDiv);
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            }
                         } else if (data.type === 'error') {
                             contentDiv.innerText += `\nError: ${data.content}`;
                         }
@@ -664,6 +688,8 @@
 
         let currentConfig = null;
         let globalResourceMap = {}; // Track name -> full path/url
+        let lastUserQuestion = "";
+        let lastBotResponse = "";
 
         providerSelect.onchange = async () => {
             const provider = providerSelect.value;
