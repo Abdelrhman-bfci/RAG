@@ -10,7 +10,7 @@ import os
 import shutil
 import asyncio
 
-from app.ingestion.pdf_ingest import ingest_pdfs, TRACKING_FILE as PDF_TRACKING
+from app.ingestion.document_ingest import ingest_documents, TRACKING_FILE as DOC_TRACKING
 from app.ingestion.db_ingest import ingest_database, DB_TRACKING_FILE as DB_TRACKING
 from app.ingestion.web_ingest import ingest_websites, TRACKING_FILE as WEB_TRACKING
 from app.qa.rag_chain import answer_question, stream_answer
@@ -174,13 +174,13 @@ async def ask_question_stream(question: str, deep_thinking: bool = False):
         }
     )
 
-@app.get("/ingest/pdf/stream")
-async def stream_pdf_ingestion(fresh: bool = False):
+@app.get("/ingest/document/stream")
+async def stream_document_ingestion(fresh: bool = False):
     """
-    Stream PDF ingestion progress in real-time.
+    Stream document ingestion progress in real-time.
     """
     return StreamingResponse(
-        ingest_pdfs(force_fresh=fresh), 
+        ingest_documents(force_fresh=fresh), 
         media_type="text/plain",
         headers={
             "Cache-Control": "no-cache",
@@ -199,12 +199,12 @@ async def list_resources():
         "databases": []
     }
     
-    # PDFs
-    if os.path.exists(PDF_TRACKING):
+    # Documents
+    if os.path.exists(DOC_TRACKING):
         try:
-            with open(PDF_TRACKING, "r") as f:
+            with open(DOC_TRACKING, "r") as f:
                 tracking = json.load(f)
-                resources["pdfs"] = [os.path.basename(path) for path in tracking.keys()]
+                resources["documents"] = [os.path.basename(path) for path in tracking.keys()]
         except: pass
     
     # Websites
@@ -233,12 +233,12 @@ async def delete_resource(res_type: str, name: str):
     from app.vectorstore.faiss_store import FAISSStore
     faiss_store = FAISSStore()
     
-    if res_type == "pdfs":
+    if res_type == "documents":
         # Find path in tracking
         path_to_remove = None
         tracking = {}
-        if os.path.exists(PDF_TRACKING):
-            with open(PDF_TRACKING, "r") as f:
+        if os.path.exists(DOC_TRACKING):
+            with open(DOC_TRACKING, "r") as f:
                 tracking = json.load(f)
             for path in tracking.keys():
                 if os.path.basename(path) == name:
@@ -252,13 +252,12 @@ async def delete_resource(res_type: str, name: str):
             
             # Remove from tracking
             del tracking[path_to_remove]
-            with open(PDF_TRACKING, "w") as f:
+            with open(DOC_TRACKING, "w") as f:
                 json.dump(tracking, f, indent=4)
             
             # Remove from FAISS
-            # Remove from FAISS
             faiss_store.delete_source(path_to_remove)
-            return {"status": "success", "message": f"Deleted PDF {name}"}
+            return {"status": "success", "message": f"Deleted document {name}"}
             
     elif res_type == "databases":
         # Handle database table deletion
@@ -322,7 +321,7 @@ async def reset_all_resources():
                 os.remove(path)
     
     # 2. Clear Tracking Files
-    for tracking in [PDF_TRACKING, WEB_TRACKING, DB_TRACKING, "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json"]:
+    for tracking in [DOC_TRACKING, WEB_TRACKING, DB_TRACKING, "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json"]:
         if os.path.exists(tracking):
             os.remove(tracking)
             
@@ -460,23 +459,9 @@ async def get_index_statistics():
 async def sync_resources(background_tasks: BackgroundTasks):
     """
     Trigger ingestion for any resources that are missing from the index.
-    Currently triggers a standard PDF ingestion which naturally adds missing files.
     """
-    # For now, simply triggering ingest_pdfs without forcing fresh will 
-    # add any new files that aren't in the tracking file.
-    # This matches the user's "Sync" intent.
-    
     return StreamingResponse(
-        ingest_pdfs(force_fresh=False), 
-        media_type="text/plain",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"
-        }
-    )
-
-    return StreamingResponse(
-        ingest_pdfs(force_fresh=False), 
+        ingest_documents(force_fresh=False), 
         media_type="text/plain",
         headers={
             "Cache-Control": "no-cache",

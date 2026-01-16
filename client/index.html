@@ -64,8 +64,8 @@
                     <span>Chat Assistant</span>
                 </div>
                 <div class="nav-item" onclick="switchView('view-pdf', this)">
-                    <i class="fas fa-file-pdf"></i>
-                    <span>PDF Documents</span>
+                    <i class="fas fa-file-alt"></i>
+                    <span>Documents</span>
                 </div>
                 <div class="nav-item" onclick="switchView('view-web', this)">
                     <i class="fas fa-globe"></i>
@@ -155,10 +155,10 @@
             <div id="view-pdf" class="view-section">
                 <div class="section-container">
                     <div class="db-section">
-                        <h3><i class="fas fa-file-pdf"></i> PDF Management</h3>
+                        <h3><i class="fas fa-file-alt"></i> Document Management</h3>
                         <div class="upload-zone" id="upload-zone">
-                            <input type="file" id="file-input" accept=".pdf" hidden>
-                            <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop PDF here or <a href="#"
+                            <input type="file" id="file-input" accept=".pdf,.docx,.txt,.csv,.md,.xlsx,.xls" hidden>
+                            <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop files here or <a href="#"
                                     id="browse-btn">Browse</a></p>
                             <span id="file-name-display"></span>
                         </div>
@@ -176,7 +176,7 @@
                     <div class="db-section">
                         <h3><i class="fas fa-terminal"></i> Ingestion Logs</h3>
                         <div id="pdf-console" class="mini-terminal">
-                            <span class="log-line system">> PDF synchronization updates appear here.</span>
+                            <span class="log-line system">> Document synchronization updates appear here.</span>
                         </div>
                     </div>
                 </div>
@@ -506,7 +506,7 @@
                                     const parts = content.split(',').map(s => s.trim());
                                     const possibleFile = parts[0];
 
-                                    if (possibleFile.toLowerCase().endsWith('.pdf') || sourceMap[possibleFile]) {
+                                    if (sourceMap[possibleFile]) {
                                         const safeName = possibleFile.replace(/'/g, "\\'");
                                         const clickHandler = `previewIndexSource('${safeName}', window.currentUsedDocs || [])`;
                                         return `<span class="citation-link" onclick="${clickHandler}"><i class="fas fa-file-alt"></i> ${match}</span>`;
@@ -863,8 +863,12 @@
         let selectedFile = null;
 
         function handleFileSelect(file) {
-            if (file.type !== 'application/pdf') {
-                alert('Please upload a valid PDF file.');
+            const allowedExtensions = ['.pdf', '.docx', '.txt', '.csv', '.md', '.xlsx', '.xls'];
+            const fileName = file.name.toLowerCase();
+            const isValid = allowedExtensions.some(ext => fileName.endsWith(ext));
+
+            if (!isValid) {
+                alert('Unsupported file type. Please upload PDF, Word, Text, CSV, or Excel files.');
                 return;
             }
             selectedFile = file;
@@ -925,7 +929,7 @@
 
         // Streaming Logic
         async function startIngestionStream(fresh = false) {
-            const url = `${API_BASE}/ingest/pdf/stream${fresh ? '?fresh=true' : ''}`;
+            const url = `${API_BASE}/ingest/document/stream${fresh ? '?fresh=true' : ''}`;
 
             streamBtn.disabled = true;
             freshStreamBtn.disabled = true;
@@ -1105,7 +1109,7 @@
                 container.innerHTML = '';
 
                 const sections = [
-                    { title: '📑 PDFs', key: 'pdfs', type: 'pdfs' },
+                    { title: '📑 Documents', key: 'documents', type: 'documents' },
                     { title: '🌐 Websites', key: 'websites', type: 'websites' },
                     { title: '📁 DB Tables', key: 'databases', type: 'databases' }
                 ];
@@ -1122,14 +1126,14 @@
                             const itemDiv = document.createElement('div');
                             itemDiv.className = 'res-item';
                             const name = item;
-                            const isPdf = sec.type === 'pdfs';
+                            const isDoc = sec.type === 'documents';
                             itemDiv.innerHTML = `
                                     <div class="res-info">
                                         <i class="fas ${isPdf ? 'fa-file-pdf' : (sec.type === 'websites' ? 'fa-globe' : 'fa-table')}"></i>
                                         <span>${name}</span>
                                     </div>
                                     <div class="res-actions">
-                                        ${isPdf ? `<a href="${API_BASE}/files/${name}" target="_blank" class="view-res-btn" title="View PDF"><i class="fas fa-external-link-alt"></i></a>` : ''}
+                                        ${isDoc ? `<a href="${API_BASE}/files/${name}" target="_blank" class="view-res-btn" title="View Document"><i class="fas fa-external-link-alt"></i></a>` : ''}
                                         <button onclick="deleteResource('${sec.type}', '${item}')" class="delete-res-btn" title="Remove Archive">
                                             <i class="fas fa-trash-alt"></i>
                                         </button>
@@ -1170,7 +1174,7 @@
                 // Combine all resources into a set for lookup
                 const allResources = new Set();
                 if (resourceData) {
-                    if (resourceData.pdfs) resourceData.pdfs.forEach(r => allResources.add(r));
+                    if (resourceData.documents) resourceData.documents.forEach(r => allResources.add(r));
                     if (resourceData.websites) resourceData.websites.forEach(r => allResources.add(r));
                     if (resourceData.databases) resourceData.databases.forEach(r => allResources.add(`Table: ${r}`));
                 }

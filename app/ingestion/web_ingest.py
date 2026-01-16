@@ -109,17 +109,47 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                 if current_depth > max_depth:
                     continue
                 
-                # Add to targets if it's not the seed URL (or if seed needs re-indexing which is checked above)
-                # For the seed URL itself, we adding it to targets to be loaded
-                target_urls.append(current_url)
+                # Check extensions first to save a request
+                IGNORED_EXTENSIONS = (
+                    '.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp',
+                    '.mp4', '.mp3', '.wav', '.avi', '.mov', '.zip', '.tar', '.gz',
+                    '.rar', '.7z', '.exe', '.dmg', '.iso', '.bin', '.doc', '.docx',
+                    '.xls', '.xlsx', '.ppt', '.pptx', '.csv', '.xml', '.json', '.css', '.js'
+                )
                 
-                # Stop if we reached max depth, no need to parse for links
-                if current_depth >= max_depth:
+                path = urlparse(current_url).path.lower()
+                if path.endswith(IGNORED_EXTENSIONS):
+                    yield f"Skipping media/resource file: {current_url}\n"
                     continue
 
                 try:
                     yield f"Scanning [Depth {current_depth}]: {current_url}\n"
+                    
+                    # Head request or stream=True to check headers first
+                    try:
+                        head_response = requests.head(current_url, timeout=5, allow_redirects=True)
+                        content_type = head_response.headers.get('Content-Type', '').lower()
+                        
+                        if 'text/html' not in content_type:
+                            yield f"Skipping non-HTML content ({content_type}): {current_url}\n"
+                            continue
+                            
+                    except Exception:
+                        # If HEAD fails, we might still try GET but typically it's risky if we want to avoid downloads.
+                        # We'll proceed to GET with stream=True as a fallback check
+                        pass
+
                     response = requests.get(current_url, timeout=10)
+                    
+                    # Double check content type on the actual response
+                    content_type = response.headers.get('Content-Type', '').lower()
+                    if 'text/html' not in content_type:
+                        yield f"Skipping non-HTML content ({content_type}): {current_url}\n"
+                        continue
+
+                    # Validation passed, add to targets
+                    target_urls.append(current_url)
+                    
                     soup = BeautifulSoup(response.text, 'html.parser')
                     
                     found_on_page = 0
@@ -131,16 +161,15 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                         text = a.get_text().lower().strip()
                         full_url = urljoin(current_url, href)
                         
-                        # Remove fragment identifier to avoid duplicate crawling
+                        # Remove fragment identifier
                         full_url = full_url.split('#')[0]
                         parsed_full = urlparse(full_url)
                         
                         if parsed_full.netloc == domain and full_url not in visited:
-                            # Heuristic filter for relevance (optional, but good to keep to reduce noise)
+                            # Heuristic filter
                             path = parsed_full.path.lower()
                             keywords = ["about", "history", "vision", "mission", "leader", "academic", "program", "department", "news", "blog", "service", "product"]
                             
-                            # We can be a bit more lenient with deep crawling or keep strict
                             if any(kw in path for kw in keywords) or any(kw in text for kw in keywords) or current_depth == 0:
                                 visited.add(full_url)
                                 queue.append((full_url, current_depth + 1))

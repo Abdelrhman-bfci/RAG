@@ -2,7 +2,13 @@ import os
 import glob
 import json
 import time
-from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_community.document_loaders import (
+    PyMuPDFLoader, 
+    Docx2txtLoader, 
+    TextLoader, 
+    CSVLoader, 
+    UnstructuredExcelLoader
+)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
@@ -47,24 +53,33 @@ def update_status(status, current=0, total=0, message="", start_time=None):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
-def ingest_pdfs(force_fresh: bool = False):
+def get_loader(file_path: str):
+    """Returns the appropriate LangChain loader based on file extension."""
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".pdf":
+        return PyMuPDFLoader(file_path)
+    elif ext == ".docx":
+        return Docx2txtLoader(file_path)
+    elif ext in [".txt", ".md"]:
+        return TextLoader(file_path, encoding="utf-8")
+    elif ext == ".csv":
+        return CSVLoader(file_path)
+    elif ext in [".xlsx", ".xls"]:
+         return UnstructuredExcelLoader(file_path)
+    return None
+
+def ingest_documents(force_fresh: bool = False):
     """
-    Ingest PDF files from the configured RESOURCE directory.
+    Ingest various document files from the configured RESOURCE directory.
     Only processes files that have changed since the last run unless force_fresh=True.
     Yields progress updates as strings.
     """
     if force_fresh:
-        yield "Fresh start requested. Clearing PDF tracking data...\n"
+        yield "Fresh start requested. Clearing document tracking data...\n"
         if os.path.exists(TRACKING_FILE):
             os.remove(TRACKING_FILE)
-        # We do NOT delete the entire vector_db_path because it contains data from other sources (Web, DB)
-        # faiss_store = FAISSStore()
-        # if os.path.exists(faiss_store.vector_db_path):
-        #     import shutil
-        #     shutil.rmtree(faiss_store.vector_db_path)
-        #     yield "Old index deleted.\n"
 
-    yield "Scanning files...\n"
+    yield "Scanning documents...\n"
     update_status("running", message="Scanning files...")
     
     resource_dir = Config.RESOURCE_DIR
@@ -74,57 +89,63 @@ def ingest_pdfs(force_fresh: bool = False):
         yield f"ERROR: {msg}\n"
         return
 
-    pdf_files = glob.glob(os.path.join(resource_dir, "*.pdf"))
+    # Support multiple extensions
+    extensions = ["*.pdf", "*.docx", "*.txt", "*.md", "*.csv", "*.xlsx", "*.xls"]
+    all_files = []
+    for ext in extensions:
+        all_files.extend(glob.glob(os.path.join(resource_dir, ext)))
     
-    if not pdf_files:
-        msg = "No PDF files found in resource directory."
+    if not all_files:
+        msg = "No documents found in resource directory."
         update_status("completed", message=msg)
-        yield "WARNING: No PDFs found.\n"
+        yield "WARNING: No documents found.\n"
         return
 
     tracking_data = load_tracking_data()
     new_documents = []
     processed_files_metadata = []
 
-    yield f"Found {len(pdf_files)} PDF files. Checking for updates...\n"
+    yield f"Found {len(all_files)} documents. Checking for updates...\n"
 
-    for pdf_path in pdf_files:
+    for file_path in all_files:
         try:
-            stats = os.stat(pdf_path)
-            file_id = f"{pdf_path}_{stats.st_size}_{stats.st_mtime}"
+            stats = os.stat(file_path)
+            file_id = f"{file_path}_{stats.st_size}_{stats.st_mtime}"
             
-            if not force_fresh and pdf_path in tracking_data and tracking_data[pdf_path] == file_id:
+            if not force_fresh and file_path in tracking_data and tracking_data[file_path] == file_id:
                 continue
 
-            yield f"Reading: {os.path.basename(pdf_path)}\n"
+            yield f"Reading: {os.path.basename(file_path)}\n"
             
             # Ensure we remove old versions of this file from the index before adding new ones
-            # This prevents duplicates if the file content changed but filename is same
             try:
                 faiss_store = FAISSStore()
-                faiss_store.delete_source(pdf_path)
+                faiss_store.delete_source(file_path)
             except Exception as e:
-                print(f"Warning: Failed to clear old index for {pdf_path}: {e}")
+                print(f"Warning: Failed to clear old index for {file_path}: {e}")
 
-            loader = PyMuPDFLoader(pdf_path)
-            docs = loader.load()
-            new_documents.extend(docs)
-            processed_files_metadata.append((pdf_path, file_id))
+            loader = get_loader(file_path)
+            if loader:
+                docs = loader.load()
+                new_documents.extend(docs)
+                processed_files_metadata.append((file_path, file_id))
+            else:
+                yield f"Skipping unsupported file type: {os.path.basename(file_path)}\n"
 
         except Exception as e:
-            yield f"FAILED to load {os.path.basename(pdf_path)}: {e}\n"
+            yield f"FAILED to load {os.path.basename(file_path)}: {e}\n"
 
     if not new_documents:
-        yield "All files are already up to date.\n"
-        update_status("completed", message="All files are up to date.")
+        yield "All documents are already up to date.\n"
+        update_status("completed", message="All documents are up to date.")
         return
 
-    yield f"Splitting {len(new_documents)} pages into chunks...\n"
+    yield f"Splitting {len(new_documents)} items into chunks...\n"
     update_status("running", message="Splitting documents...")
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHUNK_SIZE,
         chunk_overlap=Config.CHUNK_OVERLAP,
-        separators=["\n\n", "\n", " ", ""] # Explicit separators for better context
+        separators=["\n\n", "\n", " ", ""] 
     )
     
     splitted_docs = text_splitter.split_documents(new_documents)
@@ -135,19 +156,16 @@ def ingest_pdfs(force_fresh: bool = False):
     faiss_store = FAISSStore()
     vectorstore = faiss_store.load_index() # Load once
     
-    # PROCESS ONE CHUNK AT A TIME (Slowest but most stable)
-    total_chunks = len(splitted_docs)
+    # PROCESS ONE CHUNK AT A TIME
     start_time = time.time()
     
     import gc
     import traceback
     
     try:
-        # We manually iterate to keep strict control
         for i, doc in enumerate(splitted_docs):
             current_num = i + 1
             
-            # 1. Add single document with simple retry
             max_retries = 2
             success = False
             for attempt in range(max_retries):
@@ -161,7 +179,7 @@ def ingest_pdfs(force_fresh: bool = False):
                     break
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        time.sleep(1) # wait a bit before retry
+                        time.sleep(1)
                         continue
                     yield f"ERROR processing chunk {current_num} after retries: {e}\n"
                     print(f"CRITICAL ERROR embedding chunk {current_num}: {traceback.format_exc()}")
@@ -169,16 +187,14 @@ def ingest_pdfs(force_fresh: bool = False):
             if not success:
                 continue
             
-            # 2. Yield progress every single chunk to keep connection alive
             msg = f"Ingesting chunk {current_num}/{total_chunks}"
-            yield f"{msg}\n"
+            if current_num % 5 == 0:
+                yield f"{msg}\n"
             
-            # 3. Update status file less frequently to save I/O
             if current_num % 10 == 0:
                 update_status("running", current=current_num, total=total_chunks, message=msg, start_time=start_time)
-                gc.collect() # Free RAM
+                gc.collect() 
             
-            # 4. Checkpoint every 50 chunks (approx every minute)
             if current_num % 50 == 0:
                 yield "Saving checkpoint...\n"
                 try:
@@ -186,12 +202,11 @@ def ingest_pdfs(force_fresh: bool = False):
                 except Exception as e:
                      yield f"WARNING: Failed to save checkpoint at chunk {current_num}: {e}\n"
 
-        # Update metadata for processed files
-        for pdf_path, file_id in processed_files_metadata:
-            tracking_data[pdf_path] = file_id
+        for file_path, file_id in processed_files_metadata:
+            tracking_data[file_path] = file_id
         save_tracking_data(tracking_data)
 
-        success_msg = f"SUCCESS: Ingested {total_chunks} chunks from {len(processed_files_metadata)} files."
+        success_msg = f"SUCCESS: Ingested {total_chunks} chunks from {len(processed_files_metadata)} documents."
         update_status("completed", message=success_msg)
         yield f"{success_msg}\n"
 
