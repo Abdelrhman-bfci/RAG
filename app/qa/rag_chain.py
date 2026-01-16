@@ -203,21 +203,34 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
     def detect_language_instruction(question):
         import re
         is_arabic = bool(re.search('[\u0600-\u06FF]', question))
+        
+        # Continuation Instruction (English or Arabic)
+        cont_instr = ""
+        if is_continuation:
+            if is_arabic:
+                cont_instr = "\nتنبيه مهم: أنت الآن تكمل إجابة سابقة تم قطعها. ابدأ مباشرة من حيث انتهيت. لا تكرر أي جملة أو معلومة ذكرتها سابقاً."
+            else:
+                cont_instr = "\nIMPORTANT: You are continuing a previous response that was cut off. DO NOT REPEAT any information already provided. Start exactly from the next point or sentence."
+
         if is_arabic:
-            return """THE USER ASKED IN ARABIC. YOU MUST ANSWER IN ARABIC. 
+            return f"""THE USER ASKED IN ARABIC. YOU MUST ANSWER IN ARABIC. {cont_instr}
             قواعد الاستشهاد (MANDATORY CITATIONS): 
-            يجب وضع المرجع بجانب كل حقيقة أو دورة تدريبية أو ملف بصيغة [اسم_الملف.pdf, صفحة X]. 
+            يجب وضع المرجع بجانب كل حقيقة أو دورة تدريبية أو ملف بصيغة [اسم_الملف, صفحة X]. 
+            مثال: [Course_Catalog.pdf, صفحة 5].
+            لا تذكر كلمة SOURCE أو PAGE داخل القوسين، فقط الاسم والصفحة.
             لا تكتفي بذكر المراجع في النهاية، بل ضعها بجانب كل نقطة."""
         else:
-            return """THE USER ASKED IN ENGLISH. YOU MUST ANSWER IN ENGLISH.
+            return f"""THE USER ASKED IN ENGLISH. YOU MUST ANSWER IN ENGLISH. {cont_instr}
             CITATION RULES (MANDATORY): 
             Every single fact or item must have an inline reference like [Document.pdf, Page X]. 
+            Example: [CS_Manual.pdf, Page 12].
+            Do NOT include labels like 'SOURCE:' or 'PAGE:' inside the brackets, just the filename and page number.
             Do not just list them at the end; place them next to the specific information."""
 
     def process_question(q):
         if is_continuation and last_answer:
-            return f"CONTINUE YOUR PREVIOUS ANSWER. Below is your previous partial response. Pick up exactly where you left off without repeating yourself and complete the answer.\n\nPREVIOUS PARTIAL ANSWER:\n{last_answer}\n\nUSER'S ORIGINAL QUESTION: {q}\n\nCONTINUATION:"
-        return f"{q} [MANDATORY: Cite every single course/item in brackets like (Document.pdf, Page X)]"
+            return f"--- START OF CONTINUATION REQUEST ---\nYOU PREVIOUSLY SAID:\n[[[ {last_answer} ]]]\n\nNOW CONTINUE DIRECTLY from exactly where you left off. DO NOT REPEAT ANY LIST ITEMS OR SENTENCES FROM ABOVE. Provide the remaining missing information for the question: {q}\n--- CONTINUE BELOW ---"
+        return f"{q} [MANDATORY: Cite every single course/item in brackets like [Document.pdf, Page X]]"
 
     rag_chain = (
         {

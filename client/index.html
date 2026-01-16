@@ -517,8 +517,16 @@
                                 if (!text) return '';
 
                                 return text.replace(/\[([^\]]+)\]/g, (match, content) => {
-                                    const parts = content.split(',').map(s => s.trim());
-                                    const possibleFile = parts[0];
+                                    // Clean the content: Remove labels, normalize delimiters
+                                    let cleanContent = content
+                                        .replace(/SOURCE:/gi, '')
+                                        .replace(/PAGE:/gi, '')
+                                        .replace(/\|/g, ',')
+                                        .trim();
+
+                                    const parts = cleanContent.split(',').map(s => s.trim());
+                                    // Remove leading/trailing parentheses if the model included them inside brackets
+                                    let possibleFile = parts[0].replace(/^\(|\)$/g, '').trim();
 
                                     // Find source URL/path from map
                                     const sourcePath = sourceMap[possibleFile] || Object.values(sourceMap).find(s => s.includes(possibleFile));
