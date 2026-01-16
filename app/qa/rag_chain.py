@@ -244,7 +244,10 @@ def filter_cited_sources(answer: str, all_sources: list) -> list:
             
     # If no sources are cited but we have an answer, we might strictly want to return nothing,
     # or fallback. The user request implies "just resource that i get information from".
-    # If LLM didn't cite, we show nothing (strict).
+    # If LLM didn't cite, or we want to be generous, we fallback to all retrieved sources.
+    if not final_sources:
+        return sorted(list(set(all_sources)))
+    
     return sorted(list(set(final_sources)))
 
 def answer_question(question: str, deep_thinking: bool = False):
