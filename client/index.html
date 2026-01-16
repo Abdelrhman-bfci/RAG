@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=9">
+    <link rel="stylesheet" href="style.css?v=10">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
@@ -496,6 +496,7 @@
                             data.sources.forEach(src => {
                                 const name = src.startsWith('http') ? src : src.split('/').pop();
                                 sourceMap[name] = src;
+                                globalResourceMap[name] = src; // Sync to global
                             });
                         } else if (data.type === 'chunk') {
                             accumulatedAnswer += data.content;
@@ -509,10 +510,16 @@
                                     const parts = content.split(',').map(s => s.trim());
                                     const possibleFile = parts[0];
 
-                                    if (sourceMap[possibleFile]) {
+                                    // Find source URL/path from map
+                                    const sourcePath = sourceMap[possibleFile] || Object.values(sourceMap).find(s => s.includes(possibleFile));
+
+                                    if (sourcePath) {
+                                        const isUrl = sourcePath.startsWith('http');
                                         const safeName = possibleFile.replace(/'/g, "\\'");
+                                        const icon = isUrl ? 'fa-globe' : (possibleFile.includes('Table:') ? 'fa-table' : 'fa-file-alt');
                                         const clickHandler = `previewIndexSource('${safeName}', window.currentUsedDocs || [])`;
-                                        return `<span class="citation-link" onclick="${clickHandler}"><i class="fas fa-file-alt"></i> ${match}</span>`;
+
+                                        return `<span class="citation-link" onclick="${clickHandler}" title="View Index: ${possibleFile}"><i class="fas ${icon}"></i> ${possibleFile}</span>`;
                                     }
                                     return match;
                                 });
@@ -644,6 +651,7 @@
         const dbIngestBtn = document.getElementById('db-ingest-btn');
 
         let currentConfig = null;
+        let globalResourceMap = {}; // Track name -> full path/url
 
         providerSelect.onchange = async () => {
             const provider = providerSelect.value;
@@ -1126,6 +1134,13 @@
 
                         data[sec.key].forEach(item => {
                             totalItems++;
+
+                            // Map resource for preview/open logic
+                            // For websites we use the item as URL, for docs we assume name match
+                            if (sec.type === 'websites') globalResourceMap[item] = item;
+                            else if (sec.type === 'documents') globalResourceMap[item] = `${API_BASE}/files/${item}`;
+                            else if (sec.type === 'databases') globalResourceMap[`Table: ${item}`] = `Table: ${item}`;
+
                             const itemDiv = document.createElement('div');
                             itemDiv.className = 'res-item';
                             const name = item;
@@ -1266,8 +1281,11 @@
                             <div id="preview-content-loader" class="hint">Loading entire index for file...</div>
                             <div id="preview-chunks" class="content-chunks-container"></div>
                         </div>
-                        <div class="modal-footer">
-                            <button class="action-btn secondary-btn" onclick="document.getElementById('preview-modal').style.display='none'">Close</button>
+                        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 32px;">
+                            <div id="preview-actions-left">
+                                <!-- Dynamic Open button -->
+                            </div>
+                            <button class="action-btn secondary-btn" onclick="document.getElementById('preview-modal').style.display='none'">Close Window</button>
                         </div>
                     </div>
                 `;
@@ -1297,6 +1315,19 @@
             document.getElementById('preview-chunks').innerHTML = '';
             document.getElementById('preview-content-loader').style.display = 'block';
             document.getElementById('preview-search').value = '';
+
+            // Handle "Open Source" button
+            const leftActions = document.getElementById('preview-actions-left');
+            leftActions.innerHTML = '';
+            const sourceUrl = globalResourceMap[sourceName];
+            if (sourceUrl && sourceUrl.startsWith('http')) {
+                const openBtn = document.createElement('button');
+                openBtn.className = 'action-btn primary-btn';
+                openBtn.style.padding = '8px 20px';
+                openBtn.innerHTML = `<i class="fas fa-external-link-alt"></i> ${sourceUrl.includes('/files/') ? 'Open Document' : 'Open Website'}`;
+                openBtn.onclick = () => window.open(sourceUrl, '_blank');
+                leftActions.appendChild(openBtn);
+            }
 
             previewModal.style.display = 'flex';
 

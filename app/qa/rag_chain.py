@@ -32,7 +32,7 @@ STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
     STRICT COMPLIANCE RULES:
     1. Answer ONLY using the information from the Context.
     2. If the answer is not in the Context, say "I cannot answer this based on the provided documents" (translate to Arabic if question is Arabic).
-    3. CITE sources using [Document.pdf, Page X] or [Table: TableName].
+    3. **Inline Citations**: You MUST cite sources INLINE (directly after the relevant information) using [Document.pdf, Page X] or [Table: TableName]. DO NOT just list them at the end.
     4. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
     5. If the answer requires a long response, provide the FULL answer without cutting it short.
 
@@ -63,7 +63,7 @@ DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
     3. Structure your response with clear sections:
        - For Arabic questions: Start with "ملخص تحليلي" (Analytical Summary) followed by "تفاصيل رئيسية" (Key Details)
        - For English questions: Start with "Analytical Summary" followed by "Key Details"
-    4. CITE major points using [Source Name, Page X] or [Table: TableName].
+    4. **Inline Citations**: Cite major points INLINE (immediately after the fact or claim) using [Source Name, Page X] or [Table: TableName].
     5. If information is missing, clearly state what is unknown in the user's language.
     6. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
     7. If the answer requires a long response, provide the FULL answer without cutting it short. You have sufficient token capacity.
