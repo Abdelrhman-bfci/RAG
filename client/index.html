@@ -649,7 +649,7 @@
                 onMounted(async () => {
                     await loadCurrentConfig();
                     await fetchResources();
-                    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) isDark.value = true;
+                    isDark.value = false;
                     applyTheme();
                 });
 
