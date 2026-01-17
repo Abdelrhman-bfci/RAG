@@ -185,6 +185,18 @@
             border-color: #3b82f6;
             background: rgba(30, 58, 138, 0.2);
         }
+
+        /* Notifications */
+        .fade-enter-active,
+        .fade-leave-active {
+            transition: all 0.4s ease;
+        }
+
+        .fade-enter-from,
+        .fade-leave-to {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+        }
     </style>
 </head>
 
@@ -194,6 +206,16 @@
     <div id="app" class="flex h-full">
         <!-- Global Hidden File Input -->
         <input type="file" ref="fileInput" multiple hidden @change="handleFileUpload">
+
+        <!-- Global Notification -->
+        <transition name="fade">
+            <div v-if="notification.visible"
+                :class="['fixed top-6 right-6 z-[100] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 transform transition-all', notification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white']">
+                <i
+                    :class="['fas text-lg', notification.type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation']"></i>
+                <span class="font-medium">{{ notification.message }}</span>
+            </div>
+        </transition>
 
         <aside
             :class="['fixed z-20 inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 md:relative md:translate-x-0', sidebarOpen ? 'translate-x-0' : '-translate-x-full']">
@@ -378,16 +400,30 @@
                                 class="fas fa-cloud-upload-alt text-4xl text-gray-300 group-hover:text-asu-blue mb-4 transition-colors"></i>
                             <p class="text-gray-500 dark:text-gray-400">Click or drag & drop files here</p>
                         </div>
-                        <div v-if="pendingFiles.length > 0" class="mt-4 flex flex-wrap gap-2">
-                            <div v-for="(file, idx) in pendingFiles" @click="removeFile(idx)"
-                                class="bg-asu-blue/10 text-asu-blue px-3 py-1 rounded-full text-xs flex items-center gap-2 cursor-pointer hover:bg-red-100 hover:text-red-500 transition-colors">
-                                <i class="fas fa-file-pdf"></i> {{ file.name }} <i class="fas fa-times"></i>
+                        <div v-if="pendingFiles.length > 0 || isUploading" class="mt-4 space-y-4">
+                            <div v-if="pendingFiles.length > 0" class="flex flex-wrap gap-2">
+                                <div v-for="(file, idx) in pendingFiles" @click="removeFile(idx)"
+                                    class="bg-asu-blue/10 text-asu-blue px-3 py-1 rounded-full text-xs flex items-center gap-2 cursor-pointer hover:bg-red-100 hover:text-red-500 transition-colors">
+                                    <i class="fas fa-file-pdf"></i> {{ file.name }} <i class="fas fa-times"></i>
+                                </div>
+                            </div>
+                            <div v-if="isUploading" class="space-y-2">
+                                <div class="flex justify-between text-xs font-bold text-asu-blue">
+                                    <span>Uploading Resources...</span>
+                                    <span>{{ uploadProgress }}%</span>
+                                </div>
+                                <div class="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-asu-blue h-full transition-all duration-300"
+                                        :style="{ width: uploadProgress + '%' }"></div>
+                                </div>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-6">
-                            <button @click="uploadFiles" :disabled="pendingFiles.length === 0"
-                                class="bg-asu-blue text-white py-2 rounded-lg font-medium disabled:opacity-50">Upload
-                                Selected</button>
+                            <button @click="uploadFiles" :disabled="pendingFiles.length === 0 || isUploading"
+                                class="bg-asu-blue text-white py-2 rounded-lg font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                                <i v-if="isUploading" class="fas fa-spinner fa-spin"></i>
+                                {{ isUploading ? 'Uploading...' : 'Upload Selected' }}
+                            </button>
                             <button @click="startIngestion('quick')"
                                 class="bg-yellow-600 text-white py-2 rounded-lg font-medium">Quick Sync</button>
                             <button @click="startIngestion('fresh')"
@@ -447,8 +483,8 @@
                                     </div>
                                     <button @click="toggleAllTables"
                                         class="text-[10px] font-bold text-asu-blue hover:underline whitespace-nowrap">
-                                        {{ selectedTables.length === filteredTables.length ?
-                                        'Unselect All' : 'SelectAll' }}
+                                        {{ selectedTables.length === filteredTables.length ? 'Unselect All' : 'Select
+                                        All' }}
                                     </button>
                                 </div>
                                 <div
@@ -635,6 +671,9 @@
                 const pendingFiles = ref([]);
                 const chatMode = ref('normal');
                 const isRecording = ref(false);
+                const isUploading = ref(false);
+                const uploadProgress = ref(0);
+                const notification = ref({ visible: false, message: '', type: 'success' });
 
                 const tableSearch = ref("");
                 const filteredTables = computed(() => {
@@ -688,6 +727,11 @@
                     if (newView === 'view-manage') fetchResources();
                     if (newView === 'view-db' && dbSchemas.value.length === 0) fetchSchemas();
                 });
+
+                function showNotification(msg, type = 'success') {
+                    notification.value = { visible: true, message: msg, type };
+                    setTimeout(() => { notification.value.visible = false; }, 3000);
+                }
 
                 function applyTheme() {
                     if (isDark.value) document.documentElement.classList.add('dark');
@@ -771,7 +815,7 @@
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(updates)
                     });
-                    alert("Settings updated!");
+                    showNotification("Settings updated!");
                 }
 
                 async function fetchResources() {
@@ -857,16 +901,44 @@
                 }
 
                 function toggleRecording() {
-                    if (!recognition) { alert("Not supported"); return; }
+                    if (!recognition) { showNotification("Voice recognition not supported in this browser", "error"); return; }
                     if (isRecording.value) recognition.stop(); else recognition.start();
                 }
 
                 async function uploadFiles() {
-                    for (const file of pendingFiles.value) {
-                        const fd = new FormData(); fd.append('file', file);
-                        await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
+                    if (pendingFiles.value.length === 0) return;
+                    isUploading.value = true;
+                    uploadProgress.value = 0;
+
+                    const totalFiles = pendingFiles.value.length;
+                    for (let i = 0; i < totalFiles; i++) {
+                        const file = pendingFiles.value[i];
+                        const fd = new FormData();
+                        fd.append('file', file);
+
+                        await new Promise((resolve, reject) => {
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('POST', `${API_BASE}/upload`);
+                            xhr.upload.onprogress = (e) => {
+                                if (e.lengthComputable) {
+                                    const fileProgress = (e.loaded / e.total) * 100;
+                                    uploadProgress.value = Math.round(((i / totalFiles) * 100) + (fileProgress / totalFiles));
+                                }
+                            };
+                            xhr.onload = () => {
+                                if (xhr.status === 200) resolve();
+                                else reject(new Error('Upload failed'));
+                            };
+                            xhr.onerror = () => reject(new Error('Network error'));
+                            xhr.send(fd);
+                        });
                     }
-                    pendingFiles.value = []; alert("Uploaded!"); fetchResources();
+
+                    pendingFiles.value = [];
+                    isUploading.value = false;
+                    uploadProgress.value = 100;
+                    showNotification("Files uploaded successfully!");
+                    fetchResources();
                 }
 
                 async function startIngestion(mode) {
@@ -957,8 +1029,8 @@
                 return {
                     currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
                     settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
-                    previewSourceState,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText: (t) => { navigator.clipboard.writeText(t); alert("Copied!"); }
+                    previewSourceState, isUploading, uploadProgress, notification,
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText: (t) => { navigator.clipboard.writeText(t); showNotification("Copied to clipboard!"); }
                 };
             }
         }).mount('#app');
