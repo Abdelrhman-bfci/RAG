@@ -447,7 +447,8 @@
                                     </div>
                                     <button @click="toggleAllTables"
                                         class="text-[10px] font-bold text-asu-blue hover:underline whitespace-nowrap">
-                                        {{ selectedTables.length === filteredTables.length ? 'Unselect All' : 'Select All' }}
+                                        {{ selectedTables.length === filteredTables.length ? 'Unselect All' : 'Select
+                                        All' }}
                                     </button>
                                 </div>
                                 <div
@@ -913,12 +914,9 @@
                 }
 
                 async function startDbIngest() {
-                    const url = `${API_BASE}/ingest/db/stream`;
+                    const url = `${API_BASE}/ingest/db/stream?schema=${encodeURIComponent(selectedSchema.value)}&tables=${encodeURIComponent(selectedTables.value.join(','))}`;
                     ingestionLogs.value.db = [];
-                    const res = await fetch(url, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ schema: selectedSchema.value, tables: selectedTables.value })
-                    });
+                    const res = await fetch(url);
                     const reader = res.body.getReader();
                     const decoder = new TextDecoder();
                     while (true) {
