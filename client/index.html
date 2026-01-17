@@ -4,1774 +4,905 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASU Engineering RAG Assistant</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=12">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>ASU Engineering RAG AI</title>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        asu: {
+                            blue: '#1e3a8a',
+                            gold: '#ca8a04',
+                            light: '#f3f4f6',
+                            dark: '#111827'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        .chunk-used {
-            border: 2px solid var(--accent-color, #00A3E0) !important;
-            background-color: rgba(0, 163, 224, 0.05) !important;
-            position: relative;
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
         }
 
-        .chunk-used::after {
-            content: "Used in Answer";
-            position: absolute;
-            top: -10px;
-            right: 10px;
-            background: var(--accent-color, #00A3E0);
-            color: white;
-            font-size: 0.7rem;
-            padding: 2px 6px;
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
             border-radius: 4px;
-            font-weight: bold;
+        }
+
+        .dark ::-webkit-scrollbar-thumb {
+            background: #374151;
+        }
+
+        /* Markdown Styles */
+        .markdown-body p {
+            margin-bottom: 0.75em;
+        }
+
+        .markdown-body pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+        }
+
+        .markdown-body code {
+            background: #e2e8f0;
+            color: #d946ef;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.875em;
+        }
+
+        .dark .markdown-body code {
+            background: #374151;
+            color: #f0abfc;
+        }
+
+        .markdown-body ul {
+            list-style-type: disc;
+            margin-left: 1.5rem;
+        }
+
+        /* Enhanced Citations */
+        .citation-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            margin: 0 2px;
+            vertical-align: middle;
         }
 
         .citation-link {
             cursor: pointer;
-            color: var(--primary-color, #8C1D40);
-            text-decoration: underline;
-            font-weight: 500;
+            color: #1e3a8a;
+            background: #dbeafe;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.75rem;
+            border: 1px solid #bfdbfe;
+            transition: all 0.2s;
         }
 
-        .source-badge {
-            cursor: pointer;
+        .dark .citation-link {
+            color: #93c5fd;
+            background: #1e3a8a;
+            border-color: #1e40af;
+        }
+
+        .citation-link:hover {
+            background: #bfdbfe;
+            border-color: #3b82f6;
+        }
+
+        .citation-direct-btn {
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #f3f4f6;
+            color: #6b7280;
+            font-size: 0.7rem;
+            border: 1px solid #e5e7eb;
+            transition: all 0.2s;
+        }
+
+        .dark .citation-direct-btn {
+            background: #374151;
+            color: #d1d5db;
+            border-color: #4b5563;
+        }
+
+        .citation-direct-btn:hover {
+            background: #e5e7eb;
+            color: #1e3a8a;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            padding: 1rem;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 1rem;
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .dark .modal-content {
+            background: #1f2937;
+            border: 1px solid #374151;
+        }
+
+        .chunk-card {
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            margin-bottom: 0.75rem;
+            background: #f9fafb;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .dark .chunk-card {
+            background: #111827;
+            border-color: #374151;
+        }
+
+        .chunk-used {
+            border: 2px solid #1e3a8a;
+            background: #eff6ffef;
+        }
+
+        .dark .chunk-used {
+            border-color: #3b82f6;
+            background: rgba(30, 58, 138, 0.2);
         }
     </style>
 </head>
 
-<body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="icon">🤖</div>
-                <h1>ASU <span>RAG</span></h1>
-                <button id="close-sidebar" class="mobile-only-btn">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
+<body
+    class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 h-screen overflow-hidden transition-colors duration-200">
 
-            <nav class="nav-links">
-                <div class="nav-item active" onclick="switchView('view-chat', this)">
-                    <i class="fas fa-comment-dots"></i>
-                    <span>Chat Assistant</span>
-                </div>
-                <div class="nav-item" onclick="switchView('view-pdf', this)">
-                    <i class="fas fa-file-alt"></i>
-                    <span>Documents</span>
-                </div>
-                <div class="nav-item" onclick="switchView('view-web', this)">
-                    <i class="fas fa-globe"></i>
-                    <span>Web Content</span>
-                </div>
-                <div class="nav-item" onclick="switchView('view-db', this)">
-                    <i class="fas fa-database"></i>
-                    <span>SQL Databases</span>
-                </div>
-                <div class="nav-item" onclick="switchView('view-manage', this)">
-                    <i class="fas fa-tasks"></i>
-                    <span>Management</span>
-                </div>
-                <div class="nav-item" onclick="switchView('view-settings', this)">
-                    <i class="fas fa-cog"></i>
-                    <span>Settings</span>
-                </div>
-            </nav>
+    <div id="app" class="flex h-full">
 
-            <div class="sidebar-footer">
-                <div class="disclaimer">
-                    Powered by ASU Engineering
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Chat Area -->
-        <main class="main-content">
-            <header>
-                <div class="status-indicator">
-                    <button id="menu-toggle" class="mobile-only-btn">
-                        <i class="fas fa-bars"></i>
-                    </button>
-                    <span class="status-dot"></span>
-                    <span class="status-text">Connected</span>
-                </div>
-                <div class="header-actions">
-                    <button id="db-btn" class="icon-btn" title="Database Management">
-                        <i class="fas fa-server"></i>
-                    </button>
-                    <button id="settings-btn" class="icon-btn" title="Settings">
-                        <i class="fas fa-sliders-h"></i>
-                    </button>
-                </div>
-            </header>
-
-            <!-- View: Chat Assistant -->
-            <div id="view-chat" class="view-section active">
-                <div class="chat-container" id="chat-container">
-                    <div class="welcome-message">
-                        <h2>Hello, <span>How can I help you?</span></h2>
-                        <p>Access your documents through natural language. Ask specific questions or explore topics.</p>
-                        <div class="suggested-queries">
-                            <button onclick="setQuery('What are the available departments?')">Departments</button>
-                            <button onclick="setQuery('Tell me about the bylaws.')">Bylaws</button>
-                            <button onclick="setQuery('How to apply for graduation?')">Graduation</button>
-                        </div>
+        <aside
+            :class="['fixed z-20 inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 md:relative md:translate-x-0', sidebarOpen ? 'translate-x-0' : '-translate-x-full']">
+            <div class="flex flex-col h-full">
+                <div class="p-4 flex items-center gap-3 border-b border-gray-200 dark:border-gray-700">
+                    <img src="/client/logo.png" alt="ASU Logo" class="h-10 w-10 object-contain">
+                    <div>
+                        <h1 class="font-bold text-sm tracking-wide text-asu-blue dark:text-white">ASU ENG AI</h1>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">RAG Knowledge System</span>
                     </div>
                 </div>
 
-                <div class="input-area-wrapper">
-                    <div class="input-container">
-                        <div class="mode-dropdown-container">
-                            <select id="chat-mode" class="mode-select-compact">
-                                <option value="normal">🔘 Normal</option>
-                                <option value="deep">🧠 Deep Thinking</option>
-                            </select>
-                        </div>
-                        <textarea id="user-input" placeholder="Message RAG Assistant..." rows="1"></textarea>
+                <nav class="flex-1 overflow-y-auto p-4 space-y-2">
+                    <div @click="currentView = 'view-chat'"
+                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-chat' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                        <i class="fa-solid fa-comment-dots"></i>
+                        <span class="font-medium">Chat Assistant</span>
+                    </div>
+                    <div @click="currentView = 'view-pdf'"
+                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-pdf' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                        <i class="fa-solid fa-file-alt"></i>
+                        <span class="font-medium">Documents</span>
+                    </div>
+                    <div @click="currentView = 'view-web'"
+                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-web' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                        <i class="fa-solid fa-globe"></i>
+                        <span class="font-medium">Web Content</span>
+                    </div>
+                    <div @click="currentView = 'view-db'"
+                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-db' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                        <i class="fa-solid fa-database"></i>
+                        <span class="font-medium">SQL Databases</span>
+                    </div>
+                    <div @click="currentView = 'view-manage'"
+                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-manage' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                        <i class="fa-solid fa-tasks"></i>
+                        <span class="font-medium">Management</span>
+                    </div>
+                    <div @click="currentView = 'view-settings'"
+                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-settings' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                        <i class="fa-solid fa-cog"></i>
+                        <span class="font-medium">Settings</span>
+                    </div>
+                </nav>
 
-                        <div class="voice-controls"
-                            style="margin-right: 8px; display: flex; align-items: center; gap: 5px;">
-                            <!-- Language selector removed -->
-                            <button id="mic-btn" class="icon-btn" title="Speak" style="width: 32px; height: 32px;">
-                                <i class="fas fa-microphone"></i>
-                            </button>
-                        </div>
-
-                        <button id="send-btn">
-                            <i class="fas fa-arrow-up"></i>
+                <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Appearance</span>
+                        <button @click="toggleTheme"
+                            class="w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-gray-800 shadow-sm text-gray-500 hover:text-asu-blue transition-colors">
+                            <i v-if="isDark" class="fa-solid fa-sun text-yellow-500"></i>
+                            <i v-else class="fa-solid fa-moon text-blue-500"></i>
                         </button>
                     </div>
                 </div>
             </div>
+        </aside>
 
-            <!-- View: PDF Documents -->
-            <div id="view-pdf" class="view-section">
-                <div class="section-container">
-                    <div class="db-section">
-                        <h3><i class="fas fa-file-alt"></i> Document Management</h3>
-                        <div class="upload-zone" id="upload-zone">
-                            <input type="file" id="file-input" accept=".pdf,.docx,.txt,.csv,.md,.xlsx,.xls" hidden>
-                            <p><i class="fas fa-cloud-upload-alt"></i> Drag & Drop files here or <a href="#"
-                                    id="browse-btn">Browse</a></p>
-                            <span id="file-name-display"></span>
+        <main class="flex-1 flex flex-col h-full relative">
+
+            <div
+                class="md:hidden p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-white dark:bg-gray-800">
+                <button @click="sidebarOpen = !sidebarOpen" class="text-gray-600 dark:text-gray-300">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+                <span class="font-bold">ASU Chat</span>
+                <div class="w-6"></div>
+            </div>
+
+            <!-- View: Chat Assistant -->
+            <div v-if="currentView === 'view-chat'" class="flex-1 flex flex-col h-full overflow-hidden">
+                <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+                    <div v-if="messages.length === 0"
+                        class="h-full flex flex-col items-center justify-center text-center opacity-60">
+                        <img src="/client/logo.png" class="h-24 w-24 mb-6 opacity-80 grayscale">
+                        <h2 class="text-2xl font-bold mb-2">How can I help you today?</h2>
+                        <p class="max-w-md text-sm">Ask about engineering concepts, analyze files, or search across your
+                            knowledge base.</p>
+                    </div>
+
+                    <div v-for="(msg, index) in messages" :key="index" class="flex gap-4 max-w-4xl mx-auto"
+                        :class="msg.role === 'user' ? 'flex-row-reverse' : ''">
+                        <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm"
+                            :class="msg.role === 'user' ? 'bg-gray-500' : 'bg-asu-blue'">
+                            <i v-if="msg.role === 'user'" class="fa-solid fa-user"></i>
+                            <img v-else src="/client/logo.png"
+                                class="w-full h-full object-cover rounded-full bg-white p-0.5">
                         </div>
-                        <p class="hint" style="text-align: center; margin-top: 8px;">
-                            Supported formats: <strong>PDF, DOCX, TXT, MD, CSV, XLSX, XLS</strong>
-                        </p>
-                        <div class="pdf-controls-row">
-                            <button id="upload-btn" class="action-btn" disabled>Upload File</button>
-                            <button id="stream-btn" class="action-btn warning-btn">
-                                <i class="fas fa-sync"></i> Quick Sync
-                            </button>
-                            <button id="fresh-stream-btn" class="action-btn danger-btn">
-                                <i class="fas fa-hammer"></i> Fresh Build
-                            </button>
+
+                        <div class="group relative max-w-[85%]">
+                            <div class="p-4 rounded-2xl shadow-sm text-sm leading-relaxed"
+                                :class="msg.role === 'user' ? 'bg-asu-blue text-white rounded-tr-none' : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-tl-none'">
+                                <div v-if="msg.attachments && msg.attachments.length > 0"
+                                    class="mb-3 flex flex-wrap gap-2">
+                                    <div v-for="att in msg.attachments"
+                                        class="bg-black/10 px-2 py-1 rounded text-xs flex items-center gap-1">
+                                        <i class="fa-solid fa-paperclip"></i> {{ att }}
+                                    </div>
+                                </div>
+                                <div v-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)"
+                                    class="markdown-body"></div>
+                                <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
+                            </div>
+                            <div v-if="msg.metadata" class="mt-2 flex flex-wrap gap-2 opacity-80">
+                                <span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-[10px]"><i
+                                        class="fas fa-microchip mr-1"></i>{{ msg.metadata.model }}</span>
+                                <span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-[10px]"><i
+                                        class="fas fa-clock mr-1"></i>{{ msg.metadata.performance.total }}</span>
+                                <span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-[10px]"><i
+                                        class="fas fa-brain mr-1"></i>{{ msg.metadata.tokens }} tokens</span>
+                                <button v-if="index === messages.length - 1 && msg.role === 'assistant'"
+                                    @click="sendMessage(true)" class="text-[10px] text-asu-blue hover:underline"><i
+                                        class="fas fa-play mr-1"></i>Continue</button>
+                            </div>
+                            <div class="absolute -bottom-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                :class="msg.role === 'user' ? 'right-0' : 'left-0'">
+                                <button @click="copyText(msg.content)"
+                                    class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i
+                                        class="fa-regular fa-copy"></i> Copy</button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="db-section">
-                        <h3><i class="fas fa-terminal"></i> Ingestion Logs</h3>
-                        <div id="pdf-console" class="mini-terminal">
-                            <span class="log-line system">> Document synchronization updates appear here.</span>
+                    <div v-if="isStreaming" class="flex gap-4 max-w-4xl mx-auto">
+                        <div class="w-8 h-8 rounded-full bg-asu-blue flex-shrink-0 flex items-center justify-center">
+                            <img src="/client/logo.png" class="w-full h-full object-cover rounded-full bg-white p-0.5">
                         </div>
+                        <div
+                            class="bg-white dark:bg-gray-800 p-4 rounded-2xl rounded-tl-none border border-gray-100 dark:border-gray-700">
+                            <div class="flex gap-1">
+                                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-75"></div>
+                                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                    <div class="max-w-4xl mx-auto relative">
+                        <div v-if="pendingFiles.length > 0" class="flex gap-2 mb-2 overflow-x-auto pb-2">
+                            <div v-for="(file, idx) in pendingFiles" :key="idx"
+                                class="relative bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-md text-xs flex items-center gap-2">
+                                <span class="truncate max-w-[100px]">{{ file.name }}</span>
+                                <button @click="removeFile(idx)" class="text-red-500 hover:text-red-700"><i
+                                        class="fa-solid fa-times"></i></button>
+                            </div>
+                        </div>
+                        <div
+                            class="flex items-end gap-2 bg-gray-100 dark:bg-gray-900 p-2 rounded-xl border border-transparent focus-within:border-asu-blue transition-colors">
+                            <select v-model="chatMode"
+                                class="bg-transparent text-xs font-bold text-asu-blue dark:text-gray-300 border-none focus:ring-0 cursor-pointer">
+                                <option value="normal">🔘 Normal</option>
+                                <option value="deep">🧠 Deep</option>
+                            </select>
+                            <input type="file" ref="fileInput" multiple hidden @change="handleFileUpload">
+                            <textarea v-model="inputMessage" @keydown.enter.prevent="sendMessage(false)"
+                                placeholder="Message ASU RAG Assistant..." rows="1"
+                                class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 text-sm md:text-base custom-scrollbar"></textarea>
+                            <button @click="toggleRecording"
+                                :class="isRecording ? 'text-red-500 animate-pulse' : 'text-gray-500'"
+                                class="p-2 hover:text-asu-blue transition-colors rounded-lg"><i
+                                    class="fa-solid fa-microphone text-lg"></i></button>
+                            <button @click="sendMessage(false)" :disabled="!inputMessage && pendingFiles.length === 0"
+                                class="w-10 h-10 flex items-center justify-center bg-asu-blue text-white rounded-lg shadow-sm hover:bg-blue-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all"><i
+                                    class="fa-solid fa-arrow-up text-lg"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Documents -->
+            <div v-if="currentView === 'view-pdf'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div
+                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i
+                                class="fas fa-file-alt text-asu-blue"></i> Document Management</h3>
+                        <div @click="$refs.fileInput.click()"
+                            class="border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-asu-blue transition-colors group">
+                            <i
+                                class="fas fa-cloud-upload-alt text-4xl text-gray-300 group-hover:text-asu-blue mb-4 transition-colors"></i>
+                            <p class="text-gray-500 dark:text-gray-400">Click or drag & drop files here</p>
+                        </div>
+                        <div v-if="pendingFiles.length > 0" class="mt-4 flex flex-wrap gap-2">
+                            <div v-for="(file, idx) in pendingFiles" @click="removeFile(idx)"
+                                class="bg-asu-blue/10 text-asu-blue px-3 py-1 rounded-full text-xs flex items-center gap-2 cursor-pointer hover:bg-red-100 hover:text-red-500 transition-colors">
+                                <i class="fas fa-file-pdf"></i> {{ file.name }} <i class="fas fa-times"></i>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-6">
+                            <button @click="uploadFiles" :disabled="pendingFiles.length === 0"
+                                class="bg-asu-blue text-white py-2 rounded-lg font-medium disabled:opacity-50">Upload
+                                Selected</button>
+                            <button @click="startIngestion('quick')"
+                                class="bg-yellow-600 text-white py-2 rounded-lg font-medium">Quick Sync</button>
+                            <button @click="startIngestion('fresh')"
+                                class="bg-red-600 text-white py-2 rounded-lg font-medium">Fresh Build</button>
+                        </div>
+                    </div>
+                    <div
+                        class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
+                        <div v-for="log in ingestionLogs.pdf" class="py-0.5">> {{ log }}</div>
+                        <div v-if="ingestionLogs.pdf.length === 0">> Document synchronization updates appear here.</div>
                     </div>
                 </div>
             </div>
 
             <!-- View: Web Content -->
-            <div id="view-web" class="view-section">
-                <div class="section-container">
-                    <div class="db-section">
-                        <h3><i class="fas fa-globe"></i> Web Ingestion</h3>
-                        <p class="section-desc">Crawl website content to expand knowledge.</p>
-                        <div class="url-input-group">
-                            <input type="text" id="web-url-input" placeholder="https://example.com/about">
-                            <button id="web-ingest-btn" class="action-btn">
-                                <i class="fas fa-spider"></i> Crawl & Ingest
-                            </button>
+            <div v-if="currentView === 'view-web'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div
+                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i
+                                class="fas fa-globe text-asu-blue"></i> Web Ingestion</h3>
+                        <div class="flex gap-2">
+                            <input v-model="webUrl" type="text" placeholder="https://example.com/about"
+                                class="flex-1 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm">
+                            <button @click="startWebIngest"
+                                class="bg-asu-blue text-white px-6 rounded-lg font-medium hover:bg-blue-900 transition-colors">Crawl
+                                & Ingest</button>
                         </div>
                     </div>
-
-                    <div class="db-section">
-                        <h3><i class="fas fa-terminal"></i> Crawler Logs</h3>
-                        <div id="web-console" class="mini-terminal">
-                            <span class="log-line system">> Web crawling progress appear here.</span>
-                        </div>
+                    <div
+                        class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
+                        <div v-for="log in ingestionLogs.web" class="py-0.5">> {{ log }}</div>
                     </div>
                 </div>
             </div>
 
-            <!-- View: SQL Databases -->
-            <div id="view-db" class="view-section">
-                <div class="section-container">
-                    <div class="db-section">
-                        <h3><i class="fas fa-database"></i> SQL Database Ingestion</h3>
-                        <div class="db-resource-group">
-                            <div class="field-row">
-                                <label>Schema:</label>
-                                <select id="db-schema-select">
-                                    <option value="">Default / Loading...</option>
-                                </select>
-                            </div>
-                            <div class="field-row">
-                                <label>Tables:</label>
-                                <div id="db-tables-container">
-                                    <p class="hint">Select schema to load tables...</p>
+            <!-- View: SQL DB -->
+            <div v-if="currentView === 'view-db'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div
+                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i
+                                class="fas fa-database text-asu-blue"></i> Database Ingestion</h3>
+                        <div class="space-y-4">
+                            <select v-model="selectedSchema" @change="fetchTables"
+                                class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm">
+                                <option value="">Choose a schema...</option>
+                                <option v-for="s in dbSchemas" :value="s">{{ s }}</option>
+                            </select>
+                            <div v-if="dbTables.length > 0" class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                <div v-for="t in dbTables"
+                                    class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-700">
+                                    <input type="checkbox" :value="t" v-model="selectedTables"
+                                        class="rounded text-asu-blue">
+                                    <span class="text-xs truncate">{{ t }}</span>
                                 </div>
                             </div>
-                            <button id="db-ingest-btn" class="action-btn">
-                                <i class="fas fa-database"></i> Ingest Selected Tables
-                            </button>
+                            <button @click="startDbIngest" :disabled="!selectedSchema || selectedTables.length === 0"
+                                class="w-full bg-asu-blue text-white py-3 rounded-xl font-bold hover:bg-blue-900 transition-all disabled:opacity-30">Ingest
+                                Selected Tables</button>
                         </div>
                     </div>
-                    <div class="db-section">
-                        <h3><i class="fas fa-terminal"></i> Database Ingestion Logs</h3>
-                        <div id="db-console" class="mini-terminal">
-                            <span class="log-line system">> DB table ingestion updates appear here.</span>
-                        </div>
+                    <div
+                        class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
+                        <div v-for="log in ingestionLogs.db" class="py-0.5">> {{ log }}</div>
                     </div>
                 </div>
             </div>
 
             <!-- View: Management -->
-            <div id="view-manage" class="view-section">
-                <div class="section-container">
-                    <div class="db-section">
-                        <h3><i class="fas fa-tasks"></i> Managed Resources</h3>
-                        <div id="resource-list-container" class="resource-management-list">
-                            <p class="hint">Loading managed resources...</p>
+            <div v-if="currentView === 'view-manage'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div
+                            class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                            <span class="text-xs text-gray-400 uppercase font-bold">Total Documents</span>
+                            <div class="text-2xl font-bold text-asu-blue">{{ indexStats.total_documents }}</div>
                         </div>
+                        <div
+                            class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                            <span class="text-xs text-gray-400 uppercase font-bold">Total Chunks</span>
+                            <div class="text-2xl font-bold text-asu-blue">{{ indexStats.total_chunks }}</div>
+                        </div>
+                        <button @click="syncIndex"
+                            class="bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl font-bold text-sm transition-all"><i
+                                class="fas fa-sync-alt mr-2"></i>Sync Missing</button>
                     </div>
 
-                    <div class="db-section">
-                        <h3><i class="fas fa-heartbeat"></i> Index Health</h3>
-                        <div class="health-container">
-                            <div class="health-header">
-                                <div class="health-stat">
-                                    <span class="label">Total Documents</span>
-                                    <span class="value" id="health-total-docs">-</span>
+                    <div
+                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-lg font-bold mb-4">Managed Resources</h3>
+                        <div class="space-y-4">
+                            <div v-for="(items, category) in resourceList" :key="category">
+                                <h4 class="text-xs font-bold text-gray-400 uppercase mb-2">{{ category }}</h4>
+                                <div class="space-y-1">
+                                    <div v-for="item in items" @click="openPreview(item)"
+                                        class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-xl group cursor-pointer hover:border-asu-blue border border-transparent">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas"
+                                                :class="category === 'documents' ? 'fa-file-pdf' : (category === 'websites' ? 'fa-globe' : 'fa-table')"></i>
+                                            <span class="text-sm font-medium">{{ item }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span
+                                                class="text-[10px] bg-asu-blue/10 text-asu-blue px-2 py-0.5 rounded-full">{{
+                                                indexStats.sources[item] || 0 }} chunks</span>
+                                            <button @click.stop="deleteResource(category, item)"
+                                                class="text-gray-400 hover:text-red-500 p-1"><i
+                                                    class="fa-solid fa-trash-can"></i></button>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="health-stat">
-                                    <span class="label">Total Chunks</span>
-                                    <span class="value" id="health-total-chunks">-</span>
-                                </div>
-                                <button id="sync-btn" class="action-btn warning-btn">
-                                    <i class="fas fa-sync-alt"></i> Sync Missing
-                                </button>
-                            </div>
-
-                            <div class="health-list-header">
-                                <span>Source Name</span>
-                                <span>Status</span>
-                                <span>Chunks</span>
-                            </div>
-                            <div id="health-list" class="health-list">
-                                <!-- Health items -->
-                                <p class="hint">Checking index...</p>
                             </div>
                         </div>
                     </div>
-
-                    <div class="db-section">
-                        <h3><i class="fas fa-exclamation-triangle"></i> System Operations</h3>
-                        <div class="danger-zone">
-                            <button id="reset-all-btn" class="action-btn delete-btn-full">
-                                <i class="fas fa-trash-alt"></i> Wipe All Data & Reset
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="db-section">
-                        <h3><i class="fas fa-terminal"></i> System Logs</h3>
-                        <div id="console-output" class="terminal-window">
-                            <span class="log-line system">> View live ingestion logs here.</span>
-                        </div>
+                    <div
+                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-red-100 dark:border-red-900/30">
+                        <h3 class="text-lg font-bold mb-4 text-red-600">Danger Zone</h3>
+                        <button @click="wipeAllData"
+                            class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold transition-all">Wipe
+                            All Data & Reset System</button>
                     </div>
                 </div>
             </div>
 
             <!-- View: Settings -->
-            <div id="view-settings" class="view-section">
-                <div class="section-container">
-                    <div class="db-section">
-                        <h3><i class="fas fa-cog"></i> Global Settings</h3>
-
-                        <div class="setting-group">
-                            <label for="provider-select">LLM Provider</label>
-                            <select id="provider-select">
-                                <option value="openai">OpenAI</option>
-                                <option value="gemini">Google Gemini</option>
-                                <option value="ollama">Ollama (Local)</option>
-                                <option value="vllm">vLLM (Local)</option>
-                            </select>
-                        </div>
-
-                        <div class="setting-group">
-                            <label for="embedding-provider-select">Embedding Provider</label>
-                            <select id="embedding-provider-select">
-                                <option value="openai">OpenAI</option>
-                                <option value="ollama">Ollama (Local)</option>
-                                <option value="vllm">vLLM (Local)</option>
-                            </select>
-                        </div>
-
-                        <div id="local-settings" class="provider-settings-group" style="display: none;">
-                            <div class="setting-group" id="vllm-url-group" style="display: none;">
-                                <label for="vllm-url">Provider Base URL (vLLM)</label>
-                                <input type="text" id="vllm-url" placeholder="http://localhost:9090/v1">
-                            </div>
-                            <div class="setting-group" id="llm-model-group">
-                                <label for="model-select">LLM Model</label>
-                                <select id="model-select">
-                                    <option value="" disabled selected>Select a model...</option>
+            <div v-if="currentView === 'view-settings'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+                <div class="max-w-2xl mx-auto">
+                    <div
+                        class="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-2xl font-bold mb-6">System Configuration</h3>
+                        <div class="space-y-6">
+                            <div>
+                                <label class="block text-sm font-bold mb-2">LLM Provider</label>
+                                <select v-model="settings.provider" @change="loadModels('llm')"
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                                    <option value="openai">OpenAI</option>
+                                    <option value="gemini">Google Gemini</option>
+                                    <option value="ollama">Ollama (Local)</option>
+                                    <option value="vllm">vLLM (Local)</option>
                                 </select>
                             </div>
-                            <div class="setting-group" id="embedding-model-group">
-                                <label for="embedding-model-select">Embedding Model</label>
-                                <select id="embedding-model-select">
-                                    <option value="" disabled selected>Select a model...</option>
+                            <div v-if="settings.provider === 'openai' || settings.provider === 'gemini'"
+                                class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-bold mb-2">API Key</label>
+                                    <input
+                                        v-model="settings.provider === 'openai' ? settings.openaiKey : settings.geminiKey"
+                                        type="password" placeholder="Key..."
+                                        class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold mb-2">LLM Model</label>
+                                <select v-model="settings.llmModel"
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                                    <option v-for="m in modelLists.llm" :value="m">{{ m }}</option>
                                 </select>
                             </div>
-                            <p id="model-hint" class="setting-hint"></p>
+                            <div>
+                                <label class="block text-sm font-bold mb-2">Embedding Provider</label>
+                                <select v-model="settings.embedProvider" @change="loadModels('embed')"
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                                    <option value="openai">OpenAI</option>
+                                    <option value="ollama">Ollama (Local)</option>
+                                    <option value="vllm">vLLM (Local)</option>
+                                </select>
+                            </div>
+                            <button @click="saveSettings"
+                                class="w-full bg-asu-blue text-white py-4 rounded-xl font-bold shadow-lg transition-all text-lg">Save
+                                Configuration</button>
                         </div>
-
-                        <div id="cloud-settings" class="provider-settings-group" style="display: none;">
-                            <div class="setting-group" id="openai-key-group">
-                                <label for="openai-api-key">OpenAI API Key</label>
-                                <input type="password" id="openai-api-key" placeholder="sk-...">
-                            </div>
-                            <div class="setting-group" id="openai-url-group">
-                                <label for="openai-base-url">OpenAI Base URL</label>
-                                <input type="text" id="openai-base-url" placeholder="https://api.openai.com/v1">
-                            </div>
-                            <div class="setting-group" id="gemini-key-group">
-                                <label for="gemini-api-key">Gemini API Key</label>
-                                <input type="password" id="gemini-api-key" placeholder="AIza...">
-                            </div>
-                        </div>
-
-                        <button id="save-settings-btn" class="primary-btn" style="margin-top: 20px;">Save
-                            Changes</button>
                     </div>
                 </div>
             </div>
+
+            <!-- Preview Modal -->
+            <div v-if="previewSourceState.visible" class="modal-overlay">
+                <div class="modal-content flex flex-col">
+                    <div
+                        class="p-6 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                        <div>
+                            <h3 class="text-lg font-bold flex items-center gap-2"><i
+                                    class="fas fa-database text-asu-blue"></i> {{ previewSourceState.name }}</h3>
+                            <p class="text-xs text-gray-400">{{ previewSourceState.chunks.length }} chunks found in
+                                index</p>
+                        </div>
+                        <button @click="previewSourceState.visible = false"
+                            class="text-gray-400 hover:text-red-500 transition-colors"><i
+                                class="fa-solid fa-times text-xl"></i></button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6 space-y-4">
+                        <div v-for="(chunk, idx) in previewSourceState.chunks" :key="idx"
+                            :class="['chunk-card p-4 rounded-xl border transition-all', chunk.used ? 'chunk-used border-asu-blue bg-blue-50 dark:bg-blue-900/10' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800']">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-[10px] font-bold text-gray-400 uppercase">CHUNK #{{ idx + 1 }}</span>
+                                <span v-if="chunk.page"
+                                    class="text-[10px] bg-asu-blue/10 text-asu-blue px-2 py-0.5 rounded-full">PAGE {{
+                                    chunk.page }}</span>
+                                <span v-if="chunk.used"
+                                    class="text-[10px] bg-asu-blue text-white px-2 py-0.5 rounded-full">USED IN
+                                    ANSWER</span>
+                            </div>
+                            <div class="text-sm dark:text-gray-300">{{ chunk.content }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </main>
-
-    </div>
-
-    <div id="toast" class="toast">
-        <i class="fas fa-check-circle"></i>
-        <span id="toast-message">Settings saved successfully</span>
     </div>
 
     <script>
-        const chatContainer = document.getElementById('chat-container');
-        const userInput = document.getElementById('user-input');
-        const sendBtn = document.getElementById('send-btn');
-        // Dynamically get the API base URL from the current window location
+        const { createApp, ref, onMounted, nextTick, watch } = Vue;
         const API_BASE = window.location.origin;
 
-        function setQuery(query) {
-            userInput.value = query;
-            sendMessage();
-        }
+        createApp({
+            setup() {
+                const currentView = ref('view-chat');
+                const messages = ref([]);
+                const inputMessage = ref("");
+                const sidebarOpen = ref(false);
+                const isDark = ref(false);
+                const isStreaming = ref(false);
+                const messagesContainer = ref(null);
+                const fileInput = ref(null);
+                const pendingFiles = ref([]);
+                const chatMode = ref('normal');
+                const isRecording = ref(false);
 
-        function switchView(viewId, navItem) {
-            // Hide all views
-            document.querySelectorAll('.view-section').forEach(view => {
-                view.classList.remove('active');
-            });
-            // Show selected view
-            const activeView = document.getElementById(viewId);
-            if (activeView) activeView.classList.add('active');
+                const settings = ref({ provider: 'openai', embedProvider: 'openai', openaiKey: '', geminiKey: '', llmModel: '', embedModel: '' });
+                const modelLists = ref({ llm: [], embed: [] });
+                const resourceList = ref({ documents: [], websites: [], databases: [] });
+                const indexStats = ref({ total_documents: 0, total_chunks: 0, sources: {} });
+                const ingestionLogs = ref({ pdf: [], web: [], db: [] });
 
-            // Update sidebar active state
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            if (navItem) navItem.classList.add('active');
+                const webUrl = ref("");
+                const dbSchemas = ref([]);
+                const dbTables = ref([]);
+                const selectedSchema = ref("");
+                const selectedTables = ref([]);
+                const sourceMap = ref({});
+                const currentUsedDocs = ref([]);
+                const previewSourceState = ref({ visible: false, name: '', chunks: [] });
 
-            // Trigger data fetching if needed
-            if (viewId === 'view-manage') loadResources();
-            if (viewId === 'view-db') {
-                loadSchemas();
-                // loadTables(""); // Wait for user selection
-            }
-
-            // Close sidebar on mobile after selection
-            if (window.innerWidth <= 768) {
-                document.querySelector('.sidebar').classList.remove('active');
-            }
-
-            // Log view change
-            console.log(`Switched to view: ${viewId}`);
-        }
-
-        // Helper function to detect text direction based on language
-        function detectLanguageDirection(text) {
-            // Check if text contains Arabic characters
-            const arabicPattern = /[\u0600-\u06FF]/;
-            return arabicPattern.test(text) ? 'rtl' : 'ltr';
-        }
-
-        function addMessage(content, isUser = false) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
-
-            const avatar = document.createElement('div');
-            avatar.className = 'avatar';
-            avatar.innerText = isUser ? '👤' : 'AI';
-
-            const textDiv = document.createElement('div');
-            textDiv.className = 'text';
-            textDiv.innerText = content;
-
-            // Auto-detect and set text direction
-            if (content) {
-                textDiv.dir = detectLanguageDirection(content);
-            }
-
-            msgDiv.appendChild(avatar);
-            msgDiv.appendChild(textDiv);
-            chatContainer.appendChild(msgDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-            return textDiv;
-        }
-
-        async function sendMessage(isContinuation = false) {
-            const question = isContinuation ? lastUserQuestion : userInput.value.trim();
-            const chatMode = document.getElementById('chat-mode').value;
-            const isDeepThinking = chatMode === 'deep';
-
-            if (!question) return;
-
-            if (!isContinuation) {
-                lastUserQuestion = question;
-                userInput.value = '';
-                userInput.dir = 'ltr'; // Reset to LTR after sending
-                addMessage(question, true);
-            } else {
-                // For continuation, add a system-like hint to the UI or just start bot message
-                addMessage("Continuing response...", true);
-            }
-
-            const botMsgDiv = addMessage('', false);
-            // Create separate containers for content and metadata
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'message-content';
-            contentDiv.innerHTML = '<div class="typing">AI Assistant is thinking...</div>';
-
-            const metaContainerDiv = document.createElement('div');
-            metaContainerDiv.className = 'message-meta-container';
-
-            botMsgDiv.innerHTML = '';
-            botMsgDiv.appendChild(contentDiv);
-            botMsgDiv.appendChild(metaContainerDiv);
-
-            try {
-                const url = isContinuation
-                    ? `${API_BASE}/ask/stream?question=${encodeURIComponent(question)}&deep_thinking=${isDeepThinking}&is_continuation=true&last_answer=${encodeURIComponent(lastBotResponse)}`
-                    : `${API_BASE}/ask/stream?question=${encodeURIComponent(question)}&deep_thinking=${isDeepThinking}`;
-
-                const response = await fetch(url);
-
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
+                let recognition = null;
+                if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+                    const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    recognition = new Speech();
+                    recognition.onstart = () => { isRecording.value = true; };
+                    recognition.onend = () => { isRecording.value = false; };
+                    recognition.onresult = (e) => {
+                        const transcript = e.results[0][0].transcript;
+                        inputMessage.value = inputMessage.value ? `${inputMessage.value} ${transcript}` : transcript;
+                    };
                 }
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let accumulatedAnswer = '';
-                let sourceMap = {};
-                let usedDocs = [];
-
-                // Clear thinking state
-                contentDiv.innerHTML = '';
-
-                let buffer = '';
-
-                // Helper to process a single JSON line
-                const processLine = (line) => {
-                    if (!line.trim()) return;
-                    try {
-                        const data = JSON.parse(line);
-                        if (data.type === 'sources') {
-                            data.sources.forEach(src => {
-                                const name = src.startsWith('http') ? src : src.split('/').pop();
-                                sourceMap[name] = src;
-                                globalResourceMap[name] = src; // Sync to global
-                            });
-                        } else if (data.type === 'chunk') {
-                            accumulatedAnswer += data.content;
-
-                            const renderer = new marked.Renderer();
-                            renderer.text = function (token) {
-                                const text = typeof token === 'string' ? token : token.text;
-                                if (!text) return '';
-
-                                return text.replace(/\[([^\]]+)\]/g, (match, content) => {
-                                    // Clean the content: Remove labels, normalize delimiters
-                                    let cleanContent = content
-                                        .replace(/SOURCE:/gi, '')
-                                        .replace(/PAGE:/gi, '')
-                                        .replace(/\|/g, ',')
-                                        .trim();
-
-                                    const parts = cleanContent.split(',').map(s => s.trim());
-                                    // Remove leading/trailing parentheses if the model included them inside brackets
-                                    let possibleFile = parts[0].replace(/^\(|\)$/g, '').trim();
-
-                                    // Find source URL/path from map
-                                    const sourcePath = sourceMap[possibleFile] || Object.values(sourceMap).find(s => s.includes(possibleFile));
-
-                                    if (sourcePath) {
-                                        const isUrl = sourcePath.startsWith('http');
-                                        const safeName = possibleFile.replace(/'/g, "\\'");
-                                        const icon = isUrl ? 'fa-globe' : (possibleFile.includes('Table:') ? 'fa-table' : 'fa-file-alt');
-                                        const clickHandler = `previewIndexSource('${safeName}', window.currentUsedDocs || [])`;
-
-                                        // Handle local file vs URL for direct button
-                                        const openHandler = isUrl ? `window.open('${sourcePath}', '_blank')` : `window.open('${API_BASE}/files/${possibleFile}', '_blank')`;
-
-                                        return `
-                                            <span class="citation-group">
-                                                <span class="citation-link" onclick="${clickHandler}" title="View Index: ${possibleFile}">
-                                                    <i class="fas ${icon}"></i> ${possibleFile}
-                                                </span>
-                                                <button class="citation-direct-btn" onclick="${openHandler}" title="Open Original ${isUrl ? 'Website' : 'File'}">
-                                                    <i class="fas fa-external-link-alt"></i>
-                                                </button>
-                                            </span>
-                                        `;
-                                    }
-                                    return match;
-                                });
-                            };
-
-                            contentDiv.innerHTML = marked.parse(accumulatedAnswer, { renderer });
-                            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-                        } else if (data.type === 'metadata') {
-                            lastBotResponse = accumulatedAnswer;
-
-                            if (data.used_docs) {
-                                usedDocs = data.used_docs;
-                                window.currentUsedDocs = usedDocs;
-                            }
-
-                            const metaDiv = document.createElement('div');
-                            metaDiv.className = 'message-meta';
-                            metaDiv.style.display = 'flex';
-
-                            const stats = [
-                                { label: 'Model', value: data.model, icon: 'fa-robot' },
-                                { label: 'Total', value: data.performance.total, icon: 'fa-clock' },
-                                { label: 'LLM', value: data.performance.llm, icon: 'fa-microchip' },
-                                { label: 'Tokens', value: data.tokens, icon: 'fa-brain' }
-                            ];
-
-                            stats.forEach(stat => {
-                                const item = document.createElement('div');
-                                item.className = 'meta-item';
-                                item.innerHTML = `<i class="fas ${stat.icon}"></i> ${stat.label}: ${stat.value}`;
-                                metaDiv.appendChild(item);
-                            });
-
-                            // Add Continue Button
-                            const continueBtn = document.createElement('div');
-                            continueBtn.className = 'meta-item continue-btn';
-                            continueBtn.style.cursor = 'pointer';
-                            continueBtn.style.color = 'var(--primary-light)';
-                            continueBtn.innerHTML = `<i class="fas fa-play"></i> Continue Answer`;
-                            continueBtn.onclick = () => sendMessage(true);
-                            metaDiv.appendChild(continueBtn);
-
-                            if (data.sources && data.sources.length > 0) {
-                                const sourceContainer = document.createElement('div');
-                                sourceContainer.className = 'source-badges';
-                                data.sources.forEach(src => {
-                                    const isUrl = src.startsWith('http');
-                                    const name = isUrl ? new URL(src).hostname : src.split('/').pop();
-
-                                    const badge = document.createElement('span');
-                                    badge.className = 'source-badge';
-                                    badge.onclick = () => previewIndexSource(name, usedDocs);
-
-                                    badge.innerHTML = `<i class="fas ${isUrl ? 'fa-globe' : 'fa-file-pdf'}"></i> ${name}`;
-                                    badge.title = "Click to preview source content";
-                                    sourceContainer.appendChild(badge);
-                                });
-                                metaDiv.appendChild(sourceContainer);
-                            }
-
-                            metaContainerDiv.innerHTML = '';
-                            metaContainerDiv.appendChild(metaDiv);
-                            chatContainer.scrollTop = chatContainer.scrollHeight;
-                        } else if (data.type === 'done') {
-                            lastBotResponse = accumulatedAnswer;
-                        } else if (data.type === 'error') {
-                            contentDiv.innerText += `\nError: ${data.content}`;
-                        }
-                    } catch (e) {
-                        console.error('Error parsing JSON chunk', e);
-                    }
-                };
-
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value, { stream: true });
-                    buffer += chunk;
-
-                    const lines = buffer.split('\n');
-                    // Keep the last line in the buffer as it might be incomplete
-                    buffer = lines.pop();
-
-                    for (const line of lines) {
-                        processLine(line);
-                    }
-                }
-
-                // Process remaining buffer
-                if (buffer.trim()) {
-                    processLine(buffer);
-                }
-            } catch (error) {
-                contentDiv.innerText = `Error: ${error.message}`;
-            }
-        }
-
-        sendBtn.addEventListener('click', sendMessage);
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
-
-        // Auto-detect text direction as user types
-        userInput.addEventListener('input', (e) => {
-            const text = e.target.value;
-            if (text) {
-                e.target.dir = detectLanguageDirection(text);
-            } else {
-                e.target.dir = 'ltr'; // Default to LTR when empty
-            }
-        });
-
-        const providerSelect = document.getElementById('provider-select');
-        const embeddingProviderSelect = document.getElementById('embedding-provider-select');
-        const localSettings = document.getElementById('local-settings');
-        const modelSelect = document.getElementById('model-select');
-        const embeddingModelSelect = document.getElementById('embedding-model-select');
-        const saveSettings = document.getElementById('save-settings-btn');
-        const cloudSettings = document.getElementById('cloud-settings');
-        const openaiApiKeyInput = document.getElementById('openai-api-key');
-        const openaiBaseUrlInput = document.getElementById('openai-base-url');
-        const geminiApiKeyInput = document.getElementById('gemini-api-key');
-        const vllmUrlInput = document.getElementById('vllm-url');
-        const vllmUrlGroup = document.getElementById('vllm-url-group');
-        const modelHint = document.getElementById('model-hint');
-
-        // Ingestion & Control elements
-        const fileInput = document.getElementById('file-input');
-        const uploadZone = document.getElementById('upload-zone');
-        const uploadBtn = document.getElementById('upload-btn');
-        const fileNameDisplay = document.getElementById('file-name-display');
-        const browseBtn = document.getElementById('browse-btn');
-        const consoleOutput = document.getElementById('console-output');
-        const streamBtn = document.getElementById('stream-btn');
-        const freshStreamBtn = document.getElementById('fresh-stream-btn');
-        const webUrlInput = document.getElementById('web-url-input');
-        const webIngestBtn = document.getElementById('web-ingest-btn');
-        const schemaSelect = document.getElementById('db-schema-select');
-        const tablesContainer = document.getElementById('db-tables-container');
-        const dbIngestBtn = document.getElementById('db-ingest-btn');
-
-        let currentConfig = null;
-        let globalResourceMap = {}; // Track name -> full path/url
-        let lastUserQuestion = "";
-        let lastBotResponse = "";
-
-        providerSelect.onchange = async () => {
-            const provider = providerSelect.value;
-            localSettings.style.display = (provider === 'ollama' || provider === 'vllm') ? 'block' : 'none';
-            cloudSettings.style.display = (provider === 'openai' || provider === 'gemini') ? 'block' : 'none';
-            vllmUrlGroup.style.display = provider === 'vllm' ? 'block' : 'none';
-
-            // Show/hide specific cloud groups
-            document.getElementById('openai-key-group').style.display = provider === 'openai' ? 'block' : 'none';
-            document.getElementById('openai-url-group').style.display = provider === 'openai' ? 'block' : 'none';
-            document.getElementById('gemini-key-group').style.display = provider === 'gemini' ? 'block' : 'none';
-
-            if (provider === 'ollama' || provider === 'vllm' || provider === 'openai' || provider === 'gemini') {
-                modelHint.innerText = `Select the ${provider} model for chat generation.`;
-                await loadModels(provider, null, modelSelect);
-            }
-        };
-
-        embeddingProviderSelect.onchange = async () => {
-            const provider = embeddingProviderSelect.value;
-            if (provider === 'ollama' || provider === 'vllm') {
-                const baseUrl = provider === 'vllm' ? vllmUrlInput.value : null;
-                await loadModels(provider, baseUrl, embeddingModelSelect);
-
-                if (currentConfig && provider === currentConfig.embedding_provider) {
-                    embeddingModelSelect.value = (provider === 'ollama') ? currentConfig.ollama.embedding_model : currentConfig.vllm.embedding_model;
-                }
-            }
-        };
-
-        // Debounced model loading for URL change
-        let vllmUrlTimeout;
-        vllmUrlInput.oninput = () => {
-            clearTimeout(vllmUrlTimeout);
-            vllmUrlTimeout = setTimeout(() => {
-                if (providerSelect.value === 'vllm') loadModels('vllm', vllmUrlInput.value, modelSelect);
-                if (embeddingProviderSelect.value === 'vllm') loadModels('vllm', vllmUrlInput.value, embeddingModelSelect);
-            }, 800);
-        };
-
-        async function loadCurrentConfig() {
-            try {
-                const response = await fetch(`${API_BASE}/config/current`);
-                currentConfig = await response.json();
-
-                providerSelect.value = currentConfig.provider;
-                embeddingProviderSelect.value = currentConfig.embedding_provider || currentConfig.provider;
-
-                if (currentConfig.vllm) vllmUrlInput.value = currentConfig.vllm.base_url || '';
-                if (currentConfig.openai) {
-                    openaiApiKeyInput.value = currentConfig.openai.api_key || '';
-                    openaiBaseUrlInput.value = currentConfig.openai.base_url || 'https://api.openai.com/v1';
-                }
-                if (currentConfig.gemini) geminiApiKeyInput.value = currentConfig.gemini.api_key || '';
-
-                await providerSelect.onchange();
-                await embeddingProviderSelect.onchange();
-            } catch (error) {
-                console.error('Failed to load current config:', error);
-            }
-        }
-
-        async function loadModels(provider, baseUrl = null, targetSelect) {
-            if (!provider) provider = providerSelect.value;
-
-            let url = `${API_BASE}/models/${provider}`;
-            const params = new URLSearchParams();
-
-            if (provider === 'vllm' && (baseUrl || vllmUrlInput.value)) params.append('base_url', baseUrl || vllmUrlInput.value);
-            if (provider === 'openai') {
-                if (openaiApiKeyInput.value) params.append('api_key', openaiApiKeyInput.value);
-                if (openaiBaseUrlInput.value) params.append('base_url', openaiBaseUrlInput.value);
-            }
-            if (provider === 'gemini' && geminiApiKeyInput.value) params.append('api_key', geminiApiKeyInput.value);
-
-            const queryString = params.toString();
-            if (queryString) url += `?${queryString}`;
-
-            targetSelect.innerHTML = '<option value="" disabled selected>Loading models...</option>';
-
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
-
-                targetSelect.innerHTML = '';
-                if (data.models && data.models.length > 0) {
-                    data.models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model;
-                        option.text = model;
-                        targetSelect.appendChild(option);
-                    });
-                } else {
-                    targetSelect.innerHTML = '<option value="">No models found</option>';
-                }
-            } catch (error) {
-                console.error('Failed to load models:', error);
-                targetSelect.innerHTML = '<option value="">Error connecting</option>';
-            }
-        }
-
-        function showToast(message, isError = false) {
-            const toast = document.getElementById('toast');
-            const toastMsg = document.getElementById('toast-message');
-            toastMsg.innerText = message;
-            toast.classList.add('show');
-            if (isError) {
-                toast.style.borderLeft = '4px solid #f43f5e';
-                toast.querySelector('i').className = 'fas fa-exclamation-circle';
-                toast.querySelector('i').style.color = '#f43f5e';
-            } else {
-                toast.style.borderLeft = '4px solid #10b981';
-                toast.querySelector('i').className = 'fas fa-check-circle';
-                toast.querySelector('i').style.color = '#10b981';
-            }
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 3000);
-        }
-
-        saveSettings.onclick = async () => {
-            const provider = providerSelect.value;
-            const embedProvider = embeddingProviderSelect.value;
-            const updates = {
-                "LLM_PROVIDER": provider,
-                "EMBEDDING_PROVIDER": embedProvider
-            };
-
-            if (provider === 'ollama' || provider === 'vllm') {
-                updates[provider === 'ollama' ? "OLLAMA_LLM_MODEL" : "VLLM_MODEL"] = modelSelect.value;
-            }
-
-            if (embedProvider === 'ollama' || embedProvider === 'vllm') {
-                updates[embedProvider === 'ollama' ? "OLLAMA_EMBEDDING_MODEL" : "VLLM_EMBEDDING_MODEL"] = embeddingModelSelect.value;
-            }
-
-            if (provider === 'vllm' || embedProvider === 'vllm') {
-                updates["VLLM_BASE_URL"] = vllmUrlInput.value;
-            }
-
-            if (provider === 'openai') {
-                updates["OPENAI_API_KEY"] = openaiApiKeyInput.value;
-                updates["OPENAI_BASE_URL"] = openaiBaseUrlInput.value;
-                updates["OPENAI_LLM_MODEL"] = modelSelect.value;
-            }
-
-            if (provider === 'gemini') {
-                updates["GEMINI_API_KEY"] = geminiApiKeyInput.value;
-                updates["GEMINI_MODEL"] = modelSelect.value;
-            }
-
-            saveSettings.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-            saveSettings.disabled = true;
-
-            try {
-                const response = await fetch(`${API_BASE}/config/update`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updates)
+                onMounted(async () => {
+                    await loadCurrentConfig();
+                    await fetchResources();
+                    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) isDark.value = true;
+                    applyTheme();
                 });
 
-                if (response.ok) {
-                    showToast(`Settings updated successfully`);
-                } else {
-                    throw new Error('Failed to update');
-                }
-            } catch (error) {
-                showToast('Failed to update settings', true);
-            } finally {
-                saveSettings.innerText = 'Save Changes';
-                saveSettings.disabled = false;
-            }
-        }
-        // ==========================================
-        // UI & NAVIGATION LOGIC
-        // ==========================================
-        const dbBtn = document.getElementById('db-btn');
-        const settingsBtnHeader = document.getElementById('settings-btn');
-
-        if (dbBtn) dbBtn.onclick = () => switchView('view-manage');
-        if (settingsBtnHeader) settingsBtnHeader.onclick = () => switchView('view-settings');
-
-        // Initial config load
-        loadCurrentConfig();
-
-        // File Selection Logic
-        browseBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            fileInput.click();
-        });
-
-        uploadZone.addEventListener('click', (e) => {
-            if (e.target !== browseBtn) fileInput.click();
-        });
-
-        uploadZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadZone.style.borderColor = 'var(--accent-color)';
-        });
-
-        uploadZone.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            uploadZone.style.borderColor = 'var(--border-color)';
-        });
-
-        uploadZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadZone.style.borderColor = 'var(--border-color)';
-            if (e.dataTransfer.files.length) {
-                handleFileSelect(e.dataTransfer.files[0]);
-            }
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            if (fileInput.files.length) {
-                handleFileSelect(fileInput.files[0]);
-            }
-        });
-
-        let selectedFile = null;
-
-        function handleFileSelect(file) {
-            const allowedExtensions = ['.pdf', '.docx', '.txt', '.csv', '.md', '.xlsx', '.xls'];
-            const fileName = file.name.toLowerCase();
-            const isValid = allowedExtensions.some(ext => fileName.endsWith(ext));
-
-            if (!isValid) {
-                alert('Unsupported file type. Please upload PDF, Word, Text, CSV, or Excel files.');
-                return;
-            }
-            selectedFile = file;
-            fileNameDisplay.textContent = `Selected: ${file.name}`;
-            uploadBtn.disabled = false;
-        }
-
-        // Upload Logic
-        uploadBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
-
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-
-            uploadBtn.disabled = true;
-            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-
-            try {
-                const response = await fetch(`${API_BASE}/upload`, {
-                    method: 'POST',
-                    body: formData
+                watch(isDark, applyTheme);
+                watch(currentView, (newView) => {
+                    if (newView === 'view-manage') fetchResources();
+                    if (newView === 'view-db' && dbSchemas.value.length === 0) fetchSchemas();
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    alert('File uploaded successfully!');
-                    fileNameDisplay.textContent = '';
-                    selectedFile = null;
-                    logToConsole(`UPLOAD SUCCESS: ${data.message}`, 'success');
-                } else {
-                    throw new Error('Upload failed');
+                function applyTheme() {
+                    if (isDark.value) document.documentElement.classList.add('dark');
+                    else document.documentElement.classList.remove('dark');
                 }
-            } catch (error) {
-                alert('Error uploading file');
-                logToConsole(`UPLOAD ERROR: ${error.message}`, 'error');
-            } finally {
-                uploadBtn.disabled = true;
-                uploadBtn.textContent = 'Upload File';
-            }
-        });
+                function toggleTheme() { isDark.value = !isDark.value; }
 
-        // Console Logging Helper
-        function logToConsole(message, type = 'info', targetId = 'console-output') {
-            const container = document.getElementById(targetId) || consoleOutput;
-            const line = document.createElement('span');
-            line.className = `log-line ${type}`;
-            line.textContent = `> ${message}`;
-            container.appendChild(line);
-            container.scrollTop = container.scrollHeight;
-
-            // Also log to main management console if it's not the target
-            if (targetId !== 'console-output') {
-                const mainLine = line.cloneNode(true);
-                consoleOutput.appendChild(mainLine);
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-            }
-        }
-
-        // Streaming Logic
-        async function startIngestionStream(fresh = false) {
-            const url = `${API_BASE}/ingest/document/stream${fresh ? '?fresh=true' : ''}`;
-
-            streamBtn.disabled = true;
-            freshStreamBtn.disabled = true;
-            logToConsole(fresh ? 'Starting FRESH build...' : 'Starting SYNC...', 'system');
-
-            try {
-                const response = await fetch(url);
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
-                    lines.forEach(line => {
-                        if (line.trim()) {
-                            // Check for error keywords
-                            let type = 'info';
-                            if (line.includes('ERROR') || line.includes('failed')) type = 'error';
-                            if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
-                            if (line.includes('WARNING')) type = 'warning';
-
-                            logToConsole(line, type, 'pdf-console');
-                        }
-                    });
-                }
-                logToConsole('Process finished.', 'system', 'pdf-console');
-
-            } catch (error) {
-                logToConsole(`STREAM ERROR: ${error.message}`, 'error');
-            } finally {
-                streamBtn.disabled = false;
-                freshStreamBtn.disabled = false;
-            }
-        }
-
-        streamBtn.addEventListener('click', () => startIngestionStream(false));
-        freshStreamBtn.addEventListener('click', () => startIngestionStream(true));
-
-        // Initial load
-        loadResources();
-
-        // Initialize Chat Controls
-        setupInputheightAdjust();
-        setupVoiceInput();
-
-        // ---------------------------------------------------------
-        // UI HELPERS
-        // ---------------------------------------------------------
-        function setupInputheightAdjust() {
-            const textarea = document.getElementById('user-input');
-            if (!textarea) return;
-
-            const adjustHeight = () => {
-                textarea.style.height = 'auto'; // Reset height
-                textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px'; // Set new height, max 150px
-            };
-
-            textarea.addEventListener('input', adjustHeight);
-
-            // Also adjust on window resize
-            window.addEventListener('resize', adjustHeight);
-        }
-
-        // ---------------------------------------------------------
-        // VOICE INPUT LOGIC
-        // ---------------------------------------------------------
-        function setupVoiceInput() {
-            const micBtn = document.getElementById('mic-btn');
-            const langSelect = document.getElementById('voice-lang-select');
-            const userInput = document.getElementById('user-input');
-
-            // Check browser support
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-            if (!SpeechRecognition) {
-                if (micBtn) micBtn.style.display = 'none';
-                if (langSelect) langSelect.style.display = 'none';
-                console.warn('Web Speech API not supported in this browser.');
-                return;
-            }
-
-            const recognition = new SpeechRecognition();
-            recognition.continuous = false;
-            recognition.interimResults = false;
-
-            // Set initial language logic
-            // Set initial language logic
-            const setLang = () => {
-                if (!langSelect) {
-                    recognition.lang = ''; // Default to auto/browser default
-                    return;
-                }
-                const lang = langSelect.value;
-                if (lang === 'auto') {
-                    recognition.lang = '';
-                } else {
-                    recognition.lang = lang;
-                }
-            };
-            setLang(); // Safe to call now
-
-            let isRecording = false;
-
-            // Toggle Recording logic
-            if (micBtn) {
-                micBtn.addEventListener('click', () => {
-                    if (isRecording) {
-                        recognition.stop();
-                    } else {
-                        setLang();
-                        try {
-                            recognition.start();
-                        } catch (e) {
-                            console.error('Recognition start error:', e);
-                        }
-                    }
-                });
-            }
-
-            // Update language dynamically only if selector exists
-            if (langSelect) {
-                langSelect.addEventListener('change', (e) => {
-                    setLang();
-                    if (isRecording) {
-                        recognition.stop();
-                    }
-                });
-            }
-
-            // Events
-            recognition.onstart = () => {
-                isRecording = true;
-                micBtn.classList.add('recording');
-                micBtn.innerHTML = '<i class="fas fa-stop"></i>';
-            };
-
-            recognition.onend = () => {
-                isRecording = false;
-                micBtn.classList.remove('recording');
-                micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
-            };
-
-            recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-
-                // Append text
-                const currentText = userInput.value;
-                userInput.value = currentText ? `${currentText} ${transcript}` : transcript;
-
-                // Trigger input event
-                userInput.dispatchEvent(new Event('input'));
-                userInput.focus();
-            };
-
-            recognition.onerror = (event) => {
-                console.error('Speech recognition error', event.error);
-                isRecording = false;
-                micBtn.classList.remove('recording');
-                micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
-
-                if (event.error === 'not-allowed') {
-                    alert('Microphone access denied. Please allow microphone permissions.');
-                }
-            };
-        }
-
-        async function loadResources() {
-            const container = document.getElementById('resource-list-container');
-            try {
-                const response = await fetch(`${API_BASE}/resources`);
-                const data = await response.json();
-
-                container.innerHTML = '';
-
-                const sections = [
-                    { title: '📑 Documents', key: 'documents', type: 'documents' },
-                    { title: '🌐 Websites', key: 'websites', type: 'websites' },
-                    { title: '📁 DB Tables', key: 'databases', type: 'databases' }
-                ];
-
-                let totalItems = 0;
-                sections.forEach(sec => {
-                    if (data[sec.key] && data[sec.key].length > 0) {
-                        const secDiv = document.createElement('div');
-                        secDiv.className = 'res-section';
-                        secDiv.innerHTML = `<h4>${sec.title}</h4>`;
-
-                        data[sec.key].forEach(item => {
-                            totalItems++;
-
-                            // Map resource for preview/open logic
-                            // For websites we use the item as URL, for docs we assume name match
-                            if (sec.type === 'websites') globalResourceMap[item] = item;
-                            else if (sec.type === 'documents') globalResourceMap[item] = `${API_BASE}/files/${item}`;
-                            else if (sec.type === 'databases') globalResourceMap[`Table: ${item}`] = `Table: ${item}`;
-
-                            const itemDiv = document.createElement('div');
-                            itemDiv.className = 'res-item';
-                            const name = item;
-                            const isDoc = sec.type === 'documents';
-                            itemDiv.innerHTML = `
-                                    <div class="res-info">
-                                        <i class="fas ${isDoc ? 'fa-file-alt' : (sec.type === 'websites' ? 'fa-globe' : 'fa-table')}"></i>
-                                        <span>${name}</span>
-                                    </div>
-                                    <div class="res-actions">
-                                        ${isDoc ? `<a href="${API_BASE}/files/${name}" target="_blank" class="view-res-btn" title="View Document"><i class="fas fa-external-link-alt"></i></a>` : ''}
-                                        <button onclick="deleteResource('${sec.type}', '${item}')" class="delete-res-btn" title="Remove Archive">
-                                            <i class="fas fa-trash-alt"></i>
+                function renderMarkdown(text) {
+                    const renderer = new marked.Renderer();
+                    renderer.text = function (token) {
+                        const content = typeof token === 'string' ? token : token.text;
+                        if (!content) return '';
+                        return content.replace(/\[([^\]]+)\]/g, (match, inner) => {
+                            let clean = inner.replace(/SOURCE:/gi, '').replace(/PAGE:/gi, '').replace(/\|/g, ',').trim();
+                            const parts = clean.split(',').map(s => s.trim());
+                            let possibleFile = parts[0].replace(/^\(|\)$/g, '').trim();
+                            const sourcePath = sourceMap.value[possibleFile] || Object.values(sourceMap.value).find(s => s.includes(possibleFile));
+                            if (sourcePath) {
+                                const isUrl = sourcePath.startsWith('http');
+                                const safeName = possibleFile.replace(/'/g, "\\'");
+                                const icon = isUrl ? 'fa-globe' : (possibleFile.includes('Table:') ? 'fa-table' : 'fa-file-alt');
+                                const openUrl = isUrl ? sourcePath : `${API_BASE}/files/${possibleFile}`;
+                                return `
+                                    <span class="citation-group">
+                                        <span class="citation-link" onclick="window.previewSourceInModal('${safeName}')" title="View Index: ${possibleFile}">
+                                            <i class="fas ${icon}"></i> ${possibleFile}
+                                        </span>
+                                        <button class="citation-direct-btn" onclick="window.open('${openUrl}', '_blank')" title="Open Original">
+                                            <i class="fas fa-external-link-alt"></i>
                                         </button>
-                                    </div>
-                                `;
-                            secDiv.appendChild(itemDiv);
-                        });
-                        container.appendChild(secDiv);
-                    }
-                });
-
-                if (totalItems === 0) {
-                    container.innerHTML = '<p class="hint">No resources ingested yet.</p>';
-                }
-
-                // After loading resources, check health if we are in management view
-                loadIndexHealth(data);
-
-            } catch (error) {
-                container.innerHTML = '<p class="hint error">Failed to load resources.</p>';
-            }
-        }
-
-        async function loadIndexHealth(resourceData) {
-            const list = document.getElementById('health-list');
-            const totalDocsEl = document.getElementById('health-total-docs');
-            const totalChunksEl = document.getElementById('health-total-chunks');
-
-            try {
-                console.log("Fetching index stats...");
-                const response = await fetch(`${API_BASE}/index/stats`);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-                const indexData = await response.json();
-                console.log("Index statistics received:", indexData);
-
-                totalDocsEl.textContent = indexData.total_documents;
-                totalChunksEl.textContent = indexData.total_chunks;
-
-                list.innerHTML = '';
-
-                // Combine all resources into a set for lookup
-                const allResources = new Set();
-                if (resourceData) {
-                    if (resourceData.documents) resourceData.documents.forEach(r => allResources.add(r));
-                    if (resourceData.websites) resourceData.websites.forEach(r => allResources.add(r));
-                    if (resourceData.databases) resourceData.databases.forEach(r => allResources.add(`Table: ${r}`));
-                }
-
-                const indexedSources = indexData.sources || {};
-                const allKeys = new Set([...allResources, ...Object.keys(indexedSources)]);
-
-                let hasMissing = false;
-
-                allKeys.forEach(name => {
-                    const isIndexed = indexedSources.hasOwnProperty(name);
-                    const isResource = allResources.has(name);
-
-                    // Logic to handle "Table: Name" matching if needed, but strict string match first
-
-                    let status = 'ok';
-                    let statusIcon = 'fa-check-circle';
-                    let statusClass = 'status-ok';
-                    let chunks = indexedSources[name] || 0;
-
-                    if (isIndexed && isResource) {
-                        // Healthy
-                    } else if (isResource && !isIndexed) {
-                        status = 'Missing from Index';
-                        statusIcon = 'fa-exclamation-circle';
-                        statusClass = 'status-missing';
-                        hasMissing = true;
-                    } else if (!isResource && isIndexed) {
-                        status = 'Orphaned (Index only)';
-                        statusIcon = 'fa-ghost';
-                        statusClass = 'status-orphan';
-                    }
-
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'health-item ' + statusClass;
-                    itemDiv.innerHTML = `
-                        <span class="health-name" title="${name}">${name}</span>
-                        <span class="health-status"><i class="fas ${statusIcon}"></i> ${status}</span>
-                        <div class="health-actions" style="display:flex; align-items:center;">
-                            ${isIndexed ? `<button onclick="previewIndexSource('${name}')" class="preview-btn" title="Preview Content"><i class="fas fa-eye"></i></button>` : ''}
-                            <span class="health-chunks">${chunks} chunks</span>
-                        </div>
-                    `;
-                    list.appendChild(itemDiv);
-                });
-
-                const syncBtn = document.getElementById('sync-btn');
-                if (hasMissing) {
-                    syncBtn.style.display = 'inline-flex';
-                    syncBtn.onclick = () => performSync();
-                } else {
-                    syncBtn.style.display = 'none';
-                }
-
-            } catch (error) {
-                console.error("Health check failed", error);
-                list.innerHTML = '<p class="hint error">Failed to load index stats.</p>';
-            }
-        }
-
-        async function previewIndexSource(sourceName, usedDocs = []) {
-            let previewModal = document.getElementById('preview-modal');
-            if (!previewModal) {
-                previewModal = document.createElement('div');
-                previewModal.id = 'preview-modal';
-                previewModal.className = 'modal-overlay';
-                previewModal.style.display = 'none';
-                previewModal.innerHTML = `
-                    <div class="modal-content" style="max-width: 900px; width: 95%;">
-                        <div class="modal-header">
-                            <div>
-                                <h3 id="preview-modal-title" style="margin-bottom: 4px; display: flex; align-items: center; gap: 10px;">
-                                    <i class="fas fa-database" style="-webkit-text-fill-color: var(--primary); font-size: 1.2rem;"></i> 
-                                    <span>Index Content</span>
-                                </h3>
-                                <p id="preview-subtitle" style="font-size: 0.85rem; color: var(--text-muted); margin:0;">0 chunks loaded</p>
-                            </div>
-                            <button class="close-modal" onclick="document.getElementById('preview-modal').style.display='none'"><i class="fas fa-times"></i></button>
-                        </div>
-                        <div class="modal-body">
-                            <input type="text" id="preview-search" class="modal-search-bar" placeholder="Search chunks...">
-                            <div id="preview-content-loader" class="hint">Loading entire index for file...</div>
-                            <div id="preview-chunks" class="content-chunks-container"></div>
-                        </div>
-                        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 32px;">
-                            <div id="preview-actions-left">
-                                <!-- Dynamic Open button -->
-                            </div>
-                            <button class="action-btn secondary-btn" onclick="document.getElementById('preview-modal').style.display='none'">Close Window</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(previewModal);
-
-                // Add search listener
-                const searchInput = document.getElementById('preview-search');
-                searchInput.addEventListener('input', (e) => {
-                    const term = e.target.value.toLowerCase();
-                    const cards = document.querySelectorAll('.chunk-card');
-                    let visibleCount = 0;
-                    cards.forEach(card => {
-                        const text = card.innerText.toLowerCase();
-                        if (text.includes(term)) {
-                            card.style.display = 'block';
-                            visibleCount++;
-                        } else {
-                            card.style.display = 'none';
-                        }
-                    });
-                    document.getElementById('preview-subtitle').innerHTML = `${visibleCount} chunks visible (of ${cards.length} total)`;
-                });
-            }
-
-            document.querySelector('#preview-modal-title span').textContent = sourceName;
-            document.getElementById('preview-subtitle').textContent = "Loading...";
-            document.getElementById('preview-chunks').innerHTML = '';
-            document.getElementById('preview-content-loader').style.display = 'block';
-            document.getElementById('preview-search').value = '';
-
-            // Handle "Open Source" button
-            const leftActions = document.getElementById('preview-actions-left');
-            leftActions.innerHTML = '';
-            const sourceUrl = globalResourceMap[sourceName];
-            if (sourceUrl && sourceUrl.startsWith('http')) {
-                const openBtn = document.createElement('button');
-                openBtn.className = 'action-btn primary-btn';
-                openBtn.style.padding = '8px 20px';
-                openBtn.innerHTML = `<i class="fas fa-external-link-alt"></i> ${sourceUrl.includes('/files/') ? 'Open Document' : 'Open Website'}`;
-                openBtn.onclick = () => window.open(sourceUrl, '_blank');
-                leftActions.appendChild(openBtn);
-            }
-
-            previewModal.style.display = 'flex';
-
-            try {
-                // Now returns ALL chunks (limit removed on backend)
-                const response = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(sourceName)}`);
-                const chunks = await response.json();
-
-                document.getElementById('preview-content-loader').style.display = 'none';
-                const container = document.getElementById('preview-chunks');
-                const subtitle = document.getElementById('preview-subtitle');
-
-                subtitle.textContent = `${chunks.length} chunks stored in index`;
-
-                if (chunks.length === 0) {
-                    container.innerHTML = '<p class="hint">No content found for this source inside the index.</p>';
-                    return;
-                }
-
-                // Prepare set of used content for O(1) lookup
-                // We'll use a simplified check or exact match
-                const usedContents = new Set(usedDocs.filter(d => d.source === sourceName).map(d => d.content.trim()));
-
-                let firstUsedChunk = null;
-
-                // Render all chunks
-                chunks.forEach((chunk, index) => {
-                    const card = document.createElement('div');
-                    card.className = 'chunk-card';
-
-                    // Check if this chunk was used
-                    // We check if the content maps to one of our used docs
-                    if (usedContents.has(chunk.content.trim())) {
-                        card.classList.add('chunk-used');
-                        if (!firstUsedChunk) firstUsedChunk = card;
-                    }
-
-                    card.innerHTML = `
-                        <div class="chunk-header">
-                            <span>#${index + 1}</span>
-                            <span class="chunk-badge">Page ${chunk.page}</span>
-                        </div>
-                        <div class="chunk-text">${chunk.content}</div>
-                    `;
-                    container.appendChild(card);
-                });
-
-                // Scroll to first used chunk
-                if (firstUsedChunk) {
-                    setTimeout(() => {
-                        firstUsedChunk.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 300);
-                }
-
-            } catch (error) {
-                document.getElementById('preview-content-loader').textContent = 'Failed to load content.';
-                console.error(error);
-            }
-        }
-
-        async function performSync() {
-            const syncBtn = document.getElementById('sync-btn');
-            syncBtn.disabled = true;
-            syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
-
-            try {
-                // Determine if we need to sync files or websites. 
-                // Currently backend sync only supports ingest_pdfs logic (local files).
-                const response = await fetch(`${API_BASE}/index/sync`, { method: 'POST' });
-
-                // We're expecting a stream or similiar.
-                // For simplicity, we just notify "Started" and listen to log.
-                // Better: consume stream like other ingestions.
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                logToConsole("Started Resource Sync...", "system");
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-                    lines.forEach(line => {
-                        if (line.trim()) logToConsole(line, 'info');
-                    });
-                }
-
-                showToast("Sync completed");
-                loadResources(); // Reloads both resources and health
-
-            } catch (error) {
-                showToast("Sync failed: " + error.message, true);
-            } finally {
-                syncBtn.disabled = false;
-                syncBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync Missing';
-            }
-        }
-
-        async function deleteResource(type, name) {
-            if (!confirm(`Are you sure you want to remove "${name}"? This will delete the source file and associations.`)) return;
-
-            try {
-                const response = await fetch(`${API_BASE}/resources/${type}/${encodeURIComponent(name)}`, {
-                    method: 'DELETE'
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    showToast(result.message);
-                    loadResources();
-                } else {
-                    throw new Error(result.detail || 'Delete failed');
-                }
-            } catch (error) {
-                showToast(error.message, true);
-            }
-        }
-
-        document.getElementById('reset-all-btn').onclick = async () => {
-            if (!confirm("CRITICAL ACTION: This will delete ALL uploaded PDFs, clear the entire search index, and reset configurations. Proceed?")) return;
-
-            try {
-                const response = await fetch(`${API_BASE}/resources/reset`, { method: 'POST' });
-                const result = await response.json();
-                if (response.ok) {
-                    showToast("System reset successfully");
-                    loadResources();
-                    logToConsole("SYSTEM RESET: All data wiped.", "warning");
-                } else {
-                    throw new Error('Reset failed');
-                }
-            } catch (error) {
-                showToast(error.message, true);
-            }
-        };
-
-        // Web Ingestion Logic
-
-        async function startWebIngestionStream() {
-            const url = webUrlInput.value.trim();
-            if (!url) {
-                alert('Please enter a URL first.');
-                return;
-            }
-
-            const streamUrl = `${API_BASE}/ingest/web/stream?url=${encodeURIComponent(url)}`;
-            webIngestBtn.disabled = true;
-            logToConsole(`Starting WEB CRAWL for ${url}...`, 'system');
-
-            try {
-                const response = await fetch(streamUrl);
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
-                    lines.forEach(line => {
-                        if (line.trim()) {
-                            let type = 'info';
-                            if (line.includes('ERROR') || line.includes('failed')) type = 'error';
-                            if (line.includes('SUCCESS') || line.includes('saved')) type = 'success';
-                            if (line.includes('WARNING')) type = 'warning';
-                            logToConsole(line, type, 'web-console');
-                        }
-                    });
-                }
-                logToConsole('Web ingestion finished.', 'system', 'web-console');
-            } catch (error) {
-                logToConsole(`WEB STREAM ERROR: ${error.message}`, 'error');
-            } finally {
-                webIngestBtn.disabled = false;
-            }
-        }
-
-        webIngestBtn.addEventListener('click', startWebIngestionStream);
-
-        // SQL Database Ingestion Logic
-
-        async function loadSchemas() {
-            try {
-                const response = await fetch(`${API_BASE}/db/schemas`);
-                const data = await response.json();
-                if (data.schemas) {
-                    schemaSelect.innerHTML = '<option value="">Select Schema...</option>';
-                    data.schemas.forEach(s => {
-                        const opt = document.createElement('option');
-                        opt.value = s;
-                        opt.textContent = s;
-                        schemaSelect.appendChild(opt);
-                    });
-                }
-            } catch (error) {
-                console.error('Failed to load schemas:', error);
-            }
-        }
-
-        async function loadTables(schema) {
-            if (!schema) {
-                tablesContainer.innerHTML = '<p class="hint">Please select a schema to view tables.</p>';
-                return;
-            }
-            tablesContainer.innerHTML = '<p class="hint">Loading tables...</p>';
-            try {
-                const url = `${API_BASE}/db/tables?schema=${encodeURIComponent(schema)}`;
-                const response = await fetch(url);
-                const data = await response.json();
-                if (data.tables) {
-                    // Render Professional List Structure
-                    tablesContainer.innerHTML = `
-                        <div class="sql-table-container">
-                            <!-- Toolbar -->
-                            <div class="sql-toolbar">
-                                <div class="search-box">
-                                    <i class="fas fa-search"></i>
-                                    <input type="text" id="table-search" placeholder="Search tables...">
-                                </div>
-                                <div class="bulk-actions">
-                                    <label class="action-checkbox">
-                                        <input type="checkbox" id="select-all-tables" checked>
-                                        <span>Select All</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <!-- List Header -->
-                            <div class="sql-list-header">
-                                <div class="col-check"></div>
-                                <div class="col-name">Table Name</div>
-                            </div>
-
-                            <!-- Scrollable List Body -->
-                            <div class="sql-list-body" id="sql-list-body">
-                                <!-- Rows will be injected here -->
-                            </div>
-
-                            <!-- Footer -->
-                            <div class="sql-footer">
-                                <span class="selection-summary" id="selection-summary">0 tables selected</span>
-                                <!-- Button moved here dynamically if needed, or kept outside -->
-                            </div>
-                        </div>
-                    `;
-
-                    const listBody = tablesContainer.querySelector('#sql-list-body');
-                    const selectAllCheckbox = tablesContainer.querySelector('#select-all-tables');
-                    const searchInput = tablesContainer.querySelector('#table-search');
-                    const summaryText = tablesContainer.querySelector('#selection-summary');
-
-                    // Helper to update selection stats
-                    function updateSelectionStats() {
-                        const total = listBody.querySelectorAll('input[type="checkbox"]').length;
-                        const checked = listBody.querySelectorAll('input[type="checkbox"]:checked').length;
-                        summaryText.textContent = `${checked} of ${total} tables selected`;
-
-                        // Update Select All state
-                        const allChecked = total > 0 && total === checked;
-                        selectAllCheckbox.checked = allChecked;
-                        selectAllCheckbox.indeterminate = !allChecked && checked > 0;
-                    }
-
-                    data.tables.forEach(table => {
-                        const row = document.createElement('div');
-                        row.className = 'sql-row';
-                        row.innerHTML = `
-                            <div class="col-check">
-                                <input type="checkbox" value="${table}" checked>
-                            </div>
-                            <div class="col-name" title="${table}">${table}</div>
-                        `;
-
-                        // Row click toggles checkbox
-                        row.addEventListener('click', (e) => {
-                            if (e.target.type !== 'checkbox') {
-                                const cb = row.querySelector('input[type="checkbox"]');
-                                cb.checked = !cb.checked;
-                                // Trigger change event manually if needed, or just update stats
-                                updateSelectionStats();
+                                    </span>`;
                             }
+                            return match;
                         });
+                    };
+                    return marked.parse(text, { renderer });
+                }
 
-                        // Checkbox change updates stats
-                        row.querySelector('input').addEventListener('change', updateSelectionStats);
+                const scrollToBottom = () => nextTick(() => { if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight; });
 
-                        listBody.appendChild(row);
+                async function loadCurrentConfig() {
+                    try {
+                        const res = await fetch(`${API_BASE}/config/current`);
+                        const data = await res.json();
+                        settings.value.provider = data.LLM_PROVIDER;
+                        settings.value.embedProvider = data.EMBEDDING_PROVIDER;
+                        settings.value.openaiKey = data.OPENAI_API_KEY || '';
+                        settings.value.geminiKey = data.GEMINI_API_KEY || '';
+                        settings.value.llmModel = data.OPENAI_LLM_MODEL || data.GEMINI_MODEL || data.OLLAMA_LLM_MODEL || data.VLLM_MODEL || '';
+                        await loadModels('llm');
+                        await loadModels('embed');
+                    } catch (e) { console.error("Config load failed", e); }
+                }
+
+                async function loadModels(type) {
+                    const provider = type === 'llm' ? settings.value.provider : settings.value.embedProvider;
+                    try {
+                        const res = await fetch(`${API_BASE}/models/${provider}`);
+                        const data = await res.json();
+                        modelLists.value[type] = data.models || [];
+                    } catch (e) { console.error("Models load failed", e); }
+                }
+
+                async function saveSettings() {
+                    const updates = {
+                        "LLM_PROVIDER": settings.value.provider,
+                        "EMBEDDING_PROVIDER": settings.value.embedProvider,
+                        "OPENAI_API_KEY": settings.value.openaiKey,
+                        "GEMINI_API_KEY": settings.value.geminiKey
+                    };
+                    if (settings.value.provider === 'openai') updates["OPENAI_LLM_MODEL"] = settings.value.llmModel;
+                    if (settings.value.provider === 'gemini') updates["GEMINI_MODEL"] = settings.value.llmModel;
+
+                    await fetch(`${API_BASE}/config/update`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updates)
                     });
+                    alert("Settings updated!");
+                }
 
-                    // Initial stats update
-                    updateSelectionStats();
+                async function fetchResources() {
+                    const res = await fetch(`${API_BASE}/resources`);
+                    resourceList.value = await res.json();
+                    const stats = await fetch(`${API_BASE}/index/stats`);
+                    indexStats.value = await stats.json();
+                }
 
-                    // Search Logic
-                    searchInput.addEventListener('input', (e) => {
-                        const term = e.target.value.toLowerCase();
-                        listBody.querySelectorAll('.sql-row').forEach(row => {
-                            const name = row.querySelector('.col-name').textContent.toLowerCase();
-                            row.style.display = name.includes(term) ? 'grid' : 'none';
-                        });
-                    });
+                async function sendMessage(isContinuation = false) {
+                    if ((!inputMessage.value.trim() && !isContinuation && pendingFiles.value.length === 0) || isStreaming.value) return;
+                    const text = isContinuation ? "" : inputMessage.value;
+                    const files = [...pendingFiles.value];
+                    inputMessage.value = ""; pendingFiles.value = [];
 
-                    // Select All Logic
-                    selectAllCheckbox.addEventListener('change', (e) => {
-                        const isChecked = e.target.checked;
-                        const rows = listBody.querySelectorAll('.sql-row');
+                    if (!isContinuation) {
+                        messages.value.push({ role: 'user', content: text, attachments: files.map(f => f.name) });
+                    }
+                    scrollToBottom();
 
-                        rows.forEach(row => {
-                            if (row.style.display !== 'none') {
-                                row.querySelector('input').checked = isChecked;
+                    const uploaded = [];
+                    for (const f of files) {
+                        const fd = new FormData(); fd.append('file', f);
+                        const r = await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
+                        const d = await r.json(); uploaded.push(d.url);
+                    }
+
+                    isStreaming.value = true;
+                    const botMsg = { role: 'assistant', content: "", metadata: null };
+                    messages.value.push(botMsg);
+
+                    try {
+                        const url = isContinuation
+                            ? `${API_BASE}/ask/stream?question=${encodeURIComponent(messages.value[messages.value.length - 2].content)}&is_continuation=true&last_answer=${encodeURIComponent(messages.value[messages.value.length - 2].content)}`
+                            : `${API_BASE}/ask/stream?question=${encodeURIComponent(text)}&deep_thinking=${chatMode.value === 'deep'}`;
+
+                        const response = await fetch(url);
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            const lines = decoder.decode(value).split('\n');
+                            for (const line of lines) {
+                                if (!line.trim()) continue;
+                                const data = JSON.parse(line);
+                                if (data.type === 'sources') {
+                                    data.sources.forEach(src => {
+                                        const name = src.startsWith('http') ? src : src.split('/').pop();
+                                        sourceMap.value[name] = src;
+                                    });
+                                }
+                                if (data.type === 'chunk') botMsg.content += data.content;
+                                if (data.type === 'metadata') {
+                                    botMsg.metadata = data;
+                                    currentUsedDocs.value = data.used_docs || [];
+                                }
+                                scrollToBottom();
                             }
-                        });
-                        updateSelectionStats();
-                    });
-                }
-            } catch (error) {
-                tablesContainer.innerHTML = `<p class="hint error">Error loading tables: ${error.message}</p>`;
-            }
-        }
-
-        schemaSelect.addEventListener('change', (e) => loadTables(e.target.value));
-
-        async function startDbIngestionStream() {
-            const selectedTables = Array.from(tablesContainer.querySelectorAll('input:checked'))
-                .map(cb => cb.value);
-
-            if (selectedTables.length === 0) {
-                alert('Please select at least one table.');
-                return;
-            }
-
-            const schema = schemaSelect.value;
-            let streamUrl = `${API_BASE}/ingest/db/stream?tables=${selectedTables.join(',')}`;
-            if (schema) streamUrl += `&schema=${encodeURIComponent(schema)}`;
-
-            dbIngestBtn.disabled = true;
-            logToConsole(`Starting DATABASE INGESTION for ${selectedTables.length} tables...`, 'system');
-
-            try {
-                const response = await fetch(streamUrl);
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
-                    lines.forEach(line => {
-                        if (line.trim()) {
-                            let type = 'info';
-                            if (line.includes('ERROR') || line.includes('SKIP')) type = 'error';
-                            if (line.includes('SUCCESS') || line.includes('Added')) type = 'success';
-                            if (line.includes('WARNING')) type = 'warning';
-                            logToConsole(line, type, 'db-console');
                         }
-                    });
+                    } catch (e) { botMsg.content = "Error: " + e.message; }
+                    finally { isStreaming.value = false; }
                 }
-                logToConsole('Database ingestion finished.', 'system', 'db-console');
-            } catch (error) {
-                logToConsole(`DB STREAM ERROR: ${error.message}`, 'error');
-            } finally {
-                dbIngestBtn.disabled = false;
+
+                function toggleRecording() {
+                    if (!recognition) { alert("Not supported"); return; }
+                    if (isRecording.value) recognition.stop(); else recognition.start();
+                }
+
+                async function uploadFiles() {
+                    for (const file of pendingFiles.value) {
+                        const fd = new FormData(); fd.append('file', file);
+                        await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
+                    }
+                    pendingFiles.value = []; alert("Uploaded!"); fetchResources();
+                }
+
+                async function startIngestion(mode) {
+                    const url = `${API_BASE}/ingest/document/stream${mode === 'fresh' ? '?fresh=true' : ''}`;
+                    ingestionLogs.value.pdf = [];
+                    const res = await fetch(url);
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        const lines = decoder.decode(value).split('\n');
+                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.pdf.push(l); });
+                    }
+                    fetchResources();
+                }
+
+                async function startWebIngest() {
+                    const url = `${API_BASE}/ingest/web/stream?url=${encodeURIComponent(webUrl.value)}`;
+                    ingestionLogs.value.web = [];
+                    const res = await fetch(url);
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        const lines = decoder.decode(value).split('\n');
+                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.web.push(l); });
+                    }
+                    fetchResources();
+                }
+
+                async function fetchSchemas() {
+                    const res = await fetch(`${API_BASE}/ingest/db/schemas`);
+                    dbSchemas.value = await res.json();
+                }
+
+                async function fetchTables() {
+                    const res = await fetch(`${API_BASE}/ingest/db/tables?schema=${selectedSchema.value}`);
+                    dbTables.value = await res.json();
+                }
+
+                async function startDbIngest() {
+                    const url = `${API_BASE}/ingest/db/stream`;
+                    ingestionLogs.value.db = [];
+                    const res = await fetch(url, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ schema: selectedSchema.value, tables: selectedTables.value })
+                    });
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        const lines = decoder.decode(value).split('\n');
+                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.db.push(l); });
+                    }
+                    fetchResources();
+                }
+
+                async function openPreview(name) {
+                    previewSourceState.value.name = name;
+                    previewSourceState.value.visible = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(name)}`);
+                        const chunks = await res.json();
+                        const usedContents = new Set(currentUsedDocs.value.filter(d => d.source === name).map(d => d.content.trim()));
+                        previewSourceState.value.chunks = chunks.map(c => ({ ...c, used: usedContents.has(c.content.trim()) }));
+                    } catch (e) { console.error(e); }
+                }
+                window.previewSourceInModal = openPreview;
+
+                async function deleteResource(type, name) {
+                    if (confirm(`Delete ${name}?`)) {
+                        await fetch(`${API_BASE}/resources/${type}/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                        fetchResources();
+                    }
+                }
+
+                async function wipeAllData() {
+                    if (confirm("Reset everything?")) {
+                        await fetch(`${API_BASE}/resources/reset`, { method: 'POST' });
+                        location.reload();
+                    }
+                }
+
+                return {
+                    currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
+                    settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
+                    previewSourceState,
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, syncIndex: () => startIngestion('quick'), copyText: (t) => { navigator.clipboard.writeText(t); alert("Copied!"); }
+                };
             }
-        }
-
-        dbIngestBtn.addEventListener('click', startDbIngestionStream);
-
-        // Mobile Sidebar Toggle Logic
-        const menuToggle = document.getElementById('menu-toggle');
-        const closeSidebar = document.getElementById('close-sidebar');
-        const sidebar = document.querySelector('.sidebar');
-
-        menuToggle.onclick = () => {
-            sidebar.classList.add('mobile-active');
-        };
-
-        closeSidebar.onclick = () => {
-            sidebar.classList.remove('mobile-active');
-        };
-
-        // Close sidebar when clicking a nav item on mobile
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', () => {
-                sidebar.classList.remove('mobile-active');
-            });
-        });
-
-        // Update window click handler to close both modals AND sidebar
-        // Modal backdrop logic removed
-        window.onclick = (event) => {
-            if (event.target == sidebar && sidebar.classList.contains('mobile-active')) {
-                sidebar.classList.remove('mobile-active');
-            }
-        }
+        }).mount('#app');
     </script>
 </body>
 
