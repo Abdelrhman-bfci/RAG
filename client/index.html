@@ -197,6 +197,47 @@
             opacity: 0;
             transform: translateY(-20px) scale(0.95);
         }
+
+        /* Typing cursor */
+        .typing-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.25em;
+            background: #3b82f6;
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+            margin-left: 2px;
+            vertical-align: middle;
+            animation: blink-cursor 0.8s infinite;
+        }
+
+        @keyframes blink-cursor {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+            }
+        }
+
+        /* Smooth Reveal */
+        .message-reveal {
+            animation: text-reveal 0.3s ease-out forwards;
+        }
+
+        @keyframes text-reveal {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 
@@ -321,8 +362,11 @@
                                     <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
                                     <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
                                 </div>
-                                <div v-else-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)"
-                                    class="markdown-body"></div>
+                                <div v-else-if="msg.role === 'assistant'" class="markdown-body">
+                                    <div class="inline" v-html="renderMarkdown(msg.content)"></div>
+                                    <span v-if="isStreaming && index === messages.length - 1"
+                                        class="typing-cursor"></span>
+                                </div>
                                 <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
                             </div>
                             <div v-if="msg.metadata" class="mt-2 flex flex-wrap gap-2 opacity-80">
@@ -483,8 +527,7 @@
                                     </div>
                                     <button @click="toggleAllTables"
                                         class="text-[10px] font-bold text-asu-blue hover:underline whitespace-nowrap">
-                                        {{ selectedTables.length === filteredTables.length ?
-                                        'Unselect All' : 'Select All' }}
+                                        {{ selectedTables.length === filteredTables.length ? 'Unselect All' : 'Select All' }}
                                     </button>
                                 </div>
                                 <div
