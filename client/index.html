@@ -291,7 +291,13 @@
                                         <i class="fa-solid fa-paperclip"></i> {{ att }}
                                     </div>
                                 </div>
-                                <div v-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)"
+                                <div v-if="msg.role === 'assistant' && !msg.content && isStreaming"
+                                    class="flex gap-1 py-1">
+                                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+                                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
+                                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
+                                </div>
+                                <div v-else-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)"
                                     class="markdown-body"></div>
                                 <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
                             </div>
@@ -315,19 +321,6 @@
                         </div>
                     </div>
 
-                    <div v-if="isStreaming" class="flex gap-4 max-w-4xl mx-auto">
-                        <div class="w-8 h-8 rounded-full bg-asu-blue flex-shrink-0 flex items-center justify-center">
-                            <img src="/client/logo.png" class="w-full h-full object-cover rounded-full bg-white p-0.5">
-                        </div>
-                        <div
-                            class="bg-white dark:bg-gray-800 p-4 rounded-2xl rounded-tl-none border border-gray-100 dark:border-gray-700">
-                            <div class="flex gap-1">
-                                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-75"></div>
-                                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150"></div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Input Area -->
@@ -342,23 +335,30 @@
                             </div>
                         </div>
                         <div
-                            class="flex items-end gap-2 bg-gray-100 dark:bg-gray-900 p-2 rounded-xl border border-transparent focus-within:border-asu-blue transition-colors">
+                            class="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-2 rounded-2xl border border-gray-200 dark:border-gray-700 focus-within:border-asu-blue focus-within:ring-1 focus-within:ring-asu-blue transition-all shadow-sm">
                             <select v-model="chatMode"
-                                class="bg-transparent text-xs font-bold text-asu-blue dark:text-gray-300 border-none focus:ring-0 cursor-pointer">
-                                <option value="normal">🔘 Normal</option>
+                                class="bg-gray-50 dark:bg-gray-800 text-[10px] font-bold text-asu-blue dark:text-gray-300 border-none rounded-lg focus:ring-0 cursor-pointer h-8 px-2">
+                                <option value="normal">Normal</option>
                                 <option value="deep">🧠 Deep</option>
                             </select>
                             <input type="file" ref="fileInput" multiple hidden @change="handleFileUpload">
                             <textarea v-model="inputMessage" @keydown.enter.prevent="sendMessage(false)"
                                 placeholder="Message ASU RAG Assistant..." rows="1"
-                                class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 text-sm md:text-base custom-scrollbar"></textarea>
-                            <button @click="toggleRecording"
-                                :class="isRecording ? 'text-red-500 animate-pulse' : 'text-gray-500'"
-                                class="p-2 hover:text-asu-blue transition-colors rounded-lg"><i
-                                    class="fa-solid fa-microphone text-lg"></i></button>
-                            <button @click="sendMessage(false)" :disabled="!inputMessage && pendingFiles.length === 0"
-                                class="w-10 h-10 flex items-center justify-center bg-asu-blue text-white rounded-lg shadow-sm hover:bg-blue-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all"><i
-                                    class="fa-solid fa-arrow-up text-lg"></i></button>
+                                class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 text-sm md:text-base custom-scrollbar placeholder-gray-400 dark:placeholder-gray-500"></textarea>
+
+                            <div class="flex items-center gap-1">
+                                <button @click="toggleRecording"
+                                    :class="isRecording ? 'text-red-500 bg-red-50 dark:bg-red-900/20' : 'text-gray-400 hover:text-asu-blue'"
+                                    class="p-2 transition-colors rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800"
+                                    title="Voice input">
+                                    <i class="fa-solid fa-microphone text-lg"></i>
+                                </button>
+                                <button @click="sendMessage(false)"
+                                    :disabled="!inputMessage && pendingFiles.length === 0"
+                                    class="w-10 h-10 flex items-center justify-center bg-asu-blue text-white rounded-xl shadow-sm hover:bg-blue-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                                    <i class="fa-solid fa-arrow-up text-lg"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -929,7 +929,7 @@
                     currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
                     settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
                     previewSourceState,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, syncIndex: () => startIngestion('quick'), copyText: (t) => { navigator.clipboard.writeText(t); alert("Copied!"); }
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, syncIndex: () => startIngestion('quick'), copyText: (t) => { navigator.clipboard.writeText(t); alert("Copied!"); }
                 };
             }
         }).mount('#app');
