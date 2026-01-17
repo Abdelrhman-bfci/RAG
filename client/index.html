@@ -651,6 +651,27 @@
                 </div>
             </div>
 
+            <!-- Confirmation Modal -->
+            <transition name="fade">
+                <div v-if="confirmState.visible" class="modal-overlay">
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-gray-100 dark:border-gray-700 animate-in fade-in zoom-in duration-200">
+                        <div
+                            class="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full flex items-center justify-center mb-4 text-xl">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">{{ confirmState.title }}</h3>
+                        <p class="text-gray-500 dark:text-gray-400 text-sm mb-6">{{ confirmState.message }}</p>
+                        <div class="flex gap-3">
+                            <button @click="confirmState.resolve(false)"
+                                class="flex-1 bg-gray-100 dark:bg-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+                            <button @click="confirmState.resolve(true)"
+                                class="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
         </main>
     </div>
 
@@ -702,6 +723,18 @@
                 const sourceMap = ref({});
                 const currentUsedDocs = ref([]);
                 const previewSourceState = ref({ visible: false, name: '', chunks: [] });
+                const confirmState = ref({ visible: false, title: '', message: '', resolve: null });
+
+                async function requestConfirm(title, message) {
+                    return new Promise((resolve) => {
+                        confirmState.value = {
+                            visible: true, title, message, resolve: (val) => {
+                                confirmState.value.visible = false;
+                                resolve(val);
+                            }
+                        };
+                    });
+                }
 
                 let recognition = null;
                 if (window.SpeechRecognition || window.webkitSpeechRecognition) {
@@ -1013,14 +1046,15 @@
                 window.previewSourceInModal = openPreview;
 
                 async function deleteResource(type, name) {
-                    if (confirm(`Delete ${name}?`)) {
+                    if (await requestConfirm("Delete Resource?", `Are you sure you want to delete ${name}?`)) {
                         await fetch(`${API_BASE}/resources/${type}/${encodeURIComponent(name)}`, { method: 'DELETE' });
                         fetchResources();
+                        showNotification("Resource deleted");
                     }
                 }
 
                 async function wipeAllData() {
-                    if (confirm("Reset everything?")) {
+                    if (await requestConfirm("Wipe All Data?", "This will permanently delete ALL indexed data and reset the system. This cannot be undone.")) {
                         await fetch(`${API_BASE}/resources/reset`, { method: 'POST' });
                         location.reload();
                     }
@@ -1029,7 +1063,7 @@
                 return {
                     currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
                     settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
-                    previewSourceState, isUploading, uploadProgress, notification,
+                    previewSourceState, isUploading, uploadProgress, notification, confirmState,
                     toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText: (t) => { navigator.clipboard.writeText(t); showNotification("Copied to clipboard!"); }
                 };
             }
