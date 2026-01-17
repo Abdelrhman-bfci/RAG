@@ -781,25 +781,35 @@
                         const response = await fetch(url);
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
+                        let buffer = "";
+
                         while (true) {
                             const { done, value } = await reader.read();
                             if (done) break;
-                            const lines = decoder.decode(value).split('\n');
+
+                            buffer += decoder.decode(value, { stream: true });
+                            let lines = buffer.split('\n');
+                            buffer = lines.pop(); // Keep partial line for next chunk
+
                             for (const line of lines) {
                                 if (!line.trim()) continue;
-                                const data = JSON.parse(line);
-                                if (data.type === 'sources') {
-                                    data.sources.forEach(src => {
-                                        const name = src.startsWith('http') ? src : src.split('/').pop();
-                                        sourceMap.value[name] = src;
-                                    });
+                                try {
+                                    const data = JSON.parse(line);
+                                    if (data.type === 'sources') {
+                                        data.sources.forEach(src => {
+                                            const name = src.startsWith('http') ? src : src.split('/').pop();
+                                            sourceMap.value[name] = src;
+                                        });
+                                    }
+                                    if (data.type === 'chunk') botMsg.content += data.content;
+                                    if (data.type === 'metadata') {
+                                        botMsg.metadata = data;
+                                        currentUsedDocs.value = data.used_docs || [];
+                                    }
+                                    scrollToBottom();
+                                } catch (e) {
+                                    console.warn("Partial or invalid JSON line:", line, e);
                                 }
-                                if (data.type === 'chunk') botMsg.content += data.content;
-                                if (data.type === 'metadata') {
-                                    botMsg.metadata = data;
-                                    currentUsedDocs.value = data.used_docs || [];
-                                }
-                                scrollToBottom();
                             }
                         }
                     } catch (e) { botMsg.content = "Error: " + e.message; }
@@ -861,12 +871,14 @@
 
                 async function fetchSchemas() {
                     const res = await fetch(`${API_BASE}/ingest/db/schemas`);
-                    dbSchemas.value = await res.json();
+                    const data = await res.json();
+                    dbSchemas.value = data.schemas || [];
                 }
 
                 async function fetchTables() {
                     const res = await fetch(`${API_BASE}/ingest/db/tables?schema=${selectedSchema.value}`);
-                    dbTables.value = await res.json();
+                    const data = await res.json();
+                    dbTables.value = data.tables || [];
                 }
 
                 async function startDbIngest() {

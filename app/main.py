@@ -375,7 +375,7 @@ async def trigger_web_ingestion(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_ingest)
     return {"status": "accepted", "message": "Website ingestion started in background"}
 
-@app.get("/db/schemas")
+@app.get("/ingest/db/schemas")
 async def list_database_schemas():
     """
     List all available database schemas/databases.
@@ -398,7 +398,7 @@ async def list_database_schemas():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch schemas: {str(e)}")
 
-@app.get("/db/tables")
+@app.get("/ingest/db/tables")
 async def list_database_tables(schema: str = ""):
     """
     List all tables in a specific schema.
