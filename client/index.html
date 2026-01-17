@@ -533,9 +533,11 @@
                                 class="space-y-4">
                                 <div>
                                     <label class="block text-sm font-bold mb-2">API Key</label>
-                                    <input
-                                        v-model="settings.provider === 'openai' ? settings.openaiKey : settings.geminiKey"
-                                        type="password" placeholder="Key..."
+                                    <input v-if="settings.provider === 'openai'" v-model="settings.openaiKey"
+                                        type="password" placeholder="OpenAI Key..."
+                                        class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                                    <input v-if="settings.provider === 'gemini'" v-model="settings.geminiKey"
+                                        type="password" placeholder="Gemini Key..."
                                         class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3">
                                 </div>
                             </div>
@@ -700,13 +702,19 @@
                     try {
                         const res = await fetch(`${API_BASE}/config/current`);
                         const data = await res.json();
-                        settings.value.provider = data.LLM_PROVIDER;
-                        settings.value.embedProvider = data.EMBEDDING_PROVIDER;
-                        settings.value.openaiKey = data.OPENAI_API_KEY || '';
-                        settings.value.geminiKey = data.GEMINI_API_KEY || '';
-                        settings.value.llmModel = data.OPENAI_LLM_MODEL || data.GEMINI_MODEL || data.OLLAMA_LLM_MODEL || data.VLLM_MODEL || '';
-                        await loadModels('llm');
-                        await loadModels('embed');
+                        settings.value.provider = data.provider;
+                        settings.value.embedProvider = data.embedding_provider;
+                        settings.value.openaiKey = data.openai?.api_key || '';
+                        settings.value.geminiKey = data.gemini?.api_key || '';
+
+                        // Extract current model based on provider
+                        if (data.provider === 'openai') settings.value.llmModel = data.openai.model;
+                        else if (data.provider === 'gemini') settings.value.llmModel = data.gemini.model;
+                        else if (data.provider === 'ollama') settings.value.llmModel = data.ollama.model;
+                        else if (data.provider === 'vllm') settings.value.llmModel = data.vllm.model;
+
+                        if (settings.value.provider) await loadModels('llm');
+                        if (settings.value.embedProvider) await loadModels('embed');
                     } catch (e) { console.error("Config load failed", e); }
                 }
 
