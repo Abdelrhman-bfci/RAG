@@ -798,6 +798,16 @@
                     finally { isStreaming.value = false; }
                 }
 
+                function handleFileUpload(e) {
+                    const files = Array.from(e.target.files);
+                    files.forEach(f => pendingFiles.value.push(f));
+                    e.target.value = null;
+                }
+
+                function removeFile(index) {
+                    pendingFiles.value.splice(index, 1);
+                }
+
                 function toggleRecording() {
                     if (!recognition) { alert("Not supported"); return; }
                     if (isRecording.value) recognition.stop(); else recognition.start();
