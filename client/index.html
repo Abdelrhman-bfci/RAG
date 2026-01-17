@@ -192,6 +192,8 @@
     class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 h-screen overflow-hidden transition-colors duration-200">
 
     <div id="app" class="flex h-full">
+        <!-- Global Hidden File Input -->
+        <input type="file" ref="fileInput" multiple hidden @change="handleFileUpload">
 
         <aside
             :class="['fixed z-20 inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 md:relative md:translate-x-0', sidebarOpen ? 'translate-x-0' : '-translate-x-full']">
@@ -335,16 +337,15 @@
                             </div>
                         </div>
                         <div
-                            class="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-2 rounded-2xl border border-gray-200 dark:border-gray-700 focus-within:border-asu-blue focus-within:ring-1 focus-within:ring-asu-blue transition-all shadow-sm">
+                            class="flex items-center gap-2 bg-white dark:bg-gray-900 pr-1 pl-3 py-1 rounded-2xl border border-gray-200 dark:border-gray-700 outline-none focus-within:ring-2 focus-within:ring-asu-blue/50 focus-within:border-asu-blue transition-all shadow-sm">
                             <select v-model="chatMode"
                                 class="bg-gray-50 dark:bg-gray-800 text-[10px] font-bold text-asu-blue dark:text-gray-300 border-none rounded-lg focus:ring-0 cursor-pointer h-8 px-2">
                                 <option value="normal">Normal</option>
                                 <option value="deep">🧠 Deep</option>
                             </select>
-                            <input type="file" ref="fileInput" multiple hidden @change="handleFileUpload">
                             <textarea v-model="inputMessage" @keydown.enter.prevent="sendMessage(false)"
                                 placeholder="Message ASU RAG Assistant..." rows="1"
-                                class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 text-sm md:text-base custom-scrollbar placeholder-gray-400 dark:placeholder-gray-500"></textarea>
+                                class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 text-sm md:text-base custom-scrollbar placeholder-gray-400 dark:placeholder-gray-500 outline-none"></textarea>
 
                             <div class="flex items-center gap-1">
                                 <button @click="toggleRecording"
@@ -371,7 +372,7 @@
                         class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i
                                 class="fas fa-file-alt text-asu-blue"></i> Document Management</h3>
-                        <div @click="$refs.fileInput.click()"
+                        <div @click="fileInput.click()"
                             class="border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-xl p-8 text-center cursor-pointer hover:border-asu-blue transition-colors group">
                             <i
                                 class="fas fa-cloud-upload-alt text-4xl text-gray-300 group-hover:text-asu-blue mb-4 transition-colors"></i>
@@ -436,12 +437,28 @@
                                 <option value="">Choose a schema...</option>
                                 <option v-for="s in dbSchemas" :value="s">{{ s }}</option>
                             </select>
-                            <div v-if="dbTables.length > 0" class="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                <div v-for="t in dbTables"
-                                    class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-700">
-                                    <input type="checkbox" :value="t" v-model="selectedTables"
-                                        class="rounded text-asu-blue">
-                                    <span class="text-xs truncate">{{ t }}</span>
+                            <div v-if="dbTables.length > 0" class="space-y-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="relative flex-1">
+                                        <i
+                                            class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                                        <input v-model="tableSearch" type="text" placeholder="Search tables..."
+                                            class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg py-2 pl-8 pr-3 text-xs focus:ring-1 focus:ring-asu-blue ring-offset-0">
+                                    </div>
+                                    <button @click="toggleAllTables"
+                                        class="text-[10px] font-bold text-asu-blue hover:underline whitespace-nowrap">
+                                        {{ selectedTables.length === filteredTables.length ? 'Unselect All' : 'Select
+                                        All' }}
+                                    </button>
+                                </div>
+                                <div
+                                    class="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                    <div v-for="t in filteredTables"
+                                        class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-700 hover:border-asu-blue/30 transition-colors">
+                                        <input type="checkbox" :value="t" v-model="selectedTables"
+                                            class="rounded text-asu-blue">
+                                        <span class="text-[11px] truncate" :title="t">{{ t }}</span>
+                                    </div>
                                 </div>
                             </div>
                             <button @click="startDbIngest" :disabled="!selectedSchema || selectedTables.length === 0"
@@ -602,7 +619,7 @@
     </div>
 
     <script>
-        const { createApp, ref, onMounted, nextTick, watch } = Vue;
+        const { createApp, ref, onMounted, nextTick, watch, computed } = Vue;
         const API_BASE = window.location.origin;
 
         createApp({
@@ -618,6 +635,19 @@
                 const pendingFiles = ref([]);
                 const chatMode = ref('normal');
                 const isRecording = ref(false);
+
+                const tableSearch = ref("");
+                const filteredTables = computed(() => {
+                    if (!tableSearch.value) return dbTables.value;
+                    return dbTables.value.filter(t => t.toLowerCase().includes(tableSearch.value.toLowerCase()));
+                });
+                function toggleAllTables() {
+                    if (selectedTables.value.length === filteredTables.value.length && filteredTables.value.length > 0) {
+                        selectedTables.value = [];
+                    } else {
+                        selectedTables.value = [...filteredTables.value];
+                    }
+                }
 
                 const settings = ref({ provider: 'openai', embedProvider: 'openai', openaiKey: '', geminiKey: '', llmModel: '', embedModel: '' });
                 const modelLists = ref({ llm: [], embed: [] });
@@ -876,6 +906,8 @@
                 }
 
                 async function fetchTables() {
+                    tableSearch.value = "";
+                    selectedTables.value = [];
                     const res = await fetch(`${API_BASE}/ingest/db/tables?schema=${selectedSchema.value}`);
                     const data = await res.json();
                     dbTables.value = data.tables || [];
@@ -929,7 +961,7 @@
                     currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
                     settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
                     previewSourceState,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, syncIndex: () => startIngestion('quick'), copyText: (t) => { navigator.clipboard.writeText(t); alert("Copied!"); }
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText: (t) => { navigator.clipboard.writeText(t); alert("Copied!"); }
                 };
             }
         }).mount('#app');
