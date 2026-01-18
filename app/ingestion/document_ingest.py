@@ -13,7 +13,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
 import pymupdf4llm
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
 
 TRACKING_FILE = "ingested_files.json"
 STATUS_FILE = "ingestion_status.json"

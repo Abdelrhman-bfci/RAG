@@ -9,7 +9,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
 import trafilatura
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
 
 TRACKING_FILE = "ingested_websites.json"
 STATUS_FILE = "web_ingestion_status.json"
