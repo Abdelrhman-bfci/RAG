@@ -237,7 +237,7 @@ async def list_resources():
     
     return resources
 
-@app.delete("/resources/{res_type}/{name}")
+@app.delete("/resources/{res_type}/{name:path}")
 async def delete_resource(res_type: str, name: str):
     """
     Delete a specific resource.

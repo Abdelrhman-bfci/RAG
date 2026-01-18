@@ -140,8 +140,13 @@ class FAISSStore:
         
         for doc_id, doc in docstore.items():
             source = doc.metadata.get("source", "Unknown")
-            # Handle table names or file paths
-            source_name = os.path.basename(source) if "/" in source or "\\" in source else source
+            # Distinguish between URLs and file paths
+            if source.startswith(("http://", "https://")):
+                source_name = source
+            elif "Table: " in source:
+                source_name = source # Tables are already prefixed
+            else:
+                source_name = os.path.basename(source) if "/" in source or "\\" in source else source
             
             if source_name not in stats["sources"]:
                 stats["sources"][source_name] = 0

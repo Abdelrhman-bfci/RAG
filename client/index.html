@@ -527,7 +527,8 @@
                                     </div>
                                     <button @click="toggleAllTables"
                                         class="text-[10px] font-bold text-asu-blue hover:underline whitespace-nowrap">
-                                        {{ selectedTables.length === filteredTables.length ? 'Unselect All' : 'Select All' }}
+                                        {{ selectedTables.length === filteredTables.length ? 'Unselect All' : 'Select
+                                        All' }}
                                     </button>
                                 </div>
                                 <div
@@ -573,28 +574,43 @@
 
                     <div
                         class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <h3 class="text-lg font-bold mb-4">Managed Resources</h3>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold">Managed Resources</h3>
+                            <div class="relative w-48">
+                                <i
+                                    class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                                <input v-model="resourceSearch" type="text" placeholder="Search resources..."
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg py-1.5 pl-8 pr-3 text-xs focus:ring-1 focus:ring-asu-blue outline-none">
+                            </div>
+                        </div>
                         <div class="space-y-4">
-                            <div v-for="(items, category) in resourceList" :key="category">
-                                <h4 class="text-xs font-bold text-gray-400 uppercase mb-2">{{ category }}</h4>
-                                <div class="space-y-1">
-                                    <div v-for="item in items" @click="openPreview(item)"
-                                        class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-xl group cursor-pointer hover:border-asu-blue border border-transparent">
-                                        <div class="flex items-center gap-3">
-                                            <i class="fas"
-                                                :class="category === 'documents' ? 'fa-file-pdf' : (category === 'websites' ? 'fa-globe' : 'fa-table')"></i>
-                                            <span class="text-sm font-medium">{{ item }}</span>
-                                        </div>
-                                        <div class="flex items-center gap-2">
-                                            <span
-                                                class="text-[10px] bg-asu-blue/10 text-asu-blue px-2 py-0.5 rounded-full">{{
-                                                indexStats.sources[item] || 0 }} chunks</span>
-                                            <button @click.stop="deleteResource(category, item)"
-                                                class="text-gray-400 hover:text-red-500 p-1"><i
-                                                    class="fa-solid fa-trash-can"></i></button>
+                            <div v-for="(items, category) in filteredResourceList" :key="category">
+                                <div v-if="items.length > 0">
+                                    <h4 class="text-xs font-bold text-gray-400 uppercase mb-2">{{ category }}</h4>
+                                    <div class="space-y-1 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                                        <div v-for="item in items" @click="openPreview(item)"
+                                            class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-xl group cursor-pointer hover:border-asu-blue border border-transparent">
+                                            <div class="flex items-center gap-3 overflow-hidden">
+                                                <i class="fas flex-shrink-0"
+                                                    :class="category === 'documents' ? 'fa-file-pdf' : (category === 'websites' ? 'fa-globe' : 'fa-table')"></i>
+                                                <span class="text-sm font-medium truncate" :title="item">{{ item
+                                                    }}</span>
+                                            </div>
+                                            <div class="flex items-center gap-2 flex-shrink-0">
+                                                <span
+                                                    class="text-[10px] bg-asu-blue/10 text-asu-blue px-2 py-0.5 rounded-full">{{
+                                                    indexStats.sources[item] || 0 }} chunks</span>
+                                                <button @click.stop="deleteResource(category, item)"
+                                                    class="text-gray-400 hover:text-red-500 p-1"><i
+                                                        class="fa-solid fa-trash-can"></i></button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                            <div v-if="Object.values(filteredResourceList).every(l => l.length === 0)"
+                                class="text-center py-8 text-gray-400 text-sm">
+                                No resources found matching your search.
                             </div>
                         </div>
                     </div>
@@ -757,6 +773,16 @@
                 const resourceList = ref({ documents: [], websites: [], databases: [] });
                 const indexStats = ref({ total_documents: 0, total_chunks: 0, sources: {} });
                 const ingestionLogs = ref({ pdf: [], web: [], db: [] });
+                const resourceSearch = ref("");
+                const filteredResourceList = computed(() => {
+                    if (!resourceSearch.value) return resourceList.value;
+                    const search = resourceSearch.value.toLowerCase();
+                    const filtered = {};
+                    for (const cat in resourceList.value) {
+                        filtered[cat] = resourceList.value[cat].filter(item => item.toLowerCase().includes(search));
+                    }
+                    return filtered;
+                });
 
                 const webUrl = ref("");
                 const dbSchemas = ref([]);
@@ -1122,6 +1148,7 @@
                     currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
                     settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
                     previewSourceState, isUploading, uploadProgress, notification, confirmState,
+                    resourceSearch, filteredResourceList,
                     toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText
                 };
             }
