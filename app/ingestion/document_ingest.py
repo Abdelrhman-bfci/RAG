@@ -12,6 +12,8 @@ from langchain_community.document_loaders import (
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
+import pymupdf4llm
+from langchain.docstore.document import Document
 
 TRACKING_FILE = "ingested_files.json"
 STATUS_FILE = "ingestion_status.json"
@@ -124,13 +126,20 @@ def ingest_documents(force_fresh: bool = False):
             except Exception as e:
                 print(f"Warning: Failed to clear old index for {file_path}: {e}")
 
-            loader = get_loader(file_path)
-            if loader:
-                docs = loader.load()
+            if ext == ".pdf":
+                # Use pymupdf4llm for high-quality Markdown conversion
+                md_content = pymupdf4llm.to_markdown(file_path)
+                docs = [Document(page_content=md_content, metadata={"source": file_path})]
                 new_documents.extend(docs)
                 processed_files_metadata.append((file_path, file_id))
             else:
-                yield f"Skipping unsupported file type: {os.path.basename(file_path)}\n"
+                loader = get_loader(file_path)
+                if loader:
+                    docs = loader.load()
+                    new_documents.extend(docs)
+                    processed_files_metadata.append((file_path, file_id))
+                else:
+                    yield f"Skipping unsupported file type: {os.path.basename(file_path)}\n"
 
         except Exception as e:
             yield f"FAILED to load {os.path.basename(file_path)}: {e}\n"
@@ -145,7 +154,7 @@ def ingest_documents(force_fresh: bool = False):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHUNK_SIZE,
         chunk_overlap=Config.CHUNK_OVERLAP,
-        separators=["\n\n", "\n", " ", ""] 
+        separators=["\n\n", "\n", " ", "", "---", "##", "#"] 
     )
     
     splitted_docs = text_splitter.split_documents(new_documents)

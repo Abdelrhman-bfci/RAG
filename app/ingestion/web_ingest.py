@@ -8,6 +8,8 @@ from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
+import trafilatura
+from langchain.docstore.document import Document
 
 TRACKING_FILE = "ingested_websites.json"
 STATUS_FILE = "web_ingestion_status.json"
@@ -75,8 +77,8 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     processed_links = []
     
     # Configure crawling limits
-    max_depth = kwargs.get('depth', 10)
-    max_pages = kwargs.get('max_pages', 250) # -1 implies unlimited
+    max_depth = kwargs.get('depth', 8)
+    max_pages = kwargs.get('max_pages', -1) # -1 implies unlimited
     
     yield f"Found {len(links)} seed links. Starting crawl (Max Depth: {max_depth}, Max Pages: {'Unlimited' if max_pages == -1 else max_pages})...\n"
 
@@ -187,31 +189,22 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
             # Batch process the discovered URLs
             if target_urls:
                 yield "Starting extraction...\n"
-                # Load in batches to avoid overwhelming
-                batch_size = 10
-                for i in range(0, len(target_urls), batch_size):
-                    batch_urls = target_urls[i:i+batch_size]
-                    yield f"Loading batch {i//batch_size + 1} ({len(batch_urls)} urls)...\n"
-                    
+                for i, target_url in enumerate(target_urls):
                     try:
-                        loader = WebBaseLoader(batch_urls)
-                        # Set requests timeout or other loader parameters if possible in this version of langchain
-                        # loader.requests_kwargs = {'timeout': 10} 
-                        
-                        docs = loader.load()
-                        
-                        # Filter valid docs
-                        valid_batched_docs = []
-                        for d in docs:
-                            if len(d.page_content.strip()) > 300:
-                                valid_batched_docs.append(d)
-                                source_url = d.metadata.get("source", "Unknown URL")
-                                yield f" - Extracted: {source_url}\n"
-                        
-                        new_documents.extend(valid_batched_docs)
-                        
+                        yield f"Processing ({i+1}/{len(target_urls)}): {target_url}\n"
+                        downloaded = trafilatura.fetch_url(target_url)
+                        if downloaded:
+                            result = trafilatura.extract(downloaded, output_format='markdown', include_tables=True, include_images=False, include_links=False)
+                            if result and len(result.strip()) > 300:
+                                doc = Document(page_content=result, metadata={"source": target_url})
+                                new_documents.append(doc)
+                                yield f" - Successfully extracted as Markdown\n"
+                            else:
+                                yield f" - Skipping (insufficient content or extraction failed)\n"
+                        else:
+                            yield f" - Failed to fetch URL\n"
                     except Exception as e:
-                        yield f"Batch extraction failed: {e}\n"
+                        yield f" - Extraction failed: {e}\n"
     
             processed_links.append(url)
 
@@ -228,7 +221,7 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHUNK_SIZE,
         chunk_overlap=Config.CHUNK_OVERLAP,
-        separators=["\n\n", "\n", " ", ""] # Explicit separators
+        separators=["\n\n", "\n", " ", "", "---", "##", "#"] # Markdown-friendly separators
     )
     
     splitted_docs = text_splitter.split_documents(new_documents)
