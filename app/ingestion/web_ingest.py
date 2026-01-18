@@ -84,18 +84,43 @@ def update_status(status, current=0, total=0, message="", start_time=None):
         json.dump(data, f)
 
 def normalize_url(url: str) -> str:
-    """Strip fragments and trailing slashes."""
+    """Strip fragments and trailing slashes, but keep pagination params."""
     parsed = urlparse(url)
     path = parsed.path.rstrip('/')
     if not path: path = '/'
+    
+    # Keep standard pagination/query params
+    keep_params = ['page', 'p', 'offset', 'start', 'limit', 'pagination']
+    from urllib.parse import parse_qsl, urlencode
+    query_params = parse_qsl(parsed.query)
+    filtered_params = [(k, v) for k, v in query_params if k in keep_params]
+    
+    new_query = urlencode(filtered_params)
     normalized = f"{parsed.scheme}://{parsed.netloc}{path}"
-    if parsed.query:
-        normalized += f"?{parsed.query}"
+    if new_query:
+        normalized += f"?{new_query}"
     return normalized
+
+def is_pagination_link(url: str, text: str) -> bool:
+    """Heuristic to detect if a link is likely for pagination."""
+    text = text.lower().strip()
+    url = url.lower()
+    
+    # Text patterns
+    text_patterns = ['next', 'previous', 'prev', 'more', 'page', '>', '»']
+    if any(p == text for p in text_patterns) or text.isdigit():
+        return True
+    
+    # URL patterns
+    url_patterns = ['page=', 'p=', 'offset=', 'start=', '/p/']
+    if any(p in url for p in url_patterns):
+        return True
+        
+    return False
 
 def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     """
-    Ingest website content using BFS crawling.
+    Ingest website content using BFS crawling with pagination support.
     """
     if not os.path.exists(DOWNLOAD_FOLDER):
         os.makedirs(DOWNLOAD_FOLDER)
@@ -115,7 +140,7 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
         update_status("completed", message="No links to ingest.")
         return
 
-    max_depth = kwargs.get('depth', 2)
+    max_depth = kwargs.get('depth', 8)
     max_pages = kwargs.get('max_pages', -1)
     
     yield f"Starting crawl on {len(links)} seed URLs (Max Depth: {max_depth})\n"
@@ -125,7 +150,8 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     start_time = time.time()
 
     for seed_url in links:
-        queue = deque([(seed_url, 0, None)])
+        # Tuple: (url, current_depth, parent_url, is_pagination)
+        queue = deque([(seed_url, 0, None, False)])
         original_domain = urlparse(seed_url).netloc
         visited = set()
 
@@ -133,9 +159,12 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
             if max_pages != -1 and processed_pages >= max_pages:
                 break
 
-            current_url, current_depth, parent_url = queue.popleft()
+            current_url, current_depth, parent_url, is_pagination = queue.popleft()
             
-            if current_depth > max_depth:
+            # Don't increment depth if it's just pagination of the same results
+            adj_depth = current_depth if is_pagination else current_depth
+            
+            if adj_depth > max_depth:
                 continue
             
             if current_url in visited:
@@ -165,7 +194,7 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                 
             if should_download:
                 try:
-                    yield f"[FETCH] Depth {current_depth}: {current_url}\n"
+                    yield f"[FETCH] Depth {adj_depth}: {current_url}\n"
                     response = requests.get(current_url, timeout=15)
                     if response.status_code != 200:
                         yield f"  -> Failed: Status {response.status_code}\n"
@@ -198,15 +227,24 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
 
                     # Process content for vector store
                     if 'text/html' in content_type:
+                        soup = BeautifulSoup(content, 'html.parser')
+                        title = soup.title.string if soup.title else "Untitled Page"
+                        
                         # Extract with trafilatura (Markdown support)
                         text_content = trafilatura.extract(content, output_format='markdown', include_tables=True)
                         if not text_content:
-                            # Fallback to BeautifulSoup
-                            soup = BeautifulSoup(content, 'html.parser')
                             text_content = soup.get_text(separator='\n\n')
                         
                         if text_content and len(text_content.strip()) > 200:
-                            doc = Document(page_content=text_content, metadata={"source": current_url})
+                            # Enhance Markdown as a README format
+                            readme_content = f"# {title}\n\n"
+                            readme_content += f"**Source URL:** {current_url}\n"
+                            readme_content += f"**Parent URL:** {parent_url if parent_url else 'Root'}\n"
+                            readme_content += f"**Ingestion Date:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                            readme_content += "---\n\n"
+                            readme_content += text_content
+                            
+                            doc = Document(page_content=readme_content, metadata={"source": current_url})
                             
                             # Split
                             text_splitter = RecursiveCharacterTextSplitter(
@@ -248,8 +286,10 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                 try:
                     soup = BeautifulSoup(content, "html.parser")
                     for link in soup.find_all("a", href=True):
+                        link_text = link.get_text()
                         full_url = urljoin(current_url, link.get("href"))
                         parsed = urlparse(full_url)
+                        
                         # Normalize to avoid duplicates
                         clean_url = normalize_url(full_url)
                         
@@ -257,7 +297,12 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                             parsed.netloc == original_domain and 
                             parsed.scheme in ['http', 'https']):
                             
-                            queue.append((clean_url, current_depth + 1, current_url))
+                            # Detection for pagination
+                            is_pag = is_pagination_link(clean_url, link_text)
+                            
+                            # Pagination links stay at the same depth level
+                            next_depth = current_depth if is_pag else current_depth + 1
+                            queue.append((clean_url, next_depth, current_url, is_pag))
                 except Exception as e:
                     yield f"  -> Link extraction error: {e}\n"
 
