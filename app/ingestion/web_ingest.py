@@ -51,6 +51,38 @@ def update_status(status, current=0, total=0, message="", start_time=None):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
+def normalize_url(url: str) -> str:
+    """Strip fragments, query params (except pagination), and trailing slashes."""
+    parsed = urlparse(url)
+    # Keep standard pagination/query params if they seem relevant (e.g. page, p, offset)
+    # Otherwise strip them to avoid duplicates
+    path = parsed.path.rstrip('/')
+    if not path: path = '/'
+    
+    # Simple list of query params to preserve for discovery (pagination)
+    keep_params = ['page', 'p', 'offset', 'start', 'limit']
+    from urllib.parse import parse_qsl, urlencode
+    query_params = parse_qsl(parsed.query)
+    filtered_params = [(k, v) for k, v in query_params if k in keep_params]
+    
+    new_query = urlencode(filtered_params)
+    normalized = f"{parsed.scheme}://{parsed.netloc}{path}"
+    if new_query:
+        normalized += f"?{new_query}"
+    return normalized
+
+def has_repeated_segments(url: str, threshold: int = 2) -> bool:
+    """Detect if path segments repeat too many times to prevent recursion loops."""
+    path = urlparse(url).path.strip('/')
+    if not path: return False
+    segments = path.split('/')
+    from collections import Counter
+    counts = Counter(segments)
+    for seg, count in counts.items():
+        if count > threshold and len(seg) > 2: # Ignore short things like /e/ or /v/
+            return True
+    return False
+
 def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     """
     Ingest website content from the given urls or Config.WEBSITE_LINKS.
@@ -163,16 +195,31 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                         text = a.get_text().lower().strip()
                         full_url = urljoin(current_url, href)
                         
-                        # Remove fragment identifier
-                        full_url = full_url.split('#')[0]
+                        # Normalize and check for loops
+                        full_url = normalize_url(full_url)
+                        
+                        # Prevent loops with repeated path segments
+                        if has_repeated_segments(full_url):
+                            continue
+
                         parsed_full = urlparse(full_url)
                         
                         if parsed_full.netloc == domain and full_url not in visited:
-                            # Heuristic filter
+                            # Improved Heuristic filter
                             path = parsed_full.path.lower()
-                            keywords = ["about", "history", "vision", "mission", "leader", "academic", "program", "department", "news", "blog", "service", "product"]
+                            # Keywords for general discovery
+                            discover_keywords = [
+                                "about", "history", "vision", "mission", "leader", "academic", "program", 
+                                "department", "news", "blog", "service", "product", "page", "p="
+                            ]
                             
-                            if any(kw in path for kw in keywords) or any(kw in text for kw in keywords) or current_depth == 0:
+                            # Check if it looks like a pagination link or matches keywords
+                            is_discovery_path = any(kw in path for kw in discover_keywords) or \
+                                              any(kw in text for kw in discover_keywords) or \
+                                              any(p in parsed_full.query for p in ['page', 'p', 'offset']) or \
+                                              current_depth == 0
+                            
+                            if is_discovery_path:
                                 visited.add(full_url)
                                 queue.append((full_url, current_depth + 1))
                                 found_on_page += 1
@@ -192,15 +239,31 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                 for i, target_url in enumerate(target_urls):
                     try:
                         yield f"Processing ({i+1}/{len(target_urls)}): {target_url}\n"
-                        downloaded = trafilatura.fetch_url(target_url)
+                        # Fetch with small retry
+                        downloaded = None
+                        for attempt in range(2):
+                            try:
+                                downloaded = trafilatura.fetch_url(target_url)
+                                if downloaded: break
+                                time.sleep(1)
+                            except: pass
+                            
                         if downloaded:
+                            # Use trafilatura extraction with table support
                             result = trafilatura.extract(downloaded, output_format='markdown', include_tables=True, include_images=False, include_links=False)
+                            
+                            # Fallback to BeautifulSoup logic if Markdown extraction is empty or too short
+                            if not result or len(result.strip()) < 200:
+                                # Simple fallback to text-only if we need it
+                                soup = BeautifulSoup(downloaded, 'html.parser')
+                                result = soup.get_text(separator='\n\n')
+                                
                             if result and len(result.strip()) > 300:
                                 doc = Document(page_content=result, metadata={"source": target_url})
                                 new_documents.append(doc)
-                                yield f" - Successfully extracted as Markdown\n"
+                                yield f" - Successfully extracted\n"
                             else:
-                                yield f" - Skipping (insufficient content or extraction failed)\n"
+                                yield f" - Skipping (insufficient content)\n"
                         else:
                             yield f" - Failed to fetch URL\n"
                     except Exception as e:
