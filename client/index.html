@@ -974,6 +974,7 @@
                     if (!isContinuation) {
                         messages.value.push({ role: 'user', content: text, attachments: files.map(f => f.name) });
                     }
+                    await nextTick();
                     scrollToBottom();
 
                     const uploaded = [];
@@ -986,6 +987,10 @@
                     isStreaming.value = true;
                     const botMsg = { role: 'assistant', content: "", metadata: null };
                     messages.value.push(botMsg);
+
+                    // Force immediate render
+                    await nextTick();
+                    scrollToBottom();
 
                     try {
                         const url = isContinuation
@@ -1015,19 +1020,31 @@
                                             sourceMap.value[name] = src;
                                         });
                                     }
-                                    if (data.type === 'chunk') botMsg.content += data.content;
+                                    if (data.type === 'chunk') {
+                                        botMsg.content += data.content;
+                                        // Force Vue to update immediately
+                                        await nextTick();
+                                        scrollToBottom();
+                                    }
                                     if (data.type === 'metadata') {
                                         botMsg.metadata = data;
                                         currentUsedDocs.value = data.used_docs || [];
+                                        await nextTick();
                                     }
-                                    scrollToBottom();
                                 } catch (e) {
                                     console.warn("Partial or invalid JSON line:", line, e);
                                 }
                             }
                         }
-                    } catch (e) { botMsg.content = "Error: " + e.message; }
-                    finally { isStreaming.value = false; }
+                    } catch (e) {
+                        botMsg.content = "Error: " + e.message;
+                        await nextTick();
+                    }
+                    finally {
+                        isStreaming.value = false;
+                        await nextTick();
+                        scrollToBottom();
+                    }
                 }
 
                 function handleFileUpload(e) {
