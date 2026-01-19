@@ -14,71 +14,103 @@ import time
 import traceback
 import json
 
-# --- Prompt Templates ---
-# --- Prompt Templates ---
+# --- Enhanced Prompt Templates with Chain-of-Thought ---
 STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are a highly precise legal/academic assistant. Your goal is to answer questions strictly based on the provided context.
-    
-    CRITICAL INSTRUCTION: {language_instruction}
-    
-    CRITICAL LANGUAGE RULES (ABSOLUTE PRIORITY):
-    1. **Strict Matching**: 
-       - IF Question is in **English** -> Answer MUST be in **English**.
-       - IF Question is in **Arabic** -> Answer MUST be in **Arabic**.
-       - IF Question is in **Mixed** -> Answer in the DOMINANT language of the question.
-    2. **Context Independence**: The language of the *Context* documents implies NOTHING about the answer language. Ignore context language when deciding output language.
-    3. **No Translation Explanations**: Do NOT say "I am translating this". Just answer directly in the correct language.
+    ("system", """You are a highly precise academic assistant. Follow this systematic process:
 
-    STRICT COMPLIANCE RULES:
-    1. Answer ONLY using the information from the Context.
-    2. If the answer is not in the Context, say "I cannot answer this based on the provided documents" (translate to Arabic if question is Arabic).
-    3. **MANDATORY PER-ITEM CITATIONS**: Every single fact, claim, or item in a list MUST be followed immediately by its source in brackets. 
-       - EXAMPLE: "1. Software Engineering [Computer_Course.pdf, Page 12]"
-       - EXAMPLE: "2. Database Systems [CS_Manual.pdf, Page 5]"
-       - Failure to cite every item is a violation of protocol.
-    4. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
-    5. If the answer requires a long response, provide the FULL answer without cutting it short.
+STEP 1: ANALYZE THE QUESTION
+- Identify the key concepts and requirements
+- Determine the question language (English/Arabic) - THIS IS CRITICAL
+- Understand what type of answer is needed (factual, list, explanation, etc.)
 
-    DATABASE & RELATION RULES:
-    1. **Resolved Foreign Keys**: If you see fields like `department_id` and `department_name`, they are linked. Use the `_name` field for human-readable answers.
-    2. **Implicit Relations**: If a user asks about "Courses in Computer Science", look for `department_name: Computer Science` in the `courses` table context.
-    3. **Schema Awareness**: `institutes` table refers to "Faculties" or "Colleges". `departments` refers to academic departments."""),
-    ("human", """Context:
-    {context}
-    
-    Question: {question}""")
+STEP 2: ASSESS CONTEXT RELEVANCE  
+- Review the provided context sources and chunks
+- Identify which sources contain relevant information
+- Note the number of sources and chunks available
+
+STEP 3: CONSTRUCT ANSWER
+{language_instruction}
+
+CRITICAL COMPLIANCE RULES:
+1. **Answer ONLY using information from the Context** - No external knowledge
+2. **If answer not in Context**: Say "I cannot answer this based on the provided documents" (translate to Arabic if question is Arabic)
+3. **MANDATORY INLINE CITATIONS**: Every single fact, claim, or item MUST be followed by [Source, Page]
+   - CORRECT: "Software Engineering [CS_Catalog.pdf, Page 12]"
+   - WRONG: Listing sources only at the end
+4. **COMPLETE LISTS**: When listing items (courses, programs, requirements), provide ALL items found. DO NOT truncate or say "and more"
+5. **FULL RESPONSES**: If answer requires long response, provide COMPLETE answer without cutting short
+
+DATABASE & RELATION RULES:
+- **Resolved Foreign Keys**: Use `_name` fields (like `department_name`) for human-readable answers
+- **Implicit Relations**: Connect related data (e.g., courses → departments → faculties)
+- **Schema Awareness**: `institutes` = Faculties/Colleges, `departments` = academic departments
+
+STEP 4: QUALITY CHECK
+- Verify all facts are cited with [Source, Page]
+- Confirm answer language matches question language
+- Ensure completeness (no truncated lists)
+- Check that only context information is used"""),
+    ("human", """Context (organized by source):
+{context}
+
+Question: {question}
+
+Think step-by-step and provide a complete, well-cited answer in the same language as the question.""")
 ])
 
 DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """FIRST AND MOST IMPORTANT: {language_instruction}
-    
-    - **Enforce Output Language**:
-        - Question in **English** -> Response in **English**.
-        - Question in **Arabic** -> Response in **Arabic**.
-    - **Context Irrelevance**: The documents might be in a different language. You must TRANSLATE the information from the context into the Question's language.
-    - **No Metadata/Preachiness**: Do not start with "Here is the answer in English". Just give the answer.
-    
-    You are an expert academic analyst and research assistant. Your goal is to provide a comprehensive, analytical summary and deep insights based on the provided documents.
-    
-    INSTRUCTIONS:
-    1. Synthesize information from the Context.
-    2. Use professional, academic language in the SAME language as the question.
-    3. Structure your response with clear sections.
-    4. **MANDATORY PER-ITEM CITATIONS**: Every major statement and EVERY single item in a list MUST have an inline citation. 
-       - FORMAT: [Source Name, Page X] or [Table: TableName].
-       - CRITICAL: Do not group citations at the end. Attach them to each specific point.
-    5. If information is missing, clearly state what is unknown in the user's language.
-    6. CRITICAL: When listing items (courses, programs, requirements, etc.), you MUST list ALL items found in the context. DO NOT truncate, summarize, or say "and more". Provide the COMPLETE list.
-    7. If the answer requires a long response, provide the FULL answer without cutting it short. You have sufficient token capacity.
-    
-    RELATIONAL DATA LOGIC:
-    - **Connect the Dots**: Data might be spread across tables (e.g., Course -> Department -> Faculty). Use the enriched `_name` fields (like `department_name`) to bridge these connections.
-    - **Terminology**: Treat `institutes` as Faculties/Colleges.
-    - **Aggregation**: If analyzing data from a database, summarize trends or groupings where appropriate."""),
-    ("human", """Context:
-    {context}
-    
-    Question: {question}""")
+    ("system", """You are an expert academic analyst. Follow this systematic approach:
+
+STEP 1: UNDERSTAND THE QUESTION
+{language_instruction}
+- Identify key concepts and analytical requirements
+- Determine the depth of analysis needed
+- Note the question language (CRITICAL: English question → English answer, Arabic question → Arabic answer)
+
+STEP 2: ANALYZE AVAILABLE CONTEXT
+- Review all {len(sources)} sources provided
+- Identify relevant information across sources
+- Note connections and relationships between data points
+- Identify any gaps in available information
+
+STEP 3: SYNTHESIZE COMPREHENSIVE ANSWER
+- Combine information from multiple sources
+- Provide analytical insights and patterns
+- Structure response with clear sections
+- Use professional academic language in the SAME language as question
+
+CRITICAL INSTRUCTIONS:
+1. **MANDATORY INLINE CITATIONS**: Every major statement and EVERY item in lists MUST have [Source, Page]
+   - FORMAT: [Document.pdf, Page X] or [Table: TableName]
+   - Attach citations to each specific point, not grouped at end
+2. **COMPLETE INFORMATION**: When listing items, provide ALL items found. Never truncate or summarize
+3. **FULL RESPONSES**: Provide complete analysis without cutting short. You have sufficient token capacity
+4. **CONTEXT ONLY**: Use only information from provided context
+5. **LANGUAGE MATCHING**: 
+   - Question in English → Response in English
+   - Question in Arabic → Response in Arabic
+   - Translate context information to match question language if needed
+
+RELATIONAL DATA LOGIC:
+- **Connect the Dots**: Link data across tables (Course → Department → Faculty)
+- **Use enriched fields**: Prefer `_name` fields for human-readable output
+- **Terminology**: Treat `institutes` as Faculties/Colleges
+- **Aggregation**: Summarize trends and groupings where appropriate
+
+STEP 4: VERIFY QUALITY
+- All facts cited inline
+- Language matches question
+- Complete information provided
+- Professional academic tone
+- Clear structure and organization
+
+If information is missing, clearly state what is unknown in the user's language."""),
+    ("human", """Context (organized by source):
+{context}
+
+Question: {question}
+
+Provide a comprehensive, analytical answer with complete information and inline citations.""")
 ])
 
 def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
@@ -92,17 +124,13 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
     if not vectorstore:
         raise ValueError("Vector store not found. Please run ingestion first.")
 
-    # Custom Hybrid Retrieval: Vector Search + Rapid Keyword check
-    class HybridRetriever:
+    # Advanced Hybrid Retrieval with Relevance Filtering and MMR
+    class AdvancedHybridRetriever:
         def __init__(self, vectorstore):
             self.vectorstore = vectorstore
             
-        def invoke(self, query):
-            # 1. Broad vector search (increase k to ensure we find sparse website content)
-            initial_docs = self.vectorstore.similarity_search(query, k=300)
-            
-            # 2. Extract priority terms
-            # Improve keyword extraction: keep words > 3 chars for EN, and all words for AR (as Arabic words can be short)
+        def _extract_keywords(self, query):
+            """Extract keywords from query based on language."""
             import re
             is_arabic = bool(re.search('[\u0600-\u06FF]', query))
             
@@ -111,28 +139,118 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             else:
                 keywords = [w.lower() for w in query.split() if len(w) > 3]
             
-            # Simple re-ranking: Boost documents that contain exact keywords
-            # We want to maintain diversity, so we won't strictly segregate.
+            return keywords
+        
+        def _calculate_keyword_score(self, content, keywords):
+            """Calculate keyword match score for a document."""
+            content_lower = content.lower()
+            matches = sum(1 for kw in keywords if kw in content_lower)
+            return matches / len(keywords) if keywords else 0
+        
+        def _apply_mmr(self, docs_with_scores, query_embedding, k=40, lambda_param=0.7):
+            """
+            Apply Maximum Marginal Relevance to reduce redundancy.
+            lambda_param: 0 = max diversity, 1 = max relevance
+            """
+            if len(docs_with_scores) <= k:
+                return [doc for doc, _ in docs_with_scores]
             
-            priority_docs = []
-            other_docs = []
+            # Separate docs and scores
+            docs = [doc for doc, _ in docs_with_scores]
+            scores = [score for _, score in docs_with_scores]
             
-            for d in initial_docs:
-                content_lower = d.page_content.lower()
+            # Simple MMR: select diverse documents
+            selected = []
+            selected_indices = []
+            remaining_indices = list(range(len(docs)))
+            
+            # Start with highest scoring document
+            best_idx = scores.index(min(scores))  # Lower L2 distance is better
+            selected.append(docs[best_idx])
+            selected_indices.append(best_idx)
+            remaining_indices.remove(best_idx)
+            
+            # Iteratively select documents that are relevant but diverse
+            while len(selected) < k and remaining_indices:
+                best_score = float('inf')
+                best_idx = None
                 
-                # Check for keyword matches
-                has_keywords = any(kw in content_lower for kw in keywords)
+                for idx in remaining_indices:
+                    # Relevance score (lower is better for L2)
+                    relevance = scores[idx]
+                    
+                    # Diversity: check similarity to already selected docs
+                    # Simple diversity: check content overlap
+                    diversity = 0
+                    for sel_idx in selected_indices:
+                        # Simple Jaccard similarity on words
+                        words_current = set(docs[idx].page_content.lower().split())
+                        words_selected = set(docs[sel_idx].page_content.lower().split())
+                        if words_current and words_selected:
+                            overlap = len(words_current & words_selected) / len(words_current | words_selected)
+                            diversity = max(diversity, overlap)
+                    
+                    # MMR score: balance relevance and diversity
+                    mmr_score = lambda_param * relevance + (1 - lambda_param) * diversity
+                    
+                    if mmr_score < best_score:
+                        best_score = mmr_score
+                        best_idx = idx
                 
-                if has_keywords:
-                    priority_docs.append(d)
+                if best_idx is not None:
+                    selected.append(docs[best_idx])
+                    selected_indices.append(best_idx)
+                    remaining_indices.remove(best_idx)
                 else:
-                    other_docs.append(d)
+                    break
             
-            # Return priority matches first, then others, but don't filter out non-web sources
-            combined = priority_docs + other_docs
-            return combined[:30] # Top 30 documents
+            return selected
+            
+        def invoke(self, query):
+            # Stage 1: Broad retrieval with similarity scores (increased from 300 to 500)
+            try:
+                docs_with_scores = self.vectorstore.similarity_search_with_score(query, k=500)
+            except:
+                # Fallback if similarity_search_with_score not available
+                docs = self.vectorstore.similarity_search(query, k=500)
+                docs_with_scores = [(doc, 0.0) for doc in docs]
+            
+            # Stage 2: Filter by relevance threshold
+            # FAISS L2 distance: lower is better, typical range 0-2 for similar docs
+            relevance_threshold = 1.5
+            relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < relevance_threshold]
+            
+            # If too few docs pass threshold, relax it
+            if len(relevant_docs) < 20:
+                relevance_threshold = 2.0
+                relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < relevance_threshold]
+            
+            # Stage 3: Keyword boosting
+            keywords = self._extract_keywords(query)
+            boosted_docs = []
+            
+            for doc, vec_score in relevant_docs:
+                keyword_score = self._calculate_keyword_score(doc.page_content, keywords)
+                # Combine scores: lower vector score is better, higher keyword score is better
+                # Normalize: boost docs with high keyword matches
+                combined_score = vec_score * (1 - keyword_score * 0.3)  # Up to 30% boost
+                boosted_docs.append((doc, combined_score))
+            
+            # Sort by combined score (lower is better)
+            boosted_docs.sort(key=lambda x: x[1])
+            
+            # Stage 4: Apply MMR for diversity
+            try:
+                # Get query embedding for MMR
+                query_embedding = self.vectorstore.embeddings.embed_query(query)
+                final_docs = self._apply_mmr(boosted_docs, query_embedding, k=40, lambda_param=0.7)
+            except:
+                # Fallback: just take top 40
+                final_docs = [doc for doc, _ in boosted_docs[:40]]
+            
+            return final_docs
 
-    retriever = HybridRetriever(vectorstore)
+    retriever = AdvancedHybridRetriever(vectorstore)
 
     # 2. Select Prompt
     prompt = DEEP_THINKING_PROMPT if deep_thinking else STRICT_RAG_PROMPT
@@ -185,20 +303,46 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
         )
 
-    # 4. Construct the Chain
+    # 4. Construct the Chain with Enhanced Context Formatting
     def format_docs(docs):
-        context_parts = []
+        """
+        Enhanced context formatting with source grouping and relevance indicators.
+        """
+        # Group documents by source for better context
+        grouped = {}
         for i, doc in enumerate(docs):
             source = os.path.basename(doc.metadata.get("source", "Unknown"))
+            if source not in grouped:
+                grouped[source] = []
+            
             page = doc.metadata.get("page", "N/A")
             if isinstance(page, int):
                 page = page + 1
             
-            # Use a more explicit header that the LLM can easily pluck source names from
-            header = f"\n[SOURCE: {source} | PAGE: {page}]"
-            context_parts.append(f"{header}\nCONTENT: {doc.page_content}")
+            grouped[source].append({
+                "content": doc.page_content,
+                "page": page,
+                "index": i + 1
+            })
         
-        return "\n" + "-"*30 + "\n".join(context_parts)
+        # Format grouped context
+        context_parts = []
+        context_parts.append("\n" + "="*60)
+        context_parts.append(f"RETRIEVED CONTEXT ({len(docs)} chunks from {len(grouped)} sources)")
+        context_parts.append("="*60)
+        
+        for source_idx, (source, chunks) in enumerate(grouped.items(), 1):
+            context_parts.append(f"\n{'─'*60}")
+            context_parts.append(f"SOURCE #{source_idx}: {source}")
+            context_parts.append(f"CHUNKS: {len(chunks)}")
+            context_parts.append(f"{'─'*60}")
+            
+            for chunk in chunks:
+                context_parts.append(f"\n[CHUNK #{chunk['index']}] [PAGE: {chunk['page']}]")
+                context_parts.append(f"CONTENT: {chunk['content']}")
+                context_parts.append("")  # Empty line for readability
+        
+        return "\n".join(context_parts)
 
     def detect_language_instruction(question):
         import re
