@@ -569,53 +569,61 @@
             <!-- View: Management -->
             <div v-if="currentView === 'view-manage'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
                 <div class="max-w-4xl mx-auto space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Stats Grid - Responsive -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                         <div
-                            class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                            class="bg-white dark:bg-gray-800 p-4 md:p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                             <span class="text-xs text-gray-400 uppercase font-bold">Total Documents</span>
-                            <div class="text-2xl font-bold text-asu-blue">{{ indexStats.total_documents }}</div>
+                            <div class="text-2xl md:text-3xl font-bold text-asu-blue mt-1">{{ indexStats.total_documents
+                                }}</div>
                         </div>
                         <div
-                            class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                            class="bg-white dark:bg-gray-800 p-4 md:p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                             <span class="text-xs text-gray-400 uppercase font-bold">Total Chunks</span>
-                            <div class="text-2xl font-bold text-asu-blue">{{ indexStats.total_chunks }}</div>
+                            <div class="text-2xl md:text-3xl font-bold text-asu-blue mt-1">{{ indexStats.total_chunks }}
+                            </div>
                         </div>
                         <button @click="syncIndex"
-                            class="bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl font-bold text-sm transition-all"><i
+                            class="bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl font-bold text-sm md:text-base transition-all min-h-[60px] sm:col-span-2 md:col-span-1"><i
                                 class="fas fa-sync-alt mr-2"></i>Sync Missing</button>
                     </div>
 
+                    <!-- Managed Resources Card -->
                     <div
-                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-lg font-bold">Managed Resources</h3>
-                            <div class="relative w-48">
+                        class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <!-- Header with Search - Mobile Responsive -->
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                            <h3 class="text-lg md:text-xl font-bold">Managed Resources</h3>
+                            <div class="relative w-full sm:w-64">
                                 <i
                                     class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
                                 <input v-model="resourceSearch" type="text" placeholder="Search resources..."
-                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg py-1.5 pl-8 pr-3 text-xs focus:ring-1 focus:ring-asu-blue outline-none">
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg py-2 pl-8 pr-3 text-sm focus:ring-1 focus:ring-asu-blue outline-none">
                             </div>
                         </div>
+
+                        <!-- Resources List -->
                         <div class="space-y-4">
                             <div v-for="(items, category) in filteredResourceList" :key="category">
                                 <div v-if="items.length > 0">
                                     <h4 class="text-xs font-bold text-gray-400 uppercase mb-2">{{ category }}</h4>
-                                    <div class="space-y-1 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                                    <div class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
                                         <div v-for="item in items" @click="openPreview(item)"
-                                            class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-xl group cursor-pointer hover:border-asu-blue border border-transparent">
-                                            <div class="flex items-center gap-3 overflow-hidden">
-                                                <i class="fas flex-shrink-0"
-                                                    :class="category === 'documents' ? 'fa-file-pdf' : (category === 'websites' ? 'fa-globe' : 'fa-table')"></i>
-                                                <span class="text-sm font-medium truncate" :title="item">{{ item
-                                                    }}</span>
+                                            class="flex items-center justify-between p-3 md:p-4 bg-gray-50 dark:bg-gray-900 rounded-xl group cursor-pointer hover:border-asu-blue border border-transparent transition-all active:scale-[0.98]">
+                                            <div
+                                                class="flex items-center gap-2 md:gap-3 overflow-hidden min-w-0 flex-1">
+                                                <i class="fas flex-shrink-0 text-base md:text-lg"
+                                                    :class="category === 'documents' ? 'fa-file-pdf text-red-500' : (category === 'websites' ? 'fa-globe text-blue-500' : 'fa-table text-green-500')"></i>
+                                                <span class="text-sm md:text-base font-medium truncate" :title="item">{{
+                                                    item }}</span>
                                             </div>
-                                            <div class="flex items-center gap-2 flex-shrink-0">
+                                            <div class="flex items-center gap-2 md:gap-3 flex-shrink-0 ml-2">
                                                 <span
-                                                    class="text-[10px] bg-asu-blue/10 text-asu-blue px-2 py-0.5 rounded-full">{{
+                                                    class="text-[10px] md:text-xs bg-asu-blue/10 text-asu-blue px-2 py-1 rounded-full whitespace-nowrap">{{
                                                     indexStats.sources[item] || 0 }} chunks</span>
                                                 <button @click.stop="deleteResource(category, item)"
-                                                    class="text-gray-400 hover:text-red-500 p-1"><i
-                                                        class="fa-solid fa-trash-can"></i></button>
+                                                    class="text-gray-400 hover:text-red-500 p-2 md:p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"><i
+                                                        class="fa-solid fa-trash-can text-sm"></i></button>
                                             </div>
                                         </div>
                                     </div>
@@ -627,11 +635,13 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Danger Zone -->
                     <div
-                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-red-100 dark:border-red-900/30">
-                        <h3 class="text-lg font-bold mb-4 text-red-600">Danger Zone</h3>
+                        class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-red-100 dark:border-red-900/30">
+                        <h3 class="text-lg md:text-xl font-bold mb-3 md:mb-4 text-red-600">Danger Zone</h3>
                         <button @click="wipeAllData"
-                            class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold transition-all">Wipe
+                            class="w-full bg-red-600 hover:bg-red-700 text-white py-3 md:py-4 rounded-xl font-bold transition-all min-h-[48px]">Wipe
                             All Data & Reset System</button>
                     </div>
                 </div>
