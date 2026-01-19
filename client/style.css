@@ -1281,6 +1281,26 @@ header {
     color: var(--text-primary);
 }
 
+/* Tablet Breakpoint (768px - 1024px) */
+@media (max-width: 1024px) and (min-width: 768px) {
+    .section-container {
+        padding: 32px;
+    }
+
+    .chat-container {
+        padding: 20px 32px;
+    }
+
+    .message {
+        max-width: 90%;
+    }
+
+    .input-container {
+        max-width: 700px;
+    }
+}
+
+/* Mobile and Tablet Breakpoint (max-width: 992px) */
 @media (max-width: 992px) {
     .sidebar {
         position: fixed;
@@ -1326,16 +1346,39 @@ header {
     .sidebar-header {
         justify-content: space-between;
     }
+
+    /* Improve touch targets */
+    .nav-item {
+        padding: 14px 16px;
+        min-height: 48px;
+    }
+
+    .icon-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* Better spacing for forms */
+    .db-section {
+        padding: 20px 24px;
+    }
+
+    .section-container {
+        padding: 24px;
+    }
 }
 
+/* Mobile Breakpoint (max-width: 640px) */
 @media (max-width: 640px) {
     .header-actions {
         gap: 8px;
     }
 
     .icon-btn {
-        width: 36px;
-        height: 36px;
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
     }
 
     .status-text {
@@ -1344,10 +1387,15 @@ header {
 
     .welcome-message {
         margin: 40px auto;
+        padding: 0 16px;
     }
 
     .welcome-message h2 {
         font-size: 1.75rem;
+    }
+
+    .welcome-message p {
+        font-size: 1rem;
     }
 
     .message {
@@ -1356,16 +1404,17 @@ header {
     }
 
     .avatar {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         font-size: 16px;
     }
 
     .text {
-        padding: 12px 16px;
-        font-size: 0.9rem;
+        padding: 14px 16px;
+        font-size: 0.95rem;
     }
 
+    /* Full-screen modals on mobile */
     .modal-content {
         margin: 0;
         width: 100%;
@@ -1376,10 +1425,11 @@ header {
 
     .modal-content h2 {
         padding: 20px 24px;
+        font-size: 1.25rem;
     }
 
     .modal-body {
-        padding: 24px;
+        padding: 20px;
     }
 
     .modal-actions {
@@ -1391,9 +1441,86 @@ header {
     .terminal-window {
         height: calc(100vh - 400px);
         min-height: 250px;
+        font-size: 0.8rem;
+    }
+
+    /* Optimize chat input for mobile */
+    .input-container {
+        border-radius: 16px;
+        padding: 8px 12px;
+        gap: 8px;
+    }
+
+    .input-container textarea {
+        font-size: 16px;
+        /* Prevent zoom on iOS */
+        padding: 10px 0;
+    }
+
+    /* Better touch targets for buttons */
+    .action-btn {
+        min-height: 48px;
+        font-size: 1rem;
+    }
+
+    .primary-btn {
+        min-height: 48px;
+        padding: 14px 28px;
+    }
+
+    #send-btn {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* Improve form spacing */
+    .section-container {
+        padding: 16px;
+    }
+
+    .db-section {
+        padding: 16px 20px;
+    }
+
+    .setting-group {
+        margin-bottom: 20px;
+    }
+
+    /* Better table/grid layouts */
+    .sql-table-container {
+        height: 350px;
+    }
+
+    .tables-checklist {
+        grid-template-columns: 1fr;
+        max-height: 250px;
+    }
+
+    /* Improve citation readability */
+    .citation-link {
+        font-size: 0.7rem;
+        padding: 3px 8px;
+    }
+
+    .source-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+    }
+
+    /* Better metadata display */
+    .message-meta {
+        gap: 6px;
+    }
+
+    .meta-item {
+        font-size: 10px;
+        padding: 3px 6px;
     }
 }
 
+/* Extra Small Mobile (max-width: 480px) */
 @media (max-width: 480px) {
     .input-area {
         padding: 10px 16px;
