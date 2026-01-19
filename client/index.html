@@ -988,7 +988,6 @@
                     const botMsg = { role: 'assistant', content: "", metadata: null };
                     messages.value.push(botMsg);
 
-                    // Force immediate render
                     await nextTick();
                     scrollToBottom();
 
@@ -1007,44 +1006,239 @@
                             if (done) break;
 
                             buffer += decoder.decode(value, { stream: true });
-                            let lines = buffer.split('\n');
-                            buffer = lines.pop(); // Keep partial line for next chunk
+                            const lines = buffer.split('\n');
+                            buffer = lines.pop(); // Keep incomplete line
 
                             for (const line of lines) {
                                 if (!line.trim()) continue;
+
                                 try {
                                     const data = JSON.parse(line);
+
                                     if (data.type === 'sources') {
                                         data.sources.forEach(src => {
                                             const name = src.startsWith('http') ? src : src.split('/').pop();
                                             sourceMap.value[name] = src;
                                         });
                                     }
+
                                     if (data.type === 'chunk') {
                                         botMsg.content += data.content;
-                                        // Force Vue to update immediately
                                         await nextTick();
                                         scrollToBottom();
                                     }
+
                                     if (data.type === 'metadata') {
                                         botMsg.metadata = data;
                                         currentUsedDocs.value = data.used_docs || [];
+
+                                        // Enhance citations with smart handling
+                                        botMsg.content = enhanceCitations(botMsg.content, data.sources, data.used_docs);
                                         await nextTick();
+                                        scrollToBottom();
+                                    }
+
+                                    if (data.type === 'done') {
+                                        isStreaming.value = false;
+                                    }
+
+                                    if (data.type === 'error') {
+                                        botMsg.content = "Error: " + data.content;
+                                        isStreaming.value = false;
                                     }
                                 } catch (e) {
-                                    console.warn("Partial or invalid JSON line:", line, e);
+                                    console.warn("Error parsing JSON line:", line, e);
                                 }
+                            }
+                        }
+
+                        // Process remaining buffer
+                        if (buffer.trim()) {
+                            try {
+                                const data = JSON.parse(buffer);
+                                if (data.type === 'done') isStreaming.value = false;
+                            } catch (e) {
+                                console.warn("Error parsing final buffer:", e);
                             }
                         }
                     } catch (e) {
                         botMsg.content = "Error: " + e.message;
-                        await nextTick();
-                    }
-                    finally {
+                        isStreaming.value = false;
+                    } finally {
                         isStreaming.value = false;
                         await nextTick();
                         scrollToBottom();
                     }
+                }
+
+                function enhanceCitations(content, sources, usedDocs) {
+                    /**
+                     * Enhance citations with smart handling:
+                     * - URLs: Open in new tab
+                     * - PDFs: Open document viewer
+                     * - Tables: Show index preview
+                     */
+                    if (!content) return content;
+
+                    // Pattern to match citations: [Source, Page X] or [Table: name]
+                    const citationPattern = /\[([^\]]+?(?:\.(?:pdf|txt|csv|html|md)|Table:\s*\w+|https?:\/\/[^\]]+)),\s*(?:Page|صفحة)?\s*(\d+|N\/A)?\]/gi;
+
+                    return content.replace(citationPattern, (match, source, page) => {
+                        // Determine source type
+                        const isUrl = source.startsWith('http://') || source.startsWith('https://');
+                        const isTable = source.startsWith('Table:');
+                        const isPdf = source.toLowerCase().endsWith('.pdf');
+
+                        // Get source name
+                        let sourceName = source;
+                        if (isTable) {
+                            sourceName = source.replace('Table:', '').trim();
+                        } else if (isUrl) {
+                            try {
+                                sourceName = new URL(source).hostname;
+                            } catch (e) {
+                                sourceName = source;
+                            }
+                        } else {
+                            sourceName = source.split('/').pop();
+                        }
+
+                        // Find full source path
+                        const sourcePath = sourceMap.value[source] || sourceMap.value[sourceName] || source;
+
+                        // Find used doc for preview
+                        const usedDoc = usedDocs?.find(doc => {
+                            if (isTable) {
+                                return doc.source === source;
+                            }
+                            const docSource = doc.source.split('/').pop();
+                            return (docSource === sourceName || doc.source === source) && (!page || doc.page == page);
+                        });
+
+                        // Create citation with appropriate icon
+                        let icon = 'fa-file-alt';
+                        if (isUrl) icon = 'fa-globe';
+                        else if (isTable) icon = 'fa-table';
+                        else if (isPdf) icon = 'fa-file-pdf';
+
+                        const citationData = {
+                            source: sourcePath,
+                            sourceName: sourceName,
+                            page: page || 'N/A',
+                            preview: usedDoc?.content || '',
+                            type: isUrl ? 'url' : isTable ? 'table' : isPdf ? 'pdf' : 'document',
+                            icon: icon
+                        };
+
+                        return `<span class="citation-link" data-citation='${JSON.stringify(citationData).replace(/'/g, "&apos;")}' onclick="window.openCitation(this)"><i class="fas ${icon}"></i>${sourceName}${page ? ', Page ' + page : ''}</span>`;
+                    });
+                }
+
+                // Global function to handle citation clicks
+                window.openCitation = function (element) {
+                    try {
+                        const citationData = JSON.parse(element.getAttribute('data-citation').replace(/&apos;/g, "'"));
+
+                        // Handle different source types
+                        if (citationData.type === 'url') {
+                            // Open URL directly in new tab
+                            window.open(citationData.source, '_blank');
+                        } else if (citationData.type === 'table') {
+                            // Show index preview for database table
+                            showIndexPreview(citationData.sourceName);
+                        } else {
+                            // Show modal for PDFs and documents
+                            showCitationModal(citationData);
+                        }
+                    } catch (e) {
+                        console.error('Error opening citation:', e);
+                    }
+                };
+
+                async function showIndexPreview(sourceName) {
+                    try {
+                        const response = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(sourceName)}`);
+                        const chunks = await response.json();
+
+                        const modal = document.createElement('div');
+                        modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+                        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+                        const content = document.createElement('div');
+                        content.className = 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col';
+
+                        const chunksHtml = chunks.map((chunk, idx) => `
+                            <div class="p-4 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-xs font-bold text-blue-600 dark:text-blue-400">Chunk #${idx + 1}</span>
+                                    ${chunk.page !== 'N/A' ? `<span class="text-xs text-gray-500">Page ${chunk.page}</span>` : ''}
+                                </div>
+                                <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">${chunk.content}</div>
+                            </div>
+                        `).join('');
+
+                        content.innerHTML = `
+                            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                                <h3 class="text-xl font-bold text-gray-900 dark:text-white">Index Preview</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                    <i class="fas fa-database mr-2"></i>${sourceName} - ${chunks.length} chunks
+                                </p>
+                            </div>
+                            <div class="overflow-y-auto flex-1">
+                                ${chunksHtml || '<p class="p-6 text-center text-gray-500">No chunks found</p>'}
+                            </div>
+                            <div class="p-6 border-t border-gray-200 dark:border-gray-700">
+                                <button onclick="this.closest('.fixed').remove()" 
+                                    class="w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white py-3 px-4 rounded-xl font-semibold transition-colors">
+                                    Close
+                                </button>
+                            </div>
+                        `;
+
+                        modal.appendChild(content);
+                        document.body.appendChild(modal);
+                    } catch (e) {
+                        console.error('Error loading index preview:', e);
+                        alert('Failed to load index preview');
+                    }
+                }
+
+                function showCitationModal(citationData) {
+                    const modal = document.createElement('div');
+                    modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+                    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+                    const content = document.createElement('div');
+                    content.className = 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col';
+
+                    const fileUrl = citationData.source.startsWith('http') ? citationData.source : `/files/${citationData.sourceName}`;
+
+                    content.innerHTML = `
+                        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-white">Citation Preview</h3>
+                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                <i class="fas ${citationData.icon} mr-2"></i>${citationData.sourceName}${citationData.page !== 'N/A' ? ' - Page ' + citationData.page : ''}
+                            </p>
+                        </div>
+                        <div class="p-6 overflow-y-auto flex-1">
+                            <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">
+                                ${citationData.preview || 'No preview available'}
+                            </div>
+                        </div>
+                        <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                            <button onclick="window.open('${fileUrl}', '_blank')" 
+                                class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-semibold transition-colors">
+                                <i class="fas fa-external-link-alt mr-2"></i>Open Document
+                            </button>
+                            <button onclick="this.closest('.fixed').remove()" 
+                                class="flex-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white py-3 px-4 rounded-xl font-semibold transition-colors">
+                                Close
+                            </button>
+                        </div>
+                    `;
+
+                    modal.appendChild(content);
+                    document.body.appendChild(modal);
                 }
 
                 function handleFileUpload(e) {

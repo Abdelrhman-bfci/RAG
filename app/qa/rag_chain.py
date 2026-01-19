@@ -469,7 +469,7 @@ def answer_question(question: str, deep_thinking: bool = False, is_continuation:
 def stream_answer(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
     """
     Entry point to stream chunks of the LLM response.
-    Yields JSON strings containing either chunks or final metadata.
+    Yields newline-delimited JSON strings for client processing.
     """
     start_total = time.time()
     try:
