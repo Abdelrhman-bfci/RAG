@@ -258,6 +258,52 @@
             </div>
         </transition>
 
+        <!-- Login Modal -->
+        <transition name="fade">
+            <div v-if="showLoginModal"
+                class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-8 transform transition-all scale-100"
+                    @click.stop>
+                    <div class="text-center mb-8">
+                        <div
+                            class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 mb-4">
+                            <i class="fa-solid fa-user-shield text-2xl text-blue-600 dark:text-blue-400"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Admin Login</h2>
+                        <p class="text-gray-500 dark:text-gray-400 mt-2">Enter credentials to access admin features.</p>
+                    </div>
+
+                    <form @submit.prevent="handleLogin" class="space-y-6">
+                        <div>
+                            <label
+                                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Username</label>
+                            <input type="text" v-model="loginUsername" required
+                                class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400"
+                                placeholder="Enter username">
+                        </div>
+                        <div>
+                            <label
+                                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
+                            <input type="password" v-model="loginPassword" required
+                                class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder-gray-400"
+                                placeholder="Enter password">
+                        </div>
+
+                        <div class="flex gap-4 pt-2">
+                            <button type="button" @click="showLoginModal = false"
+                                class="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                Cancel
+                            </button>
+                            <button type="submit"
+                                class="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5">
+                                Sign In
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </transition>
+
         <!-- Mobile Sidebar Backdrop -->
         <div v-if="sidebarOpen" @click="sidebarOpen = false"
             class="fixed inset-0 bg-black/50 backdrop-blur-sm z-10 md:hidden transition-opacity duration-300"></div>
@@ -279,30 +325,45 @@
                         <i class="fa-solid fa-comment-dots"></i>
                         <span class="font-medium">Chat Assistant</span>
                     </div>
-                    <div @click="currentView = 'view-pdf'"
-                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-pdf' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
-                        <i class="fa-solid fa-file-alt"></i>
-                        <span class="font-medium">Documents</span>
+                    <!-- Restricted Tabs -->
+                    <template v-if="isAuthenticated">
+                        <div @click="currentView = 'view-pdf'"
+                            :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-pdf' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                            <i class="fa-solid fa-file-alt"></i>
+                            <span class="font-medium">Documents</span>
+                        </div>
+                        <div @click="currentView = 'view-web'"
+                            :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-web' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                            <i class="fa-solid fa-globe"></i>
+                            <span class="font-medium">Web Content</span>
+                        </div>
+                        <div @click="currentView = 'view-db'"
+                            :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-db' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                            <i class="fa-solid fa-database"></i>
+                            <span class="font-medium">SQL Databases</span>
+                        </div>
+                        <div @click="currentView = 'view-manage'"
+                            :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-manage' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                            <i class="fa-solid fa-tasks"></i>
+                            <span class="font-medium">Management</span>
+                        </div>
+                        <div @click="currentView = 'view-settings'"
+                            :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-settings' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                            <i class="fa-solid fa-cog"></i>
+                            <span class="font-medium">Settings</span>
+                        </div>
+                    </template>
+
+                    <!-- Auth Buttons -->
+                    <div v-if="!isAuthenticated" @click="showLoginModal = true"
+                        class="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 mt-auto">
+                        <i class="fa-solid fa-sign-in-alt"></i>
+                        <span class="font-medium">Login</span>
                     </div>
-                    <div @click="currentView = 'view-web'"
-                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-web' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
-                        <i class="fa-solid fa-globe"></i>
-                        <span class="font-medium">Web Content</span>
-                    </div>
-                    <div @click="currentView = 'view-db'"
-                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-db' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
-                        <i class="fa-solid fa-database"></i>
-                        <span class="font-medium">SQL Databases</span>
-                    </div>
-                    <div @click="currentView = 'view-manage'"
-                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-manage' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
-                        <i class="fa-solid fa-tasks"></i>
-                        <span class="font-medium">Management</span>
-                    </div>
-                    <div @click="currentView = 'view-settings'"
-                        :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-settings' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
-                        <i class="fa-solid fa-cog"></i>
-                        <span class="font-medium">Settings</span>
+                    <div v-else @click="logout"
+                        class="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 mt-auto">
+                        <i class="fa-solid fa-sign-out-alt"></i>
+                        <span class="font-medium">Logout</span>
                     </div>
                 </nav>
 
@@ -764,6 +825,40 @@
         createApp({
             setup() {
                 const currentView = ref('view-chat');
+
+                // Login System
+                const isAuthenticated = ref(false);
+                const showLoginModal = ref(false);
+                const loginUsername = ref('');
+                const loginPassword = ref('');
+
+                async function handleLogin() {
+                    try {
+                        const res = await fetch(`${API_BASE}/auth/login`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: loginUsername.value, password: loginPassword.value })
+                        });
+
+                        if (res.ok) {
+                            isAuthenticated.value = true;
+                            showLoginModal.value = false;
+                            showNotification("Login Successful!");
+                            loginUsername.value = '';
+                            loginPassword.value = '';
+                        } else {
+                            showNotification("Invalid Username or Password", "error");
+                        }
+                    } catch (e) {
+                        showNotification("Login Failed: " + e.message, "error");
+                    }
+                }
+
+                function logout() {
+                    isAuthenticated.value = false;
+                    currentView.value = 'view-chat';
+                    showNotification("Logged out");
+                }
                 const messages = ref([]);
                 const inputMessage = ref("");
                 const sidebarOpen = ref(false);
@@ -1398,7 +1493,9 @@
                     settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
                     previewSourceState, isUploading, uploadProgress, notification, confirmState,
                     resourceSearch, filteredResourceList,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText,
+                    // Login State
+                    isAuthenticated, showLoginModal, loginUsername, loginPassword, handleLogin, logout
                 };
             }
         }).mount('#app');

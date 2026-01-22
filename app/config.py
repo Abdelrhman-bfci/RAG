@@ -5,6 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
+    # Auth
+    ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "ASUAIADMIN")
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ASUAIADMIN")
+
     # API Keys
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
