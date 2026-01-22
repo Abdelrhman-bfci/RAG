@@ -438,7 +438,7 @@
                                 </div>
                                 <div v-else-if="msg.role === 'assistant'" class="markdown-body">
                                     <div class="inline" v-html="renderMarkdown(msg.content)"></div>
-                                    <span v-if="isStreaming && index === messages.length - 1"
+                                    <span v-if="(isStreaming || isProcessingStream) && index === messages.length - 1"
                                         class="typing-cursor"></span>
                                 </div>
                                 <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
@@ -928,6 +928,37 @@
                 const selectedSchema = ref("");
                 const selectedTables = ref([]);
                 const sourceMap = ref({});
+                const streamBuffer = ref("");
+                const isProcessingStream = ref(false);
+
+                // Typewriter effect logic
+                async function processStreamBuffer() {
+                    if (isProcessingStream.value) return;
+                    isProcessingStream.value = true;
+
+                    while (streamBuffer.value.length > 0 || isStreaming.value) {
+                        if (streamBuffer.value.length > 0) {
+                            // Determine chunk size based on buffer size (faster if buffer is full)
+                            const bufferLen = streamBuffer.value.length;
+                            const chunkSize = bufferLen > 50 ? 5 : bufferLen > 20 ? 2 : 1;
+
+                            const chunk = streamBuffer.value.slice(0, chunkSize);
+                            streamBuffer.value = streamBuffer.value.slice(chunkSize);
+
+                            const lastMsg = messages.value[messages.value.length - 1];
+                            if (lastMsg && lastMsg.role === 'assistant') {
+                                lastMsg.content += chunk;
+                                scrollToBottom();
+                            }
+                        }
+
+                        // Small delay for typing effect (adjustable)
+                        await new Promise(r => setTimeout(r, 15));
+
+                        if (!isStreaming.value && streamBuffer.value.length === 0) break;
+                    }
+                    isProcessingStream.value = false;
+                }
                 const currentUsedDocs = ref([]);
                 const previewSourceState = ref({ visible: false, name: '', chunks: [] });
                 const confirmState = ref({ visible: false, title: '', message: '', resolve: null });
@@ -1138,9 +1169,8 @@
                                     }
 
                                     if (data.type === 'chunk') {
-                                        botMsg.content += data.content;
-                                        await nextTick();
-                                        scrollToBottom();
+                                        streamBuffer.value += data.content;
+                                        processStreamBuffer();
                                     }
 
                                     if (data.type === 'metadata') {
@@ -1254,35 +1284,27 @@
                     try {
                         const citationData = JSON.parse(element.getAttribute('data-citation').replace(/&apos;/g, "'"));
 
-                        // Handle different source types
-                        if (citationData.type === 'url') {
-                            // Open URL directly in new tab
-                            window.open(citationData.source, '_blank');
-                        } else if (citationData.type === 'table') {
-                            // Show index preview for database table
-                            showIndexPreview(citationData.sourceName);
-                        } else {
-                            // Show modal for PDFs and documents
-                            showCitationModal(citationData);
-                        }
+                        // Handle all source types via modal first for context preview
+                        showCitationModal(citationData);
                     } catch (e) {
                         console.error('Error opening citation:', e);
                     }
-                };
+                }
+            };
 
-                async function showIndexPreview(sourceName) {
-                    try {
-                        const response = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(sourceName)}`);
-                        const chunks = await response.json();
+            async function showIndexPreview(sourceName) {
+            try {
+                const response = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(sourceName)}`);
+                const chunks = await response.json();
 
-                        const modal = document.createElement('div');
-                        modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
-                        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 
-                        const content = document.createElement('div');
-                        content.className = 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col';
+                const content = document.createElement('div');
+                content.className = 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col';
 
-                        const chunksHtml = chunks.map((chunk, idx) => `
+                const chunksHtml = chunks.map((chunk, idx) => `
                             <div class="p-4 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                 <div class="flex items-center gap-2 mb-2">
                                     <span class="text-xs font-bold text-blue-600 dark:text-blue-400">Chunk #${idx + 1}</span>
@@ -1292,7 +1314,7 @@
                             </div>
                         `).join('');
 
-                        content.innerHTML = `
+                content.innerHTML = `
                             <div class="p-6 border-b border-gray-200 dark:border-gray-700">
                                 <h3 class="text-xl font-bold text-gray-900 dark:text-white">Index Preview</h3>
                                 <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -1310,40 +1332,49 @@
                             </div>
                         `;
 
-                        modal.appendChild(content);
-                        document.body.appendChild(modal);
-                    } catch (e) {
-                        console.error('Error loading index preview:', e);
-                        alert('Failed to load index preview');
-                    }
-                }
+                modal.appendChild(content);
+                document.body.appendChild(modal);
+            } catch(e) {
+                console.error('Error loading index preview:', e);
+                alert('Failed to load index preview');
+            }
+        }
 
                 function showCitationModal(citationData) {
-                    const modal = document.createElement('div');
-                    modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
-                    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 
-                    const content = document.createElement('div');
-                    content.className = 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col';
+                const content = document.createElement('div');
+                content.className = 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col';
 
-                    const fileUrl = citationData.source.startsWith('http') ? citationData.source : `/files/${citationData.sourceName}`;
+                const fileUrl = citationData.source;
+                const isUrl = citationData.type === 'url';
 
-                    content.innerHTML = `
+                // Customize UI based on type
+                const title = isUrl ? 'Website Context' : 'Document Context';
+                const buttonText = isUrl ? 'Open Website' : 'Open Document';
+                const buttonIcon = isUrl ? 'fa-external-link-alt' : 'fa-file-pdf';
+
+                // Ensure we have some preview text
+                const previewText = citationData.preview || 'No context preview available.';
+
+                content.innerHTML = `
                         <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-                            <h3 class="text-xl font-bold text-gray-900 dark:text-white">Citation Preview</h3>
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-white">${title}</h3>
                             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                 <i class="fas ${citationData.icon} mr-2"></i>${citationData.sourceName}${citationData.page !== 'N/A' ? ' - Page ' + citationData.page : ''}
                             </p>
                         </div>
                         <div class="p-6 overflow-y-auto flex-1">
                             <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">
-                                ${citationData.preview || 'No preview available'}
+                                ${previewText}
                             </div>
                         </div>
                         <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                             <button onclick="window.open('${fileUrl}', '_blank')" 
                                 class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-semibold transition-colors">
-                                <i class="fas fa-external-link-alt mr-2"></i>Open Document
+                                <i class="fas ${buttonIcon} mr-2"></i>${buttonText}
                             </button>
                             <button onclick="this.closest('.fixed').remove()" 
                                 class="flex-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white py-3 px-4 rounded-xl font-semibold transition-colors">
@@ -1352,171 +1383,172 @@
                         </div>
                     `;
 
-                    modal.appendChild(content);
-                    document.body.appendChild(modal);
-                }
+                modal.appendChild(content);
+                document.body.appendChild(modal);
+            }
 
                 function handleFileUpload(e) {
-                    const files = Array.from(e.target.files);
-                    files.forEach(f => pendingFiles.value.push(f));
-                    e.target.value = null;
-                }
+                const files = Array.from(e.target.files);
+                files.forEach(f => pendingFiles.value.push(f));
+                e.target.value = null;
+            }
 
                 function removeFile(index) {
-                    pendingFiles.value.splice(index, 1);
-                }
+                pendingFiles.value.splice(index, 1);
+            }
 
                 function toggleRecording() {
-                    if (!recognition) { showNotification("Voice recognition not supported in this browser", "error"); return; }
-                    if (isRecording.value) recognition.stop(); else recognition.start();
-                }
+                if (!recognition) { showNotification("Voice recognition not supported in this browser", "error"); return; }
+                if (isRecording.value) recognition.stop(); else recognition.start();
+            }
 
                 async function uploadFiles() {
-                    if (pendingFiles.value.length === 0) return;
-                    isUploading.value = true;
-                    uploadProgress.value = 0;
+                if (pendingFiles.value.length === 0) return;
+                isUploading.value = true;
+                uploadProgress.value = 0;
 
-                    const totalFiles = pendingFiles.value.length;
-                    for (let i = 0; i < totalFiles; i++) {
-                        const file = pendingFiles.value[i];
-                        const fd = new FormData();
-                        fd.append('file', file);
+                const totalFiles = pendingFiles.value.length;
+                for (let i = 0; i < totalFiles; i++) {
+                    const file = pendingFiles.value[i];
+                    const fd = new FormData();
+                    fd.append('file', file);
 
-                        await new Promise((resolve, reject) => {
-                            const xhr = new XMLHttpRequest();
-                            xhr.open('POST', `${API_BASE}/upload`);
-                            xhr.upload.onprogress = (e) => {
-                                if (e.lengthComputable) {
-                                    const fileProgress = (e.loaded / e.total) * 100;
-                                    uploadProgress.value = Math.round(((i / totalFiles) * 100) + (fileProgress / totalFiles));
-                                }
-                            };
-                            xhr.onload = () => {
-                                if (xhr.status === 200) resolve();
-                                else reject(new Error('Upload failed'));
-                            };
-                            xhr.onerror = () => reject(new Error('Network error'));
-                            xhr.send(fd);
-                        });
-                    }
-
-                    pendingFiles.value = [];
-                    isUploading.value = false;
-                    uploadProgress.value = 100;
-                    showNotification("Files uploaded successfully!");
-                    fetchResources();
+                    await new Promise((resolve, reject) => {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', `${API_BASE}/upload`);
+                        xhr.upload.onprogress = (e) => {
+                            if (e.lengthComputable) {
+                                const fileProgress = (e.loaded / e.total) * 100;
+                                uploadProgress.value = Math.round(((i / totalFiles) * 100) + (fileProgress / totalFiles));
+                            }
+                        };
+                        xhr.onload = () => {
+                            if (xhr.status === 200) resolve();
+                            else reject(new Error('Upload failed'));
+                        };
+                        xhr.onerror = () => reject(new Error('Network error'));
+                        xhr.send(fd);
+                    });
                 }
+
+                pendingFiles.value = [];
+                isUploading.value = false;
+                uploadProgress.value = 100;
+                showNotification("Files uploaded successfully!");
+                fetchResources();
+            }
 
                 async function startIngestion(mode) {
-                    const url = `${API_BASE}/ingest/document/stream${mode === 'fresh' ? '?fresh=true' : ''}`;
-                    ingestionLogs.value.pdf = [];
-                    const res = await fetch(url);
-                    const reader = res.body.getReader();
-                    const decoder = new TextDecoder();
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const lines = decoder.decode(value).split('\n');
-                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.pdf.push(l); });
-                    }
-                    fetchResources();
+                const url = `${API_BASE}/ingest/document/stream${mode === 'fresh' ? '?fresh=true' : ''}`;
+                ingestionLogs.value.pdf = [];
+                const res = await fetch(url);
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const lines = decoder.decode(value).split('\n');
+                    lines.forEach(l => { if (l.trim()) ingestionLogs.value.pdf.push(l); });
                 }
+                fetchResources();
+            }
 
                 async function startWebIngest() {
-                    const url = `${API_BASE}/ingest/web/stream?url=${encodeURIComponent(webUrl.value)}`;
-                    ingestionLogs.value.web = [];
-                    const res = await fetch(url);
-                    const reader = res.body.getReader();
-                    const decoder = new TextDecoder();
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const lines = decoder.decode(value).split('\n');
-                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.web.push(l); });
-                    }
-                    fetchResources();
+                const url = `${API_BASE}/ingest/web/stream?url=${encodeURIComponent(webUrl.value)}`;
+                ingestionLogs.value.web = [];
+                const res = await fetch(url);
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const lines = decoder.decode(value).split('\n');
+                    lines.forEach(l => { if (l.trim()) ingestionLogs.value.web.push(l); });
                 }
+                fetchResources();
+            }
 
                 async function fetchSchemas() {
-                    const res = await fetch(`${API_BASE}/ingest/db/schemas`);
-                    const data = await res.json();
-                    dbSchemas.value = data.schemas || [];
-                }
+                const res = await fetch(`${API_BASE}/ingest/db/schemas`);
+                const data = await res.json();
+                dbSchemas.value = data.schemas || [];
+            }
 
                 async function fetchTables() {
-                    tableSearch.value = "";
-                    selectedTables.value = [];
-                    const res = await fetch(`${API_BASE}/ingest/db/tables?schema=${selectedSchema.value}`);
-                    const data = await res.json();
-                    dbTables.value = data.tables || [];
-                }
+                tableSearch.value = "";
+                selectedTables.value = [];
+                const res = await fetch(`${API_BASE}/ingest/db/tables?schema=${selectedSchema.value}`);
+                const data = await res.json();
+                dbTables.value = data.tables || [];
+            }
 
                 async function startDbIngest() {
-                    const url = `${API_BASE}/ingest/db/stream?schema=${encodeURIComponent(selectedSchema.value)}&tables=${encodeURIComponent(selectedTables.value.join(','))}`;
-                    ingestionLogs.value.db = [];
-                    const res = await fetch(url);
-                    const reader = res.body.getReader();
-                    const decoder = new TextDecoder();
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const lines = decoder.decode(value).split('\n');
-                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.db.push(l); });
-                    }
-                    fetchResources();
+                const url = `${API_BASE}/ingest/db/stream?schema=${encodeURIComponent(selectedSchema.value)}&tables=${encodeURIComponent(selectedTables.value.join(','))}`;
+                ingestionLogs.value.db = [];
+                const res = await fetch(url);
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const lines = decoder.decode(value).split('\n');
+                    lines.forEach(l => { if (l.trim()) ingestionLogs.value.db.push(l); });
                 }
+                fetchResources();
+            }
 
                 async function openPreview(name) {
-                    previewSourceState.value.name = name;
-                    previewSourceState.value.visible = true;
-                    try {
-                        const res = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(name)}`);
-                        const chunks = await res.json();
-                        const usedContents = new Set(currentUsedDocs.value.filter(d => d.source === name).map(d => d.content.trim()));
-                        previewSourceState.value.chunks = chunks.map(c => ({ ...c, used: usedContents.has(c.content.trim()) }));
-                    } catch (e) { console.error(e); }
-                }
+                previewSourceState.value.name = name;
+                previewSourceState.value.visible = true;
+                try {
+                    const res = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(name)}`);
+                    const chunks = await res.json();
+                    const usedContents = new Set(currentUsedDocs.value.filter(d => d.source === name).map(d => d.content.trim()));
+                    previewSourceState.value.chunks = chunks.map(c => ({ ...c, used: usedContents.has(c.content.trim()) }));
+                } catch (e) { console.error(e); }
+            }
                 window.previewSourceInModal = openPreview;
 
-                async function deleteResource(type, name) {
-                    if (await requestConfirm("Delete Resource?", `Are you sure you want to delete ${name}?`)) {
-                        await fetch(`${API_BASE}/resources/${type}/${encodeURIComponent(name)}`, { method: 'DELETE' });
-                        fetchResources();
-                        showNotification("Resource deleted");
-                    }
-                }
+        async function deleteResource(type, name) {
+            if (await requestConfirm("Delete Resource?", `Are you sure you want to delete ${name}?`)) {
+                await fetch(`${API_BASE}/resources/${type}/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                fetchResources();
+                showNotification("Resource deleted");
+            }
+        }
 
-                async function wipeAllData() {
-                    if (await requestConfirm("Wipe All Data?", "This will permanently delete ALL indexed data and reset the system. This cannot be undone.")) {
-                        await fetch(`${API_BASE}/resources/reset`, { method: 'POST' });
-                        location.reload();
-                    }
-                }
+        async function wipeAllData() {
+            if (await requestConfirm("Wipe All Data?", "This will permanently delete ALL indexed data and reset the system. This cannot be undone.")) {
+                await fetch(`${API_BASE}/resources/reset`, { method: 'POST' });
+                location.reload();
+            }
+        }
 
-                function copyText(text) {
-                    const fallback = () => {
-                        const el = document.createElement('textarea');
-                        el.value = text;
-                        document.body.appendChild(el);
-                        el.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(el);
-                        showNotification("Copied to clipboard!");
-                    };
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(text).then(() => showNotification("Copied to clipboard!")).catch(fallback);
-                    } else { fallback(); }
-                }
+        function copyText(text) {
+            const fallback = () => {
+                const el = document.createElement('textarea');
+                el.value = text;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                showNotification("Copied to clipboard!");
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showNotification("Copied to clipboard!")).catch(fallback);
+            } else { fallback(); }
+        }
 
-                return {
-                    currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
-                    settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
-                    previewSourceState, isUploading, uploadProgress, notification, confirmState,
-                    resourceSearch, filteredResourceList,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText,
-                    // Login State
-                    isAuthenticated, showLoginModal, loginUsername, loginPassword, handleLogin, logout
-                };
+        return {
+            currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
+            settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
+            previewSourceState, isUploading, uploadProgress, notification, confirmState,
+            streamBuffer, isProcessingStream,
+            resourceSearch, filteredResourceList,
+            toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText,
+            // Login State
+            isAuthenticated, showLoginModal, loginUsername, loginPassword, handleLogin, logout
+        };
             }
         }).mount('#app');
     </script>

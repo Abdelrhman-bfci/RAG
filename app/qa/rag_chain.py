@@ -207,12 +207,12 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             return selected
             
         def invoke(self, query):
-            # Stage 1: Broad retrieval with similarity scores (increased from 300 to 500)
+            # Stage 1: Broad retrieval with similarity scores (reduced from 500 to 100 for speed)
             try:
-                docs_with_scores = self.vectorstore.similarity_search_with_score(query, k=500)
+                docs_with_scores = self.vectorstore.similarity_search_with_score(query, k=100)
             except:
                 # Fallback if similarity_search_with_score not available
-                docs = self.vectorstore.similarity_search(query, k=500)
+                docs = self.vectorstore.similarity_search(query, k=100)
                 docs_with_scores = [(doc, 0.0) for doc in docs]
             
             # Stage 2: Filter by relevance threshold
@@ -239,14 +239,14 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             # Sort by combined score (lower is better)
             boosted_docs.sort(key=lambda x: x[1])
             
-            # Stage 4: Apply MMR for diversity
+            # Stage 4: Apply MMR for diversity (reduced from 40 to 15)
             try:
                 # Get query embedding for MMR
                 query_embedding = self.vectorstore.embeddings.embed_query(query)
-                final_docs = self._apply_mmr(boosted_docs, query_embedding, k=40, lambda_param=0.7)
+                final_docs = self._apply_mmr(boosted_docs, query_embedding, k=15, lambda_param=0.7)
             except:
-                # Fallback: just take top 40
-                final_docs = [doc for doc, _ in boosted_docs[:40]]
+                # Fallback: just take top 15
+                final_docs = [doc for doc, _ in boosted_docs[:15]]
             
             return final_docs
 
