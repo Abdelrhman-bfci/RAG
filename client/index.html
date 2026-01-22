@@ -478,11 +478,7 @@
                         </div>
                         <div
                             class="flex items-center gap-2 bg-white dark:bg-gray-900 pr-1 pl-3 py-1 rounded-2xl border border-gray-200 dark:border-gray-700 outline-none focus-within:ring-2 focus-within:ring-asu-blue/50 focus-within:border-asu-blue transition-all shadow-sm">
-                            <select v-model="chatMode"
-                                class="bg-gray-50 dark:bg-gray-800 text-[10px] font-bold text-asu-blue dark:text-gray-300 border-none rounded-lg focus:ring-0 cursor-pointer h-8 px-2">
-                                <option value="normal">Normal</option>
-                                <option value="deep">🧠 Deep</option>
-                            </select>
+
                             <textarea v-model="inputMessage" @keydown.enter.prevent="sendMessage(false)"
                                 placeholder="Message ASU RAG Assistant..." rows="1"
                                 class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 py-2 text-sm md:text-base custom-scrollbar placeholder-gray-400 dark:placeholder-gray-500 outline-none"></textarea>
@@ -753,6 +749,22 @@
                                     <option value="vllm">vLLM (Local)</option>
                                 </select>
                             </div>
+
+                            <div
+                                class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                                <div>
+                                    <span class="block font-bold text-sm text-gray-900 dark:text-white">Deep Thinking
+                                        Mode</span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">Enable advanced reasoning
+                                        capabilities (slower but more accurate).</span>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" v-model="settings.deepThinking" class="sr-only peer">
+                                    <div
+                                        class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-asu-blue">
+                                    </div>
+                                </label>
+                            </div>
                             <button @click="saveSettings"
                                 class="w-full bg-asu-blue text-white py-4 rounded-xl font-bold shadow-lg transition-all text-lg">Save
                                 Configuration</button>
@@ -886,7 +898,15 @@
                     }
                 }
 
-                const settings = ref({ provider: 'openai', embedProvider: 'openai', openaiKey: '', geminiKey: '', llmModel: '', embedModel: '' });
+                const settings = ref({
+                    provider: 'openai',
+                    embedProvider: 'openai',
+                    openaiKey: '',
+                    geminiKey: '',
+                    llmModel: '',
+                    embedModel: '',
+                    deepThinking: false
+                });
                 const modelLists = ref({ llm: [], embed: [] });
                 const resourceList = ref({ documents: [], websites: [], databases: [] });
                 const indexStats = ref({ total_documents: 0, total_chunks: 0, sources: {} });
@@ -1089,7 +1109,7 @@
                     try {
                         const url = isContinuation
                             ? `${API_BASE}/ask/stream?question=${encodeURIComponent(messages.value[messages.value.length - 2].content)}&is_continuation=true&last_answer=${encodeURIComponent(messages.value[messages.value.length - 2].content)}`
-                            : `${API_BASE}/ask/stream?question=${encodeURIComponent(text)}&deep_thinking=${chatMode.value === 'deep'}`;
+                            : `${API_BASE}/ask/stream?question=${encodeURIComponent(text)}&deep_thinking=${settings.value.deepThinking}`;
 
                         const response = await fetch(url);
                         const reader = response.body.getReader();
