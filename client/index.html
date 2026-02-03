@@ -1724,6 +1724,15 @@
                             body: formData
                         });
 
+                        if (!response.ok) {
+                            let errorDetail = "Server error (500)";
+                            try {
+                                const errData = await response.json();
+                                errorDetail = errData.detail || errorDetail;
+                            } catch (e) { }
+                            throw new Error(errorDetail);
+                        }
+
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
                         let buffer = "";

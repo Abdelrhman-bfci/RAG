@@ -23,8 +23,6 @@ def get_document_loader(file_path: str):
     ext = os.path.splitext(file_path)[1].lower()
     
     if ext == '.pdf':
-        if HAS_PYMUPDF:
-            return None  # Will use pymupdf4llm directly
         return PyPDFLoader(file_path)
     elif ext == '.docx':
         return Docx2txtLoader(file_path)
@@ -41,21 +39,21 @@ def extract_text_from_document(file_path: str) -> str:
     """Extract text content from various document formats."""
     ext = os.path.splitext(file_path)[1].lower()
     
-    # Special handling for PDF with pymupdf4llm
+    # Try pymupdf4llm first for PDFs
     if ext == '.pdf' and HAS_PYMUPDF:
         try:
-            md_text = pymupdf4llm.to_markdown(file_path)
-            return md_text
+            return pymupdf4llm.to_markdown(file_path)
         except Exception as e:
-            print(f"pymupdf4llm failed, falling back to PyPDFLoader: {e}")
+            print(f"pymupdf4llm failed, falling back to standard loader: {e}")
     
-    # Use LangChain loaders for other formats
-    loader = get_document_loader(file_path)
-    documents = loader.load()
-    
-    # Combine all document pages/chunks into one text
-    full_text = "\n\n".join([doc.page_content for doc in documents])
-    return full_text
+    # Fallback to standard loaders
+    try:
+        loader = get_document_loader(file_path)
+        documents = loader.load()
+        return "\n\n".join([doc.page_content for doc in documents])
+    except Exception as e:
+        print(f"Standard extraction failed: {e}")
+        raise ValueError(f"Failed to extract text from {ext} file: {str(e)}")
 
 def split_text_into_chunks(text: str, chunk_size: int = 4000, chunk_overlap: int = 200) -> List[str]:
     """Split text into overlapping chunks for processing."""
