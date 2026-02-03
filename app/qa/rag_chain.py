@@ -113,7 +113,7 @@ Question: {question}
 Provide a comprehensive, analytical answer with complete information and inline citations.""")
 ])
 
-def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
+def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = "", conversation_history: list = None):
     """
     Creates and returns the RAG chain for Question Answering.
     """
@@ -426,13 +426,18 @@ def filter_cited_sources(answer: str, all_sources: list) -> list:
     
     return sorted(list(set(final_sources)))
 
-def answer_question(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
+def answer_question(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = "", conversation_history: list = None):
     """
     Entry point to answer a question with performance metrics and source citations.
     """
     start_total = time.time()
     try:
-        chain, retriever = get_rag_chain(deep_thinking=deep_thinking, is_continuation=is_continuation, last_answer=last_answer)
+        chain, retriever = get_rag_chain(
+            deep_thinking=deep_thinking, 
+            is_continuation=is_continuation, 
+            last_answer=last_answer,
+            conversation_history=conversation_history
+        )
         
         # 1. Retrieve documents manually to get metadata for citations
         docs = retriever.invoke(question)
@@ -480,7 +485,12 @@ def stream_answer(question: str, deep_thinking: bool = False, is_continuation: b
     """
     start_total = time.time()
     try:
-        chain, retriever = get_rag_chain(deep_thinking=deep_thinking, is_continuation=is_continuation, last_answer=last_answer)
+        chain, retriever = get_rag_chain(
+            deep_thinking=deep_thinking, 
+            is_continuation=is_continuation, 
+            last_answer=last_answer,
+            conversation_history=conversation_history
+        )
         
         # 1. Pre-retrieve docs just to get sources early (optional but better for UX)
         start_retrieval = time.time()

@@ -43,6 +43,7 @@ class QuestionRequest(BaseModel):
     deep_thinking: bool = False
     is_continuation: bool = False
     last_answer: str = ""
+    session_id: Optional[str] = None
 
 class ModelUpdateRequest(BaseModel):
     model: str
@@ -161,12 +162,35 @@ async def ask_question(request: QuestionRequest):
         except:
             pass
 
+    from app.services.chat_session import (
+        create_session, 
+        get_session_history, 
+        add_message, 
+        session_exists
+    )
+    
+    # Create or validate session
+    session_id = request.session_id
+    if not session_id or not session_exists(session_id):
+        session_id = create_session()
+    
+    # Get conversation history
+    history = get_session_history(session_id, limit=10)
+    
+    # Save user question to session
+    add_message(session_id, "user", request.question)
+
     result = answer_question(
         request.question, 
         deep_thinking=request.deep_thinking,
         is_continuation=request.is_continuation,
-        last_answer=request.last_answer
+        last_answer=request.last_answer,
+        conversation_history=history
     )
+    
+    # Save assistant response
+    if "answer" in result:
+        add_message(session_id, "assistant", result["answer"])
     
     if "error" in result:
         return {"question": request.question, "answer": result["error"] + status_msg}
@@ -175,7 +199,8 @@ async def ask_question(request: QuestionRequest):
         "question": request.question, 
         "answer": result["answer"] + status_msg,
         "sources": result["sources"],
-        "performance": result["performance"]
+        "performance": result["performance"],
+        "session_id": session_id
     }
 
 @app.get("/ask/stream")
