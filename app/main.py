@@ -293,18 +293,14 @@ async def summarize_document_stream_endpoint(file: UploadFile):
     """
     import tempfile
     import shutil
-    import traceback
     from app.services.document_summarizer import summarize_document_stream
     from app.config import Config
-    
-    print(f"DEBUG: Starting summarization for file: {file.filename}")
     
     # Validate file type
     allowed_extensions = ['.pdf', '.docx', '.xlsx', '.xls', '.csv', '.txt']
     file_ext = os.path.splitext(file.filename)[1].lower()
     
     if file_ext not in allowed_extensions:
-        print(f"DEBUG: Unsupported file type: {file_ext}")
         raise HTTPException(
             status_code=400, 
             detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
@@ -313,35 +309,27 @@ async def summarize_document_stream_endpoint(file: UploadFile):
     try:
         # Save uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-            print(f"DEBUG: Saving to temp file: {tmp_file.name}")
             shutil.copyfileobj(file.file, tmp_file)
             tmp_path = tmp_file.name
     except Exception as e:
-        print(f"DEBUG: Failed to save temp file: {e}")
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to save temporary file: {str(e)}")
     
     async def generate():
         """Generator for streaming summarization progress."""
-        print("DEBUG: Summary generator started")
         try:
             for update in summarize_document_stream(
                 tmp_path, 
                 chunk_size=Config.SUMMARY_CHUNK_SIZE
             ):
-                print(f"DEBUG: Yielding update: {update.get('type')}")
                 yield json.dumps(update) + "\n"
         except Exception as e:
-            print(f"DEBUG: Error in summary generator: {e}")
-            traceback.print_exc()
             yield json.dumps({"type": "error", "message": str(e)}) + "\n"
         finally:
-            print(f"DEBUG: Cleaning up temp file: {tmp_path}")
             # Clean up temporary file
             try:
                 os.unlink(tmp_path)
-            except Exception as e:
-                print(f"DEBUG: Failed to unlink temp file: {e}")
+            except:
+                pass
     
     return StreamingResponse(
         generate(),
