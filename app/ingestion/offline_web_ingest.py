@@ -40,8 +40,11 @@ def extract_slider_text(soup):
 
 def init_tracking_db():
     """Initialize the tracking tables in the database."""
-    conn = sqlite3.connect(METADATA_DB)
+    conn = sqlite3.connect(METADATA_DB, timeout=30)
     cursor = conn.cursor()
+    
+    # Enable Write-Ahead Logging for better concurrency
+    cursor.execute('PRAGMA journal_mode=WAL')
     
     # Table for tracking ingested files
     cursor.execute('''
@@ -87,9 +90,13 @@ def get_ingested_files():
     conn.close()
     return {row[0]: {"filename": row[1], "chunks": row[2], "timestamp": row[3]} for row in results}
 
-def save_ingested_file(source_url, filename, chunks):
+def save_ingested_file(source_url, filename, chunks, conn=None):
     """Save or update an ingested file in the database."""
-    conn = sqlite3.connect(METADATA_DB)
+    local_conn = False
+    if conn is None:
+        conn = sqlite3.connect(METADATA_DB, timeout=30)
+        local_conn = True
+        
     cursor = conn.cursor()
     import time
     timestamp = time.time()
@@ -98,9 +105,11 @@ def save_ingested_file(source_url, filename, chunks):
         VALUES (?, ?, ?, COALESCE((SELECT timestamp FROM ingested_files WHERE source_url = ?), ?), ?)
     ''', (source_url, filename, chunks, source_url, timestamp, timestamp))
     conn.commit()
-    conn.close()
+    
+    if local_conn:
+        conn.close()
 
-def update_status(status, current=0, total=0, message="", start_time=None):
+def update_status(status, current=0, total=0, message="", start_time=None, conn=None):
     """Update the ingestion status in the database."""
     import time
     timestamp = time.time()
@@ -112,7 +121,11 @@ def update_status(status, current=0, total=0, message="", start_time=None):
         remaining_batches = total - current
         eta_seconds = int(remaining_batches * avg_time_per_batch)
     
-    conn = sqlite3.connect(METADATA_DB)
+    local_conn = False
+    if conn is None:
+        conn = sqlite3.connect(METADATA_DB, timeout=30)
+        local_conn = True
+        
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE ingestion_status 
@@ -120,7 +133,9 @@ def update_status(status, current=0, total=0, message="", start_time=None):
         WHERE id = 1
     ''', (status, current, total, message, timestamp, eta_seconds))
     conn.commit()
-    conn.close()
+    
+    if local_conn:
+        conn.close()
 
 def get_ingestion_status():
     """Get the current ingestion status from the database."""
@@ -170,8 +185,9 @@ def ingest_offline_downloads(force_fresh: bool = False):
 
     if force_fresh:
         # Clear all ingested files if fresh start requested
-        conn = sqlite3.connect(METADATA_DB)
+        conn = sqlite3.connect(METADATA_DB, timeout=30)
         cursor = conn.cursor()
+        cursor.execute('PRAGMA journal_mode=WAL')
         cursor.execute('DELETE FROM ingested_files')
         conn.commit()
         conn.close()
@@ -208,7 +224,9 @@ def ingest_offline_downloads(force_fresh: bool = False):
     )
 
     import sqlite3
-    conn = sqlite3.connect(METADATA_DB)
+    conn = sqlite3.connect(METADATA_DB, timeout=30)
+    # Enable WAL mode for the reader connection as well
+    conn.execute('PRAGMA journal_mode=WAL')
     cursor = conn.cursor()
 
     for i, file_path in enumerate(all_files):
@@ -279,13 +297,13 @@ def ingest_offline_downloads(force_fresh: bool = False):
                     else:
                         vectorstore = FAISSStore().add_documents(chunks)
                     
-                    # Track this file in database
-                    save_ingested_file(source_url, filename, len(chunks))
+                    # Track this file in database - reuse connection
+                    save_ingested_file(source_url, filename, len(chunks), conn=conn)
                     
                     processed_count += 1
             
             if (i+1) % 10 == 0:
-                update_status("running", current=i+1, total=total_files, message=f"Processed {i+1} files", start_time=start_time)
+                update_status("running", current=i+1, total=total_files, message=f"Processed {i+1} files", start_time=start_time, conn=conn)
                 # Save checkpoint
                 if vectorstore:
                     faiss_store.save_index(vectorstore)
@@ -305,5 +323,5 @@ def ingest_offline_downloads(force_fresh: bool = False):
             yield f"Error saving index: {e}\n"
 
     msg = f"SUCCESS: Ingested {processed_count} files from downloads."
-    update_status("completed", message=msg)
+    update_status("completed", message=msg, conn=conn)
     yield f"{msg}\n"
