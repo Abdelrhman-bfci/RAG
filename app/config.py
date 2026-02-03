@@ -110,10 +110,14 @@ class Config:
     # Crawler Settings
     DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER", "downloads")
     CRAWLER_DB = os.getenv("CRAWLER_DB", "crawler_data.db")
+    _allowed_ext_raw = os.getenv("ALLOWED_EXTENSIONS", ".pdf")
+    ALLOWED_EXTENSIONS = {ext.strip() if ext.strip().startswith('.') else f".{ext.strip()}" 
+                          for ext in _allowed_ext_raw.split(',') if ext.strip()}
     
     # Document Summarization Settings
     SUMMARY_CHUNK_SIZE = int(os.getenv("SUMMARY_CHUNK_SIZE", "4000"))
     SUMMARY_CHUNK_OVERLAP = int(os.getenv("SUMMARY_CHUNK_OVERLAP", "200"))
+    SHOW_SUMMARY_CHUNKS = os.getenv("SHOW_SUMMARY_CHUNKS", "False").lower() == "true"
 
     @classmethod
     def update_config(cls, updates: dict):

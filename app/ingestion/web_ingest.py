@@ -12,6 +12,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.faiss_store import FAISSStore
+import pymupdf4llm
 
 TRACKING_FILE = "web_metadata.json"
 STATUS_FILE = "web_ingestion_status.json"
@@ -118,6 +119,23 @@ def is_pagination_link(url: str, text: str) -> bool:
         
     return False
 
+def extract_slider_text(soup):
+    """Extract text from common slider/carousel elements."""
+    slider_texts = []
+    # Common selectors for sliders and carousels
+    selectors = [
+        '.slider', '.carousel', '.swiper', '.slide', '.gallery',
+        '[class*="slider"]', '[class*="carousel"]', '[class*="swiper"]', '[class*="slide"]'
+    ]
+    for selector in selectors:
+        for element in soup.select(selector):
+            # Extract text and avoid duplicates if nested
+            text = element.get_text(separator=' ', strip=True)
+            if text and len(text) > 20: # Filter out very short text
+                slider_texts.append(text)
+    
+    return "\n\n".join(list(dict.fromkeys(slider_texts))) # Order-preserving deduplication
+
 def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     """
     Ingest website content using BFS crawling with pagination support.
@@ -211,6 +229,15 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                         filename = existing_filename
                     else:
                         ext = get_extension(response)
+                        
+                        # Restriction: Only HTML and allowed binary extensions from .env
+                        is_allowed_binary = 'application/pdf' in content_type or ext in Config.ALLOWED_EXTENSIONS
+                        is_html = 'text/html' in content_type or ext == '.html'
+                        
+                        if not (is_allowed_binary or is_html):
+                            yield f"  -> Skipped: Type {content_type} / {ext} not allowed\n"
+                            continue
+
                         filename = f"{hashlib.md5(current_url.encode()).hexdigest()}{ext}"
                         filepath = os.path.join(DOWNLOAD_FOLDER, filename)
                         with open(filepath, "wb") as f:
@@ -242,6 +269,13 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                             readme_content += f"**Parent URL:** {parent_url if parent_url else 'Root'}\n"
                             readme_content += f"**Ingestion Date:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                             readme_content += "---\n\n"
+                            
+                            # Add Slider Content if found
+                            slider_text = extract_slider_text(soup)
+                            if slider_text:
+                                readme_content += "## Slider Content\n"
+                                readme_content += slider_text + "\n\n---\n\n"
+                            
                             readme_content += text_content
                             
                             doc = Document(page_content=readme_content, metadata={"source": current_url})
@@ -272,6 +306,36 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                             # Save periodic checkpoint
                             if processed_pages % 5 == 0:
                                 faiss_store.save_index(vectorstore)
+
+                    elif 'application/pdf' in content_type or filename.endswith('.pdf'):
+                        yield f"  -> Processing PDF with pymupdf4llm...\n"
+                        try:
+                            filepath = os.path.join(DOWNLOAD_FOLDER, filename)
+                            md_content = pymupdf4llm.to_markdown(filepath)
+                            
+                            if md_content:
+                                doc = Document(page_content=md_content, metadata={"source": current_url})
+                                text_splitter = RecursiveCharacterTextSplitter(
+                                    chunk_size=Config.CHUNK_SIZE,
+                                    chunk_overlap=Config.CHUNK_OVERLAP,
+                                    separators=["\n\n", "\n", " ", ""]
+                                )
+                                chunks = text_splitter.split_documents([doc])
+                                
+                                yield f"  -> Indexing {len(chunks)} PDF chunks...\n"
+                                faiss_store.delete_source(current_url)
+                                
+                                if vectorstore:
+                                    vectorstore.add_documents(chunks)
+                                else:
+                                    vectorstore = FAISSStore().add_documents(chunks)
+                                
+                                # Update chunk count
+                                meta = store.get_page(current_url)
+                                meta["chunk_count"] = len(chunks)
+                                store.update_page(current_url, meta)
+                        except Exception as pdf_err:
+                            yield f"  -> PDF Processing Error: {pdf_err}\n"
 
                     processed_pages += 1
                     update_status("running", current=processed_pages, message=f"Processed {processed_pages} pages")

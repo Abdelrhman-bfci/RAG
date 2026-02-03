@@ -21,6 +21,23 @@ import sqlite3
 METADATA_DB = Config.CRAWLER_DB
 DOWNLOAD_FOLDER = Config.DOWNLOAD_FOLDER
 
+def extract_slider_text(soup):
+    """Extract text from common slider/carousel elements."""
+    slider_texts = []
+    # Common selectors for sliders and carousels
+    selectors = [
+        '.slider', '.carousel', '.swiper', '.slide', '.gallery',
+        '[class*="slider"]', '[class*="carousel"]', '[class*="swiper"]', '[class*="slide"]'
+    ]
+    for selector in selectors:
+        for element in soup.select(selector):
+            # Extract text and avoid duplicates if nested
+            text = element.get_text(separator=' ', strip=True)
+            if text and len(text) > 20: # Filter out very short text
+                slider_texts.append(text)
+    
+    return "\n\n".join(list(dict.fromkeys(slider_texts))) # Order-preserving deduplication
+
 def init_tracking_db():
     """Initialize the tracking tables in the database."""
     conn = sqlite3.connect(METADATA_DB)
@@ -227,6 +244,13 @@ def ingest_offline_downloads(force_fresh: bool = False):
                     readme_content += f"**Source:** {source_url}\n"
                     readme_content += f"**Ingestion Date:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                     readme_content += "---\n\n"
+                    
+                    # Add Slider Content if found
+                    slider_text = extract_slider_text(soup)
+                    if slider_text:
+                        readme_content += "## Slider Content\n"
+                        readme_content += slider_text + "\n\n---\n\n"
+                    
                     readme_content += text_content
                     docs = [Document(page_content=readme_content, metadata={"source": source_url})]
 
@@ -238,14 +262,10 @@ def ingest_offline_downloads(force_fresh: bool = False):
                  except Exception as e:
                      yield f"  -> PDF Error: {e}\n"
 
-            # --- Other Docs ---
+            # Skip other file types as per requirement
             else:
-                loader = get_loader(file_path)
-                if loader:
-                    docs = loader.load()
-                    # Update metadata source to be the URL if known, else file path
-                    for doc in docs:
-                        doc.metadata["source"] = source_url
+                yield f"  -> Skipped: {ext} (only HTML and PDF allowed)\n"
+                continue
 
             # --- Vectorization ---
             if docs:

@@ -931,6 +931,22 @@
                                     </div>
                                 </label>
                             </div>
+
+                            <div
+                                class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                                <div>
+                                    <span class="block font-bold text-sm text-gray-900 dark:text-white">Show Summary
+                                        Chunks</span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">Display summaries for each
+                                        section of the document.</span>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" v-model="settings.showSummaryChunks" class="sr-only peer">
+                                    <div
+                                        class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-asu-blue">
+                                    </div>
+                                </label>
+                            </div>
                             <button @click="saveSettings"
                                 class="w-full bg-asu-blue text-white py-4 rounded-xl font-bold shadow-lg transition-all text-lg">Save
                                 Configuration</button>
@@ -1071,7 +1087,8 @@
                     geminiKey: '',
                     llmModel: '',
                     embedModel: '',
-                    deepThinking: false
+                    deepThinking: false,
+                    showSummaryChunks: false
                 });
                 const modelLists = ref({ llm: [], embed: [] });
                 const resourceList = ref({ documents: [], websites: [], databases: [], crawled: [] });
@@ -1246,6 +1263,8 @@
                         else if (data.provider === 'ollama') settings.value.llmModel = data.ollama.model;
                         else if (data.provider === 'vllm') settings.value.llmModel = data.vllm.model;
 
+                        settings.value.showSummaryChunks = data.show_summary_chunks;
+
                         if (settings.value.provider) await loadModels('llm');
                         if (settings.value.embedProvider) await loadModels('embed');
                     } catch (e) { console.error("Config load failed", e); }
@@ -1265,7 +1284,8 @@
                         "LLM_PROVIDER": settings.value.provider,
                         "EMBEDDING_PROVIDER": settings.value.embedProvider,
                         "OPENAI_API_KEY": settings.value.openaiKey,
-                        "GEMINI_API_KEY": settings.value.geminiKey
+                        "GEMINI_API_KEY": settings.value.geminiKey,
+                        "SHOW_SUMMARY_CHUNKS": settings.value.showSummaryChunks
                     };
                     if (settings.value.provider === 'openai') updates["OPENAI_LLM_MODEL"] = settings.value.llmModel;
                     if (settings.value.provider === 'gemini') updates["GEMINI_MODEL"] = settings.value.llmModel;
@@ -1719,7 +1739,7 @@
 
                     try {
                         summaryProgress.value.push("Uploading and starting summarization...");
-                        const response = await fetch(`${API_BASE}/summarize/stream`, {
+                        const response = await fetch(`${API_BASE}/summarize/stream?include_chunks=${settings.value.showSummaryChunks}`, {
                             method: 'POST',
                             body: formData
                         });

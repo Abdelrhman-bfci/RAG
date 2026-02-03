@@ -158,10 +158,12 @@ Final Comprehensive Summary:"""
     response = llm.invoke(prompt)
     return response.content
 
-def summarize_document_stream(file_path: str, chunk_size: int = 4000) -> Generator[Dict, None, None]:
+import concurrent.futures
+
+def summarize_document_stream(file_path: str, chunk_size: int = 4000, include_chunks: bool = False) -> Generator[Dict, None, None]:
     """
     Summarize a document with streaming progress updates.
-    Yields progress messages, chunk summaries, and final summary.
+    Yields progress messages, chunk summaries (optional), and final summary.
     """
     try:
         # Step 1: Extract text
@@ -185,20 +187,49 @@ def summarize_document_stream(file_path: str, chunk_size: int = 4000) -> Generat
         yield {"type": "progress", "message": "Initializing AI model..."}
         llm = get_llm_for_summary()
         
-        # Step 4: Summarize each chunk
-        chunk_summaries = []
-        for i, chunk in enumerate(chunks):
-            yield {"type": "progress", "message": f"Summarizing chunk {i+1}/{total_chunks}..."}
+        # Step 4: Summarize each chunk in parallel for efficiency
+        chunk_summaries = [None] * total_chunks
+        
+        if total_chunks > 1:
+            yield {"type": "progress", "message": f"Summarizing {total_chunks} chunks in parallel..."}
             
-            summary = summarize_chunk(chunk, i+1, total_chunks, llm)
-            chunk_summaries.append(summary)
-            
-            yield {
-                "type": "chunk_summary",
-                "chunk": i+1,
-                "total": total_chunks,
-                "summary": summary
-            }
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                # Map chunk indices to futures
+                future_to_index = {
+                    executor.submit(summarize_chunk, chunk, i + 1, total_chunks, llm): i 
+                    for i, chunk in enumerate(chunks)
+                }
+                
+                completed = 0
+                for future in concurrent.futures.as_completed(future_to_index):
+                    index = future_to_index[future]
+                    try:
+                        summary = future.result()
+                        chunk_summaries[index] = summary
+                        completed += 1
+                        
+                        yield {"type": "progress", "message": f"Completed chunk {completed}/{total_chunks}..."}
+                        
+                        if include_chunks:
+                            yield {
+                                "type": "chunk_summary",
+                                "chunk": index + 1,
+                                "total": total_chunks,
+                                "summary": summary
+                            }
+                    except Exception as e:
+                        yield {"type": "error", "message": f"Error summarizing chunk {index + 1}: {str(e)}"}
+        else:
+            # Single chunk fallback
+            summary = summarize_chunk(chunks[0], 1, 1, llm)
+            chunk_summaries[0] = summary
+            if include_chunks:
+                yield {
+                    "type": "chunk_summary",
+                    "chunk": 1,
+                    "total": 1,
+                    "summary": summary
+                }
         
         # Step 5: Combine summaries if multiple chunks
         if total_chunks > 1:

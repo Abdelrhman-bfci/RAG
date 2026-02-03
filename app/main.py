@@ -117,7 +117,8 @@ async def get_current_config():
         "gemini": {
             "model": Config.GEMINI_MODEL,
             "api_key": Config.GEMINI_API_KEY
-        }
+        },
+        "show_summary_chunks": Config.SHOW_SUMMARY_CHUNKS
     }
 
 @app.post("/config/update")
@@ -286,7 +287,7 @@ async def list_sessions():
 # --- Document Summarization Endpoint ---
 
 @app.post("/summarize/stream")
-async def summarize_document_stream_endpoint(file: UploadFile):
+async def summarize_document_stream_endpoint(file: UploadFile, include_chunks: Optional[bool] = None):
     """
     Summarize an uploaded document with streaming progress.
     Supports PDF, DOCX, XLSX, CSV, TXT files.
@@ -295,6 +296,10 @@ async def summarize_document_stream_endpoint(file: UploadFile):
     import shutil
     from app.services.document_summarizer import summarize_document_stream
     from app.config import Config
+    
+    # Use config default if parameter not provided
+    if include_chunks is None:
+        include_chunks = Config.SHOW_SUMMARY_CHUNKS
     
     # Validate file type
     allowed_extensions = ['.pdf', '.docx', '.xlsx', '.xls', '.csv', '.txt']
@@ -319,7 +324,8 @@ async def summarize_document_stream_endpoint(file: UploadFile):
         try:
             for update in summarize_document_stream(
                 tmp_path, 
-                chunk_size=Config.SUMMARY_CHUNK_SIZE
+                chunk_size=Config.SUMMARY_CHUNK_SIZE,
+                include_chunks=include_chunks
             ):
                 yield json.dumps(update) + "\n"
         except Exception as e:

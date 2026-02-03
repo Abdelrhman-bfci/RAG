@@ -100,8 +100,8 @@ class CrawlerService:
         original_domain = urlparse(start_url).netloc
         visited = set()
         
-        # Allowed binary types (can be expanded via config later if needed)
-        ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.svg'}
+        # Allowed binary types from config
+        ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
 
         processed_count = 0
         

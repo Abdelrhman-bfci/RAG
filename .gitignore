@@ -13,4 +13,6 @@ app/ingestion/__pycache__/web_ingest.cpython-314.pyc
 
 # Vector store
 faiss_index_v3/
+downloads/
+offine_downloads/
 
