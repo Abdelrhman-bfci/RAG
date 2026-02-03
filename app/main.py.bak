@@ -13,8 +13,6 @@ import asyncio
 from app.ingestion.document_ingest import ingest_documents, TRACKING_FILE as DOC_TRACKING
 from app.ingestion.db_ingest import ingest_database, DB_TRACKING_FILE as DB_TRACKING
 from app.ingestion.web_ingest import ingest_websites, TRACKING_FILE as WEB_TRACKING
-from app.ingestion.offline_web_ingest import ingest_offline_downloads
-from app.services.crawler_service import CrawlerService
 from app.qa.rag_chain import answer_question, stream_answer
 from app.config import Config # Assuming Config is needed for RESOURCE_DIR
 
@@ -178,156 +176,20 @@ async def ask_question(request: QuestionRequest):
     }
 
 @app.get("/ask/stream")
-async def ask_question_stream(
-    question: str, 
-    deep_thinking: bool = False, 
-    is_continuation: bool = False, 
-    last_answer: str = "",
-    session_id: str = None
-):
+async def ask_question_stream(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
     """
-    Answer a question using the RAG system with streaming and conversation history.
+    Answer a question using the RAG system with streaming.
     """
     if not question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
-    from app.services.chat_session import (
-        create_session, 
-        get_session_history, 
-        add_message, 
-        session_exists
-    )
-    
-    # Create or validate session
-    if not session_id or not session_exists(session_id):
-        session_id = create_session()
-    
-    # Get conversation history (exclude current question)
-    history = get_session_history(session_id, limit=10)
-    
-    # Save user question to session
-    add_message(session_id, "user", question)
-    
-    async def generate_with_session():
-        """Generator that streams response and saves to session."""
-        accumulated_answer = ""
-        
-        # Stream the answer with conversation history
-        for chunk_data in stream_answer(
+    return StreamingResponse(
+        stream_answer(
             question, 
             deep_thinking=deep_thinking,
             is_continuation=is_continuation,
-            last_answer=last_answer,
-            conversation_history=history
-        ):
-            # Accumulate answer chunks
-            try:
-                data = json.loads(chunk_data)
-                if data.get("type") == "chunk":
-                    accumulated_answer += data.get("content", "")
-            except:
-                pass
-            
-            yield chunk_data
-        
-        # Save assistant response to session
-        if accumulated_answer:
-            add_message(session_id, "assistant", accumulated_answer)
-    
-    return StreamingResponse(
-        generate_with_session(), 
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-            "X-Session-ID": session_id  # Return session ID in header
-        }
-    )
-
-# --- Chat Session Management Endpoints ---
-
-@app.post("/chat/session/new")
-async def create_new_session():
-    """Create a new chat session."""
-    from app.services.chat_session import create_session
-    session_id = create_session()
-    return {"session_id": session_id}
-
-@app.get("/chat/session/{session_id}/history")
-async def get_session_history_endpoint(session_id: str, limit: int = 50):
-    """Get conversation history for a session."""
-    from app.services.chat_session import get_session_history, session_exists
-    
-    if not session_exists(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    history = get_session_history(session_id, limit=limit)
-    return {"session_id": session_id, "history": history}
-
-@app.delete("/chat/session/{session_id}")
-async def delete_session_endpoint(session_id: str):
-    """Delete a chat session and all its messages."""
-    from app.services.chat_session import delete_session, session_exists
-    
-    if not session_exists(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    delete_session(session_id)
-    return {"status": "success", "message": f"Session {session_id} deleted"}
-
-@app.get("/chat/sessions")
-async def list_sessions():
-    """List all chat sessions."""
-    from app.services.chat_session import get_all_sessions
-    sessions = get_all_sessions()
-    return {"sessions": sessions}
-
-# --- Document Summarization Endpoint ---
-
-@app.post("/summarize/stream")
-async def summarize_document_stream_endpoint(file: UploadFile):
-    """
-    Summarize an uploaded document with streaming progress.
-    Supports PDF, DOCX, XLSX, CSV, TXT files.
-    """
-    import tempfile
-    import shutil
-    from app.services.document_summarizer import summarize_document_stream
-    from app.config import Config
-    
-    # Validate file type
-    allowed_extensions = ['.pdf', '.docx', '.xlsx', '.xls', '.csv', '.txt']
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    
-    if file_ext not in allowed_extensions:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
-        )
-    
-    # Save uploaded file temporarily
-    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-        shutil.copyfileobj(file.file, tmp_file)
-        tmp_path = tmp_file.name
-    
-    async def generate():
-        """Generator for streaming summarization progress."""
-        try:
-            for update in summarize_document_stream(
-                tmp_path, 
-                chunk_size=Config.SUMMARY_CHUNK_SIZE
-            ):
-                yield json.dumps(update) + "\n"
-        finally:
-            # Clean up temporary file
-            try:
-                os.unlink(tmp_path)
-            except:
-                pass
-    
-    return StreamingResponse(
-        generate(),
+            last_answer=last_answer
+        ), 
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -358,8 +220,7 @@ async def list_resources():
     resources = {
         "documents": [],
         "websites": [],
-        "databases": [],
-        "crawled": []
+        "databases": []
     }
     
     # Documents
@@ -385,15 +246,6 @@ async def list_resources():
             with open(DB_TRACKING, "r") as f:
                 resources["databases"] = json.load(f)
         except: pass
-    
-    # Crawled files (offline ingestion) - read from database
-    try:
-        from app.ingestion.offline_web_ingest import get_ingested_files
-        ingested = get_ingested_files()
-        resources["crawled"] = list(ingested.keys())
-    except Exception as e:
-        print(f"Error loading crawled files: {e}")
-        pass
     
     return resources
 
@@ -587,35 +439,6 @@ async def stream_db_ingestion(schema: str = "", tables: str = ""):
     
     return StreamingResponse(
         ingest_database(tables=table_list, schema=schema if schema else None),
-        media_type="text/plain",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"
-        }
-    )
-
-@app.get("/crawl/stream")
-async def stream_crawler(url: str, depth: int = 2):
-    """
-    Stream crawler progress in real-time.
-    """
-    service = CrawlerService()
-    return StreamingResponse(
-        service.crawl_website(url, depth), 
-        media_type="text/plain",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"
-        }
-    )
-
-@app.get("/ingest/offline/stream")
-async def stream_offline_ingestion(fresh: bool = False):
-    """
-    Stream offline ingestion progress from downloads folder.
-    """
-    return StreamingResponse(
-        ingest_offline_downloads(force_fresh=fresh), 
         media_type="text/plain",
         headers={
             "Cache-Control": "no-cache",

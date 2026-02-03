@@ -372,9 +372,15 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             Do not just list them at the end; place them next to the specific information."""
 
     def process_question(q):
+        # Prepend conversation history if provided
+        history_text = ""
+        if conversation_history and len(conversation_history) > 0:
+            from app.services.chat_session import format_history_for_prompt
+            history_text = format_history_for_prompt(conversation_history) + "\n"
+        
         if is_continuation and last_answer:
-            return f"--- START OF CONTINUATION REQUEST ---\nYOU PREVIOUSLY SAID:\n[[[ {last_answer} ]]]\n\nNOW CONTINUE DIRECTLY from exactly where you left off. DO NOT REPEAT ANY LIST ITEMS OR SENTENCES FROM ABOVE. Provide the remaining missing information for the question: {q}\n--- CONTINUE BELOW ---"
-        return f"{q} [MANDATORY: Cite every single course/item in brackets like [Document.pdf, Page X]]"
+            return f"{history_text}--- START OF CONTINUATION REQUEST ---\nYOU PREVIOUSLY SAID:\n[[[ {last_answer} ]]]\n\nNOW CONTINUE DIRECTLY from exactly where you left off. DO NOT REPEAT ANY LIST ITEMS OR SENTENCES FROM ABOVE. Provide the remaining missing information for the question: {q}\n--- CONTINUE BELOW ---"
+        return f"{history_text}{q} [MANDATORY: Cite every single course/item in brackets like [Document.pdf, Page X]]"
 
     rag_chain = (
         {
@@ -466,10 +472,11 @@ def answer_question(question: str, deep_thinking: bool = False, is_continuation:
         print(f"DEBUG ERROR: {traceback.format_exc()}")
         return {"error": f"An unexpected error occurred: {str(e)}"}
 
-def stream_answer(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = ""):
+def stream_answer(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = "", conversation_history: list = None):
     """
     Entry point to stream chunks of the LLM response.
     Yields newline-delimited JSON strings for client processing.
+    conversation_history: List of dicts with 'role' and 'content' keys
     """
     start_total = time.time()
     try:

@@ -107,6 +107,14 @@ class Config:
         """List common Gemini models."""
         return ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"]
 
+    # Crawler Settings
+    DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER", "downloads")
+    CRAWLER_DB = os.getenv("CRAWLER_DB", "crawler_data.db")
+    
+    # Document Summarization Settings
+    SUMMARY_CHUNK_SIZE = int(os.getenv("SUMMARY_CHUNK_SIZE", "4000"))
+    SUMMARY_CHUNK_OVERLAP = int(os.getenv("SUMMARY_CHUNK_OVERLAP", "200"))
+
     @classmethod
     def update_config(cls, updates: dict):
         """Update multiple configuration values and persist to .env."""

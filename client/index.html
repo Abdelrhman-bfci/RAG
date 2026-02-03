@@ -337,6 +337,16 @@
                             <i class="fa-solid fa-globe"></i>
                             <span class="font-medium">Web Content</span>
                         </div>
+                        <div @click="currentView = 'view-crawler'"
+                            :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-crawler' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                            <i class="fa-solid fa-spider"></i>
+                            <span class="font-medium">Web Crawler</span>
+                        </div>
+                        <div @click="currentView = 'view-summary'"
+                            :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-summary' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
+                            <i class="fa-solid fa-file-lines"></i>
+                            <span class="font-medium">Summary Document</span>
+                        </div>
                         <div @click="currentView = 'view-db'"
                             :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-db' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
                             <i class="fa-solid fa-database"></i>
@@ -393,11 +403,18 @@
                     <img src="/client/logo.png" alt="ASU Logo" class="h-8 w-8 object-contain">
                     <span class="font-bold text-sm">ASU ENG AI</span>
                 </div>
-                <button @click="toggleTheme"
-                    class="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:scale-95">
-                    <i v-if="isDark" class="fa-solid fa-sun text-yellow-500"></i>
-                    <i v-else class="fa-solid fa-moon text-blue-500"></i>
-                </button>
+                <div class="flex items-center gap-2">
+                    <button @click="startNewChat" v-if="currentView === 'view-chat'"
+                        class="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:scale-95"
+                        title="New Chat">
+                        <i class="fa-solid fa-plus text-asu-blue"></i>
+                    </button>
+                    <button @click="toggleTheme"
+                        class="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors active:scale-95">
+                        <i v-if="isDark" class="fa-solid fa-sun text-yellow-500"></i>
+                        <i v-else class="fa-solid fa-moon text-blue-500"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- View: Chat Assistant -->
@@ -574,6 +591,155 @@
                 </div>
             </div>
 
+            <!-- View: Web Crawler -->
+            <div v-if="currentView === 'view-crawler'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div
+                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i
+                                class="fas fa-spider text-asu-blue"></i> Web Crawler</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Start URL</label>
+                                <input v-model="crawlerUrl" type="text" placeholder="https://example.com"
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Max Depth</label>
+                                <input v-model.number="crawlerDepth" type="number" min="1" max="10"
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm">
+                            </div>
+                            <button @click="startCrawl"
+                                class="w-full bg-asu-blue text-white py-3 rounded-xl font-bold hover:bg-blue-900 transition-all">Start
+                                Crawl</button>
+                        </div>
+                    </div>
+                    <div
+                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i
+                                class="fas fa-database text-asu-blue"></i> Offline Ingestion</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Ingest downloaded files from the
+                            downloads folder into the RAG system.</p>
+                        <button @click="startOfflineIngest"
+                            class="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition-all">Ingest
+                            Downloaded Files</button>
+                    </div>
+                    <div
+                        class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
+                        <div v-for="log in ingestionLogs.crawler" class="py-0.5">> {{ log }}</div>
+                        <div v-if="ingestionLogs.crawler.length === 0">> Crawler and offline ingestion logs appear here.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Summary Document -->
+            <div v-if="currentView === 'view-summary'" class="flex-1 flex flex-col h-full overflow-hidden p-4 md:p-8">
+                <div class="max-w-5xl mx-auto w-full h-full flex flex-col space-y-6">
+                    <!-- Header -->
+                    <div class="text-center shrink-0">
+                        <h2
+                            class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white flex items-center justify-center gap-3">
+                            <i class="fa-solid fa-file-lines text-asu-blue"></i>
+                            Document Summarizer
+                        </h2>
+                        <p class="text-gray-500 dark:text-gray-400 mt-2">Upload a document to get a comprehensive
+                            AI-generated summary</p>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                        <!-- File Upload Area -->
+                        <div class="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-asu-blue dark:hover:border-asu-blue transition-all group cursor-pointer"
+                            @click="$refs.summaryFileInput.click()">
+                            <div class="text-center">
+                                <div
+                                    class="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                                    <i class="fa-solid fa-cloud-upload-alt text-2xl text-asu-blue"></i>
+                                </div>
+                                <h3 class="text-lg font-bold mb-2">Upload Document</h3>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                    Supported formats: PDF, DOCX, XLSX, CSV, TXT
+                                </p>
+                                <input type="file" ref="summaryFileInput" @change="handleSummaryFileUpload"
+                                    accept=".pdf,.docx,.xlsx,.xls,.csv,.txt" class="hidden">
+                                <span
+                                    class="inline-block bg-asu-blue text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-900 transition-all shadow-md shadow-blue-200 dark:shadow-none">
+                                    Choose File
+                                </span>
+                                <div v-if="summaryFile"
+                                    class="mt-4 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm font-medium text-asu-blue border border-blue-100 dark:border-blue-900/30">
+                                    <i class="fa-solid fa-file-circle-check mr-2"></i>{{ summaryFile.name }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Progress Section -->
+                        <div v-if="summaryProgress.length > 0"
+                            class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                            <h3
+                                class="text-sm font-bold mb-4 flex items-center gap-2 uppercase tracking-wider text-gray-400">
+                                <i v-if="!finalSummary" class="fa-solid fa-spinner fa-spin text-asu-blue"></i>
+                                <i v-else class="fa-solid fa-check-double text-green-500"></i>
+                                Processing Status
+                            </h3>
+                            <div class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                <div v-for="(msg, idx) in summaryProgress" :key="idx"
+                                    class="text-sm flex items-start gap-3 py-1 border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                                    <i class="fa-solid fa-circle-check text-green-500 mt-1"></i>
+                                    <span class="text-gray-600 dark:text-gray-300">{{ msg }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chunk Summaries -->
+                        <div v-if="chunkSummaries.length > 0" class="space-y-4">
+                            <h3
+                                class="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-gray-400">
+                                <i class="fa-solid fa-layer-group text-asu-blue"></i>Section Summaries
+                            </h3>
+                            <div class="grid grid-cols-1 gap-4">
+                                <div v-for="chunk in chunkSummaries" :key="chunk.chunk"
+                                    class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:border-asu-blue/30 transition-all">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <span
+                                            class="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-asu-blue text-[10px] font-bold rounded uppercase">
+                                            Section {{ chunk.chunk }}/{{ chunk.total }}
+                                        </span>
+                                    </div>
+                                    <div class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{{
+                                        chunk.summary }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Final Summary -->
+                        <div v-if="finalSummary"
+                            class="bg-gradient-to-br from-asu-blue to-blue-900 p-0.5 rounded-3xl shadow-xl shadow-blue-200 dark:shadow-none">
+                            <div class="bg-white dark:bg-gray-900 p-8 rounded-[22px]">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-xl font-bold flex items-center gap-3">
+                                        <div
+                                            class="w-10 h-10 bg-asu-blue rounded-xl flex items-center justify-center text-white">
+                                            <i class="fa-solid fa-file-signature"></i>
+                                        </div>
+                                        Final Comprehensive Summary
+                                    </h3>
+                                    <button @click="copyText(finalSummary)"
+                                        class="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl text-sm font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-gray-100 dark:border-gray-700 shadow-sm">
+                                        <i class="fa-solid fa-copy text-asu-blue"></i>Copy Summary
+                                    </button>
+                                </div>
+                                <div class="prose dark:prose-invert max-w-none">
+                                    <div
+                                        class="text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed text-lg font-medium">
+                                        {{ finalSummary }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- View: SQL DB -->
             <div v-if="currentView === 'view-db'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
                 <div class="max-w-4xl mx-auto space-y-6">
@@ -670,7 +836,7 @@
                                             <div
                                                 class="flex items-center gap-2 md:gap-3 overflow-hidden min-w-0 flex-1">
                                                 <i class="fas flex-shrink-0 text-base md:text-lg"
-                                                    :class="category === 'documents' ? 'fa-file-pdf text-red-500' : (category === 'websites' ? 'fa-globe text-blue-500' : 'fa-table text-green-500')"></i>
+                                                    :class="category === 'documents' ? 'fa-file-pdf text-red-500' : (category === 'websites' ? 'fa-globe text-blue-500' : (category === 'crawled' ? 'fa-spider text-purple-500' : 'fa-table text-green-500'))"></i>
                                                 <span class="text-sm md:text-base font-medium truncate" :title="item">{{
                                                     item }}</span>
                                             </div>
@@ -908,9 +1074,9 @@
                     deepThinking: false
                 });
                 const modelLists = ref({ llm: [], embed: [] });
-                const resourceList = ref({ documents: [], websites: [], databases: [] });
+                const resourceList = ref({ documents: [], websites: [], databases: [], crawled: [] });
                 const indexStats = ref({ total_documents: 0, total_chunks: 0, sources: {} });
-                const ingestionLogs = ref({ pdf: [], web: [], db: [] });
+                const ingestionLogs = ref({ pdf: [], web: [], db: [], crawler: [] });
                 const resourceSearch = ref("");
                 const filteredResourceList = computed(() => {
                     if (!resourceSearch.value) return resourceList.value;
@@ -930,6 +1096,13 @@
                 const sourceMap = ref({});
                 const streamBuffer = ref("");
                 const isProcessingStream = ref(false);
+                const crawlerUrl = ref("");
+                const crawlerDepth = ref(2);
+                const currentSessionId = ref(null);  // Chat session ID
+                const summaryFile = ref(null);
+                const summaryProgress = ref([]);
+                const chunkSummaries = ref([]);
+                const finalSummary = ref("");
 
                 // Typewriter effect logic
                 async function processStreamBuffer() {
@@ -1138,11 +1311,27 @@
                     scrollToBottom();
 
                     try {
-                        const url = isContinuation
-                            ? `${API_BASE}/ask/stream?question=${encodeURIComponent(messages.value[messages.value.length - 2].content)}&is_continuation=true&last_answer=${encodeURIComponent(messages.value[messages.value.length - 2].content)}`
-                            : `${API_BASE}/ask/stream?question=${encodeURIComponent(text)}&deep_thinking=${settings.value.deepThinking}`;
+                        // Build URL with session_id if available
+                        let url;
+                        if (isContinuation) {
+                            url = `${API_BASE}/ask/stream?question=${encodeURIComponent(messages.value[messages.value.length - 2].content)}&is_continuation=true&last_answer=${encodeURIComponent(messages.value[messages.value.length - 2].content)}`;
+                        } else {
+                            url = `${API_BASE}/ask/stream?question=${encodeURIComponent(text)}&deep_thinking=${settings.value.deepThinking}`;
+                        }
+
+                        // Add session_id if exists
+                        if (currentSessionId.value) {
+                            url += `&session_id=${encodeURIComponent(currentSessionId.value)}`;
+                        }
 
                         const response = await fetch(url);
+
+                        // Extract session ID from response header
+                        const sessionId = response.headers.get('X-Session-ID');
+                        if (sessionId && !currentSessionId.value) {
+                            currentSessionId.value = sessionId;
+                        }
+
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
                         let buffer = "";
@@ -1497,6 +1686,105 @@
                     fetchResources();
                 }
 
+                async function startCrawl() {
+                    if (!crawlerUrl.value) {
+                        showNotification("Please enter a URL", "error");
+                        return;
+                    }
+                    const url = `${API_BASE}/crawl/stream?url=${encodeURIComponent(crawlerUrl.value)}&depth=${crawlerDepth.value}`;
+                    ingestionLogs.value.crawler = [];
+                    const res = await fetch(url);
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        const lines = decoder.decode(value).split('\n');
+                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.crawler.push(l); });
+                    }
+                    showNotification("Crawl completed!");
+                }
+
+                async function handleSummaryFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    summaryFile.value = file;
+                    summaryProgress.value = [];
+                    chunkSummaries.value = [];
+                    finalSummary.value = "";
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    try {
+                        summaryProgress.value.push("Uploading and starting summarization...");
+                        const response = await fetch(`${API_BASE}/summarize/stream`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = "";
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split('\n');
+                            buffer = lines.pop();
+
+                            for (const line of lines) {
+                                if (!line.trim()) continue;
+                                try {
+                                    const data = JSON.parse(line);
+                                    if (data.type === 'progress') {
+                                        summaryProgress.value.push(data.message);
+                                    } else if (data.type === 'chunk_summary') {
+                                        chunkSummaries.value.push(data);
+                                    } else if (data.type === 'final_summary') {
+                                        finalSummary.value = data.content;
+                                    } else if (data.type === 'error') {
+                                        showNotification(data.message, 'error');
+                                        summaryProgress.value.push("ERROR: " + data.message);
+                                    }
+                                } catch (e) {
+                                    console.error("Error parsing summary stream line:", e);
+                                }
+                            }
+                        }
+                        showNotification("Summarization complete!");
+                    } catch (e) {
+                        console.error("Summarization failed:", e);
+                        showNotification("Summarization failed", 'error');
+                    }
+                }
+
+                function startNewChat() {
+                    // Clear current session and messages
+                    currentSessionId.value = null;
+                    messages.value = [];
+                    showNotification("New chat started!");
+                }
+
+                async function startOfflineIngest() {
+                    const url = `${API_BASE}/ingest/offline/stream`;
+                    ingestionLogs.value.crawler = [];
+                    const res = await fetch(url);
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        const lines = decoder.decode(value).split('\n');
+                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.crawler.push(l); });
+                    }
+                    fetchResources();
+                    showNotification("Offline ingestion completed!");
+                }
+
                 async function openPreview(name) {
                     previewSourceState.value.name = name;
                     previewSourceState.value.visible = true;
@@ -1545,7 +1833,9 @@
                     previewSourceState, isUploading, uploadProgress, notification, confirmState,
                     streamBuffer, isProcessingStream,
                     resourceSearch, filteredResourceList,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText,
+                    crawlerUrl, crawlerDepth,
+                    summaryFile, summaryProgress, chunkSummaries, finalSummary,
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, startCrawl, startOfflineIngest, startNewChat, handleSummaryFileUpload,
                     // Login State
                     isAuthenticated, showLoginModal, loginUsername, loginPassword, handleLogin, logout
                 };
