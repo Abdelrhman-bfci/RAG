@@ -16,3 +16,7 @@ faiss_index_v3/
 downloads/
 offine_downloads/
 
+.venv/
+.idea/
+
+crawler_data.db
