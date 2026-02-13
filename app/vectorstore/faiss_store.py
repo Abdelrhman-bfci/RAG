@@ -15,13 +15,15 @@ class FAISSStore:
             self.embeddings = OpenAIEmbeddings(
                 model=Config.VLLM_EMBEDDING_MODEL,
                 openai_api_base=Config.VLLM_BASE_URL,
-                openai_api_key="none"
+                openai_api_key="none",
+                check_embedding_ctx_length=False
             )
         elif Config.EMBEDDING_PROVIDER == "lmstudio":
             self.embeddings = OpenAIEmbeddings(
                 model=Config.LMSTUDIO_EMBEDDING_MODEL,
                 openai_api_base=Config.LMSTUDIO_BASE_URL,
-                openai_api_key="lm-studio"
+                openai_api_key="lm-studio",
+                check_embedding_ctx_length=False
             )
         else:
             self.embeddings = OpenAIEmbeddings(
