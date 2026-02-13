@@ -1,5 +1,8 @@
 import os
+import logging
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file if it exists
 load_dotenv()
@@ -125,6 +128,26 @@ class Config:
     def get_gemini_models(cls, api_key: str = None):
         """List common Gemini models."""
         return ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"]
+
+    # LangSmith / Tracing
+    LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+    LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "RAG-System")
+    LANGCHAIN_ENDPOINT = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+
+    @classmethod
+    def configure_langsmith(cls):
+        if not cls.LANGCHAIN_TRACING_V2:
+            return
+        if not cls.LANGCHAIN_API_KEY:
+            logger.warning("LANGCHAIN_TRACING_V2 is enabled but LANGCHAIN_API_KEY is not set. Tracing disabled.")
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+            return
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_API_KEY"] = cls.LANGCHAIN_API_KEY
+        os.environ["LANGCHAIN_PROJECT"] = cls.LANGCHAIN_PROJECT
+        os.environ["LANGCHAIN_ENDPOINT"] = cls.LANGCHAIN_ENDPOINT
+        logger.info(f"LangSmith tracing enabled for project '{cls.LANGCHAIN_PROJECT}'")
 
     # Crawler Settings
     DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER", "downloads")

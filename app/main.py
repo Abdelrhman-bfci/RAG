@@ -18,6 +18,8 @@ from app.services.crawler_service import CrawlerService
 from app.qa.rag_chain import answer_question, stream_answer
 from app.config import Config # Assuming Config is needed for RESOURCE_DIR
 
+Config.configure_langsmith()
+
 app = FastAPI(title="RAG System API", description="PDF & SQL RAG with Strict Context Control")
 
 # --- CORS Configuration ---
