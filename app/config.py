@@ -36,7 +36,7 @@ class Config:
     INGEST_TABLES = [table.strip() for table in _ingest_tables_raw.split(",") if table.strip()]
 
     # Model Settings
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower() # 'openai', 'ollama', or 'vllm'
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower() # 'openai', 'ollama', 'vllm', 'lmstudio', or 'gemini'
     EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", LLM_PROVIDER) # default to same as LLM
     
     # OpenAI Settings
@@ -57,6 +57,11 @@ class Config:
     # vLLM Settings (OpenAI Compatible)
     VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:9090/v1")
     VLLM_MODEL = os.getenv("VLLM_MODEL", "model")
+
+    # LM Studio Settings (OpenAI Compatible)
+    LMSTUDIO_BASE_URL = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+    LMSTUDIO_MODEL = os.getenv("LMSTUDIO_MODEL", "model")
+    LMSTUDIO_EMBEDDING_MODEL = os.getenv("LMSTUDIO_EMBEDDING_MODEL", "nomic-embed-text")
 
     @classmethod
     def get_ollama_models(cls, base_url: str = None):
@@ -85,6 +90,20 @@ class Config:
         except:
             pass
         return [cls.VLLM_MODEL]
+
+    @classmethod
+    def get_lmstudio_models(cls, base_url: str = None):
+        """Fetch available models from LM Studio API."""
+        import requests
+        url = base_url or cls.LMSTUDIO_BASE_URL
+        try:
+            response = requests.get(f"{url}/models", timeout=5)
+            if response.status_code == 200:
+                models = response.json().get("data", [])
+                return [m["id"] for m in models]
+        except:
+            pass
+        return [cls.LMSTUDIO_MODEL]
 
     @classmethod
     def get_openai_models(cls, api_key: str = None, base_url: str = None):

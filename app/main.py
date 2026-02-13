@@ -80,6 +80,12 @@ async def list_vllm_models(base_url: str = None):
     from app.config import Config
     return {"models": Config.get_vllm_models(base_url=base_url), "current": Config.VLLM_MODEL}
 
+@app.get("/models/lmstudio")
+async def list_lmstudio_models(base_url: str = None):
+    """List available LM Studio models."""
+    from app.config import Config
+    return {"models": Config.get_lmstudio_models(base_url=base_url), "current": Config.LMSTUDIO_MODEL}
+
 @app.get("/models/openai")
 async def list_openai_models(api_key: str = None, base_url: str = None):
     """List available OpenAI models."""
@@ -108,6 +114,11 @@ async def get_current_config():
             "model": Config.VLLM_MODEL,
             "embedding_model": Config.VLLM_EMBEDDING_MODEL,
             "base_url": Config.VLLM_BASE_URL
+        },
+        "lmstudio": {
+            "model": Config.LMSTUDIO_MODEL,
+            "embedding_model": Config.LMSTUDIO_EMBEDDING_MODEL,
+            "base_url": Config.LMSTUDIO_BASE_URL
         },
         "openai": {
             "model": Config.OPENAI_LLM_MODEL,
