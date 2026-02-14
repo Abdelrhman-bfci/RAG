@@ -79,7 +79,31 @@ def init_tracking_db():
     ''')
     
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_source_url ON ingested_files(source_url)')
-    conn.commit()
+    
+    # --- Permission & Migration ---
+    try:
+        # 1. Migration: Add ingest_status column if missing
+        cursor.execute("PRAGMA table_info(ingested_files)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'ingest_status' not in columns:
+            cursor.execute('ALTER TABLE ingested_files ADD COLUMN ingest_status INTEGER DEFAULT 1')
+            print("Successfully added 'ingest_status' column.")
+
+        # 2. Permission check: Try a dummy write
+        cursor.execute("CREATE TABLE IF NOT EXISTS _write_test (id INTEGER PRIMARY KEY)")
+        cursor.execute("DROP TABLE _write_test")
+        
+        conn.commit()
+    except sqlite3.OperationalError as e:
+        if "readonly" in str(e).lower():
+            print(f"\nCRITICAL ERROR: The database '{METADATA_DB}' is READ-ONLY.")
+            print("Please run: sudo chown $USER:$USER '{METADATA_DB}'")
+            print("Or check if another process has an exclusive lock.\n")
+            raise PermissionError(f"Database {METADATA_DB} is read-only.") from e
+        raise e
+    except Exception as e:
+        print(f"Init DB error: {e}")
+        
     conn.close()
 
 def get_ingested_files():

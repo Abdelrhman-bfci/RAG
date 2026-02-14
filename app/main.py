@@ -538,10 +538,17 @@ async def reset_all_resources():
     # 3. Clear Config Tables
     Config.update_config({"INGEST_TABLES": ""})
     
-    # 4. Clear Vector Store
+    # 4. Clear Vector Store (Current provider)
     from app.vectorstore.factory import VectorStoreFactory
     store = VectorStoreFactory.get_instance()
     store.clear_all()
+    
+    # Extra thorough cleanup: Remove any old FAISS versions that might be lingering
+    # This prevents switched providers from seeing old data in shared stats
+    for old_faiss in ["faiss_index", "faiss_index_v2", "faiss_index_v3"]:
+        if os.path.exists(old_faiss):
+            shutil.rmtree(old_faiss)
+            print(f"Cleaned up legacy FAISS index: {old_faiss}")
     
     # 5. Reset Crawled Ingestion Status and get count > 0 resources
     from app.ingestion.offline_web_ingest import reset_crawled_ingestion_status
