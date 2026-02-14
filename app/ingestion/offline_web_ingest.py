@@ -336,8 +336,10 @@ def ingest_offline_downloads(force_fresh: bool = False):
         except Exception as e:
             error_msg = str(e)
             if "readonly" in error_msg.lower() or "1032" in error_msg:
+                db_dir = os.path.dirname(os.path.abspath(METADATA_DB))
+                vs_dir = os.path.abspath(Config.VECTOR_DB_PATH)
                 yield f"  -> CRITICAL PERMISSION ERROR: The database is read-only.\n"
-                yield f"  -> Fix by running: sudo chown -R $USER:$USER {os.path.dirname(os.path.abspath(METADATA_DB))} {Config.VECTOR_DB_PATH}\n"
+                yield f"  -> Fix by running: sudo chown -R $USER:$USER {db_dir} {vs_dir}\n"
             yield f"  -> Error processing {file_path}: {e}\n"
             continue
 
