@@ -90,6 +90,13 @@ def get_llm_for_summary():
             temperature=0.3,
             api_key="none"
         )
+    elif Config.LLM_PROVIDER == "lmstudio":
+        return ChatOpenAI(
+            base_url=Config.LMSTUDIO_BASE_URL,
+            model=Config.LMSTUDIO_MODEL,
+            temperature=0.3,
+            api_key="lm-studio"
+        )
     elif Config.LLM_PROVIDER == "openai":
         return ChatOpenAI(
             model=Config.OPENAI_LLM_MODEL,

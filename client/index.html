@@ -885,6 +885,7 @@
                                     <option value="gemini">Google Gemini</option>
                                     <option value="ollama">Ollama (Local)</option>
                                     <option value="vllm">vLLM (Local)</option>
+                                    <option value="lmstudio">LM Studio (Local)</option>
                                 </select>
                             </div>
                             <div v-if="settings.provider === 'openai' || settings.provider === 'gemini'"
@@ -913,6 +914,7 @@
                                     <option value="openai">OpenAI</option>
                                     <option value="ollama">Ollama (Local)</option>
                                     <option value="vllm">vLLM (Local)</option>
+                                    <option value="lmstudio">LM Studio (Local)</option>
                                 </select>
                             </div>
 
@@ -1262,6 +1264,7 @@
                         else if (data.provider === 'gemini') settings.value.llmModel = data.gemini.model;
                         else if (data.provider === 'ollama') settings.value.llmModel = data.ollama.model;
                         else if (data.provider === 'vllm') settings.value.llmModel = data.vllm.model;
+                        else if (data.provider === 'lmstudio') settings.value.llmModel = data.lmstudio.model;
 
                         settings.value.showSummaryChunks = data.show_summary_chunks;
 
@@ -1288,7 +1291,10 @@
                         "SHOW_SUMMARY_CHUNKS": settings.value.showSummaryChunks
                     };
                     if (settings.value.provider === 'openai') updates["OPENAI_LLM_MODEL"] = settings.value.llmModel;
-                    if (settings.value.provider === 'gemini') updates["GEMINI_MODEL"] = settings.value.llmModel;
+                    else if (settings.value.provider === 'gemini') updates["GEMINI_MODEL"] = settings.value.llmModel;
+                    else if (settings.value.provider === 'ollama') updates["OLLAMA_LLM_MODEL"] = settings.value.llmModel;
+                    else if (settings.value.provider === 'vllm') updates["VLLM_MODEL"] = settings.value.llmModel;
+                    else if (settings.value.provider === 'lmstudio') updates["LMSTUDIO_MODEL"] = settings.value.llmModel;
 
                     await fetch(`${API_BASE}/config/update`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },

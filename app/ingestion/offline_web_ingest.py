@@ -85,6 +85,16 @@ def get_ingested_files():
     """Get all ingested files from the database."""
     conn = sqlite3.connect(METADATA_DB)
     cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ingested_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_url TEXT UNIQUE,
+            filename TEXT,
+            chunks INTEGER,
+            timestamp REAL,
+            last_updated REAL
+        )
+    ''')
     cursor.execute('SELECT source_url, filename, chunks, timestamp FROM ingested_files ORDER BY last_updated DESC')
     results = cursor.fetchall()
     conn.close()

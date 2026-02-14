@@ -272,7 +272,15 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             model=Config.VLLM_MODEL,
             temperature=0.2 if deep_thinking else 0.1,
             api_key="none",
-            max_tokens=8192  # Maximum tokens to generate in response
+            max_tokens=8192
+        )
+    elif Config.LLM_PROVIDER == "lmstudio":
+        llm = ChatOpenAI(
+            base_url=Config.LMSTUDIO_BASE_URL,
+            model=Config.LMSTUDIO_MODEL,
+            temperature=0.2 if deep_thinking else 0.1,
+            api_key="lm-studio",
+            max_tokens=8192
         )
     elif Config.LLM_PROVIDER == "openai":
         llm = ChatOpenAI(
@@ -536,7 +544,14 @@ def stream_answer(question: str, deep_thinking: bool = False, is_continuation: b
             "retrieval": f"{retrieval_time:.1f}s"
         }
         
-        current_model = Config.OLLAMA_LLM_MODEL if Config.LLM_PROVIDER == "ollama" else Config.LLM_MODEL
+        provider_model_map = {
+            "ollama": Config.OLLAMA_LLM_MODEL,
+            "vllm": Config.VLLM_MODEL,
+            "lmstudio": Config.LMSTUDIO_MODEL,
+            "openai": Config.OPENAI_LLM_MODEL,
+            "gemini": Config.GEMINI_MODEL,
+        }
+        current_model = provider_model_map.get(Config.LLM_PROVIDER, Config.OLLAMA_LLM_MODEL)
         
         yield json.dumps({
             "type": "metadata", 

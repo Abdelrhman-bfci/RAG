@@ -1,5 +1,8 @@
 import os
+import logging
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file if it exists
 load_dotenv()
@@ -36,7 +39,7 @@ class Config:
     INGEST_TABLES = [table.strip() for table in _ingest_tables_raw.split(",") if table.strip()]
 
     # Model Settings
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower() # 'openai', 'ollama', or 'vllm'
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower() # 'openai', 'ollama', 'vllm', 'lmstudio', or 'gemini'
     EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", LLM_PROVIDER) # default to same as LLM
     
     # OpenAI Settings
@@ -57,6 +60,11 @@ class Config:
     # vLLM Settings (OpenAI Compatible)
     VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:9090/v1")
     VLLM_MODEL = os.getenv("VLLM_MODEL", "model")
+
+    # LM Studio Settings (OpenAI Compatible)
+    LMSTUDIO_BASE_URL = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+    LMSTUDIO_MODEL = os.getenv("LMSTUDIO_MODEL", "model")
+    LMSTUDIO_EMBEDDING_MODEL = os.getenv("LMSTUDIO_EMBEDDING_MODEL", "nomic-embed-text")
 
     @classmethod
     def get_ollama_models(cls, base_url: str = None):
@@ -87,6 +95,20 @@ class Config:
         return [cls.VLLM_MODEL]
 
     @classmethod
+    def get_lmstudio_models(cls, base_url: str = None):
+        """Fetch available models from LM Studio API."""
+        import requests
+        url = base_url or cls.LMSTUDIO_BASE_URL
+        try:
+            response = requests.get(f"{url}/models", timeout=5)
+            if response.status_code == 200:
+                models = response.json().get("data", [])
+                return [m["id"] for m in models]
+        except:
+            pass
+        return [cls.LMSTUDIO_MODEL]
+
+    @classmethod
     def get_openai_models(cls, api_key: str = None, base_url: str = None):
         """Fetch available models from OpenAI."""
         import requests
@@ -106,6 +128,26 @@ class Config:
     def get_gemini_models(cls, api_key: str = None):
         """List common Gemini models."""
         return ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"]
+
+    # LangSmith / Tracing
+    LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+    LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "RAG-System")
+    LANGCHAIN_ENDPOINT = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+
+    @classmethod
+    def configure_langsmith(cls):
+        if not cls.LANGCHAIN_TRACING_V2:
+            return
+        if not cls.LANGCHAIN_API_KEY:
+            logger.warning("LANGCHAIN_TRACING_V2 is enabled but LANGCHAIN_API_KEY is not set. Tracing disabled.")
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+            return
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_API_KEY"] = cls.LANGCHAIN_API_KEY
+        os.environ["LANGCHAIN_PROJECT"] = cls.LANGCHAIN_PROJECT
+        os.environ["LANGCHAIN_ENDPOINT"] = cls.LANGCHAIN_ENDPOINT
+        logger.info(f"LangSmith tracing enabled for project '{cls.LANGCHAIN_PROJECT}'")
 
     # Crawler Settings
     DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER", "downloads")

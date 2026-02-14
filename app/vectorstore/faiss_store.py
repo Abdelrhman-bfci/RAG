@@ -12,15 +12,22 @@ class FAISSStore:
                 model=Config.OLLAMA_EMBEDDING_MODEL
             )
         elif Config.EMBEDDING_PROVIDER == "vllm":
-            # vLLM provides an OpenAI-compatible /v1/embeddings endpoint
             self.embeddings = OpenAIEmbeddings(
                 model=Config.VLLM_EMBEDDING_MODEL,
-                openai_api_base=Config.VLLM_BASE_URL, # Ensure this includes /v1
-                openai_api_key="none"
+                openai_api_base=Config.VLLM_BASE_URL,
+                openai_api_key="none",
+                check_embedding_ctx_length=False
+            )
+        elif Config.EMBEDDING_PROVIDER == "lmstudio":
+            self.embeddings = OpenAIEmbeddings(
+                model=Config.LMSTUDIO_EMBEDDING_MODEL,
+                openai_api_base=Config.LMSTUDIO_BASE_URL,
+                openai_api_key="lm-studio",
+                check_embedding_ctx_length=False
             )
         else:
             self.embeddings = OpenAIEmbeddings(
-                model=Config.EMBEDDING_MODEL,
+                model=Config.OPENAI_EMBEDDING_MODEL,
                 openai_api_key=Config.OPENAI_API_KEY
             )
         

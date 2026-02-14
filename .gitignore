@@ -1,5 +1,5 @@
 # Environment variables
-# .env
+.env
 
 # Local ingestion files and status
 ingested_websites.json
@@ -16,3 +16,7 @@ faiss_index_v3/
 downloads/
 offine_downloads/
 
+.venv/
+.idea/
+
+crawler_data.db
