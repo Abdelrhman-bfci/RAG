@@ -539,20 +539,38 @@ async def reset_all_resources():
     Config.update_config({"INGEST_TABLES": ""})
     
     # 4. Clear Vector Store (Current provider)
-    from app.vectorstore.factory import VectorStoreFactory
-    store = VectorStoreFactory.get_instance()
-    store.clear_all()
+    try:
+        from app.vectorstore.factory import VectorStoreFactory
+        store = VectorStoreFactory.get_instance()
+        store.clear_all()
+        print("Cleared current vector store.")
+    except Exception as e:
+        print(f"Error clearing vector store: {e}")
     
     # Extra thorough cleanup: Remove any old FAISS versions that might be lingering
-    # This prevents switched providers from seeing old data in shared stats
     for old_faiss in ["faiss_index", "faiss_index_v2", "faiss_index_v3"]:
         if os.path.exists(old_faiss):
-            shutil.rmtree(old_faiss)
-            print(f"Cleaned up legacy FAISS index: {old_faiss}")
+            try:
+                shutil.rmtree(old_faiss)
+                print(f"Cleaned up legacy FAISS index: {old_faiss}")
+            except Exception as e:
+                print(f"Failed to delete {old_faiss}: {e}")
+    
+    # Also explicitly clear chroma_db folder if it exists
+    if os.path.exists("chroma_db"):
+        try:
+            shutil.rmtree("chroma_db")
+            print("Explicitly deleted chroma_db folder.")
+        except Exception as e:
+            print(f"Failed to delete chroma_db: {e}")
     
     # 5. Reset Crawled Ingestion Status and get count > 0 resources
-    from app.ingestion.offline_web_ingest import reset_crawled_ingestion_status
-    crawled_reset = reset_crawled_ingestion_status()
+    try:
+        from app.ingestion.offline_web_ingest import reset_crawled_ingestion_status
+        crawled_reset = reset_crawled_ingestion_status()
+    except Exception as e:
+        print(f"Error resetting crawled status: {e}")
+        crawled_reset = 0
         
     return {
         "status": "success", 

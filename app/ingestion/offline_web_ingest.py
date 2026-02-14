@@ -97,7 +97,7 @@ def init_tracking_db():
     except sqlite3.OperationalError as e:
         if "readonly" in str(e).lower():
             print(f"\nCRITICAL ERROR: The database '{METADATA_DB}' is READ-ONLY.")
-            print("Please run: sudo chown $USER:$USER '{METADATA_DB}'")
+            print(f"Please run: sudo chown -R $USER:$USER '{os.path.dirname(os.path.abspath(METADATA_DB))}'")
             print("Or check if another process has an exclusive lock.\n")
             raise PermissionError(f"Database {METADATA_DB} is read-only.") from e
         raise e
@@ -334,6 +334,10 @@ def ingest_offline_downloads(force_fresh: bool = False):
                 # Checkpoint: ChromaDB is persistent
 
         except Exception as e:
+            error_msg = str(e)
+            if "readonly" in error_msg.lower() or "1032" in error_msg:
+                yield f"  -> CRITICAL PERMISSION ERROR: The database is read-only.\n"
+                yield f"  -> Fix by running: sudo chown -R $USER:$USER {os.path.dirname(os.path.abspath(METADATA_DB))} {Config.VECTOR_DB_PATH}\n"
             yield f"  -> Error processing {file_path}: {e}\n"
             continue
 
