@@ -523,61 +523,62 @@ async def reset_all_resources():
     """
     Wipe all ingested data and reset the system.
     """
-    # 1. Clear PDFs
+    # 1. Clear PDFs and uploaded resources
     if os.path.exists(Config.RESOURCE_DIR):
         for f in os.listdir(Config.RESOURCE_DIR):
             path = os.path.join(Config.RESOURCE_DIR, f)
             if os.path.isfile(path):
-                os.remove(path)
+                try:
+                    os.remove(path)
+                except: pass
     
-    # 2. Clear Tracking Files
-    for tracking in [DOC_TRACKING, WEB_TRACKING, DB_TRACKING, "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json"]:
+    # 2. Clear Tracking JSON Files
+    tracking_files = [
+        DOC_TRACKING, WEB_TRACKING, DB_TRACKING, 
+        "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json"
+    ]
+    for tracking in tracking_files:
         if os.path.exists(tracking):
-            os.remove(tracking)
+            try:
+                os.remove(tracking)
+            except: pass
             
-    # 3. Clear Config Tables
+    # 3. Reset Config Tables
     Config.update_config({"INGEST_TABLES": ""})
     
-    # 4. Clear Vector Store (Current provider)
+    # 4. Clear Vector Store (Thorough cleanup)
+    from app.vectorstore.factory import VectorStoreFactory
     try:
-        from app.vectorstore.factory import VectorStoreFactory
+        # Wipe current used store
         store = VectorStoreFactory.get_instance()
         store.clear_all()
         print("Cleared current vector store.")
     except Exception as e:
-        print(f"Error clearing vector store: {e}")
-    
-    # Extra thorough cleanup: Remove any old FAISS versions that might be lingering
-    for old_faiss in ["faiss_index", "faiss_index_v2", "faiss_index_v3"]:
-        if os.path.exists(old_faiss):
+        print(f"Error clearing current vector store: {e}")
+
+    # Wipe ALL potential physical storage folders to be sure
+    storage_folders = [
+        "chroma_db", "faiss_index", "faiss_index_v2", "faiss_index_v3"
+    ]
+    for folder in storage_folders:
+        if os.path.exists(folder):
             try:
-                shutil.rmtree(old_faiss)
-                print(f"Cleaned up legacy FAISS index: {old_faiss}")
+                shutil.rmtree(folder)
+                print(f"Purged: {folder}")
             except Exception as e:
-                print(f"Failed to delete {old_faiss}: {e}")
+                print(f"Failed to purge {folder}: {e}")
     
-    # Also explicitly clear chroma_db folder if it exists
-    if os.path.exists("chroma_db"):
-        try:
-            shutil.rmtree("chroma_db")
-            print("Explicitly deleted chroma_db folder.")
-        except Exception as e:
-            print(f"Failed to delete chroma_db: {e}")
-    
-    # 5. Reset Crawled Ingestion Status and get count > 0 resources
+    # 5. Reset Ingested Files SQL Table (Offline Ingestion)
     try:
         from app.ingestion.offline_web_ingest import reset_crawled_ingestion_status
-        crawled_reset = reset_crawled_ingestion_status()
+        reset_crawled_ingestion_status(full_wipe=True)
+        print("Wiped ingested_files tracking table.")
     except Exception as e:
         print(f"Error resetting crawled status: {e}")
-        crawled_reset = 0
         
     return {
         "status": "success", 
-        "message": "All resources reset successfully",
-        "details": {
-            "crawled": crawled_reset
-        }
+        "message": "All resources reset successfully. You can now re-ingest data fresh."
     }
 
 @app.get("/ingest/web/stream")

@@ -351,22 +351,27 @@ def ingest_offline_downloads(force_fresh: bool = False):
     update_status("completed", message=msg, conn=conn)
     yield f"{msg}\n"
 
-def reset_crawled_ingestion_status():
+def reset_crawled_ingestion_status(full_wipe: bool = True):
     """
-    Find all records where chunks > 0, update ingest_status to 0,
-    and return the list of source_urls.
+    Reset or wipe the ingested_files tracking table.
+    - If full_wipe is True, it deletes all records (default for reset).
+    - If full_wipe is False, it just sets status to 0 (legacy behavior).
     """
     conn = sqlite3.connect(METADATA_DB, timeout=30)
     cursor = conn.cursor()
     
-    # 1. Get resources and chunks count > 0
-    cursor.execute('SELECT source_url FROM ingested_files WHERE chunks > 0')
-    resources = [row[0] for row in cursor.fetchall()]
+    if full_wipe:
+        cursor.execute('DELETE FROM ingested_files')
+        resources = [] # No specific resources to return if wiped
+    else:
+        # 1. Get resources and chunks count > 0
+        cursor.execute('SELECT source_url FROM ingested_files WHERE chunks > 0')
+        resources = [row[0] for row in cursor.fetchall()]
+        
+        # 2. Update ingest_status to false (0)
+        if resources:
+            cursor.execute('UPDATE ingested_files SET ingest_status = 0 WHERE chunks > 0')
     
-    # 2. Update ingest_status to false (0)
-    if resources:
-        cursor.execute('UPDATE ingested_files SET ingest_status = 0 WHERE chunks > 0')
-        conn.commit()
-    
+    conn.commit()
     conn.close()
     return resources
