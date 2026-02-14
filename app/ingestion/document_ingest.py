@@ -11,7 +11,7 @@ from langchain_community.document_loaders import (
 )
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
-from app.vectorstore.faiss_store import FAISSStore
+from app.vectorstore.factory import VectorStoreFactory
 import pymupdf4llm
 from langchain_core.documents import Document
 
@@ -121,8 +121,10 @@ def ingest_documents(force_fresh: bool = False):
             
             # Ensure we remove old versions of this file from the index before adding new ones
             try:
-                faiss_store = FAISSStore()
-                faiss_store.delete_source(file_path)
+                # Clear existing entries for this source
+                # No need to explicitly save as Chroma/FAISS wrappers handle it or use VectorStoreFactory
+                store = VectorStoreFactory.get_instance()
+                store.delete_source(file_path)
             except Exception as e:
                 print(f"Warning: Failed to clear old index for {file_path}: {e}")
 
@@ -162,9 +164,13 @@ def ingest_documents(force_fresh: bool = False):
     yield f"Generated {total_chunks} new chunks. Starting vectorization...\n"
 
     # Create/Load vectorstore
-    faiss_store = FAISSStore()
-    vectorstore = faiss_store.load_index() # Load once
+    vectorstore_instance = VectorStoreFactory.get_instance()
     
+    # If force_fresh, clear the entire vector store
+    if force_fresh:
+        yield "Wiping existing vector store for fresh build...\n"
+        vectorstore_instance.clear_all()
+
     # PROCESS ONE CHUNK AT A TIME
     start_time = time.time()
     
@@ -179,11 +185,7 @@ def ingest_documents(force_fresh: bool = False):
             success = False
             for attempt in range(max_retries):
                 try:
-                    if vectorstore:
-                        vectorstore.add_documents([doc])
-                    else:
-                        from langchain_community.vectorstores import FAISS
-                        vectorstore = FAISS.from_documents([doc], faiss_store.embeddings)
+                    vectorstore_instance.add_documents([doc])
                     success = True
                     break
                 except Exception as e:
@@ -205,11 +207,7 @@ def ingest_documents(force_fresh: bool = False):
                 gc.collect() 
             
             if current_num % 50 == 0:
-                yield "Saving checkpoint...\n"
-                try:
-                    faiss_store.save_index(vectorstore)
-                except Exception as e:
-                     yield f"WARNING: Failed to save checkpoint at chunk {current_num}: {e}\n"
+                yield "Checkpoint: Data is already persisted in ChromaDB.\n"
 
         for file_path, file_id in processed_files_metadata:
             tracking_data[file_path] = file_id
@@ -225,9 +223,4 @@ def ingest_documents(force_fresh: bool = False):
         
     finally:
         if vectorstore:
-            yield "Finalizing index save...\n"
-            try:
-                faiss_store.save_index(vectorstore)
-                yield "Index saved successfully.\n"
-            except Exception as e:
-                yield f"ERROR saving final index: {e}\n"
+            yield "Data persisted in ChromaDB.\n"

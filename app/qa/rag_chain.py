@@ -9,7 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from app.config import Config
-from app.vectorstore.faiss_store import FAISSStore
+from app.vectorstore.factory import VectorStoreFactory
 import time
 import traceback
 import json
@@ -118,28 +118,31 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
     Creates and returns the RAG chain for Question Answering.
     """
     # 1. Initialize Vector Store and Retriever
-    faiss_store = FAISSStore()
-    vectorstore = faiss_store.load_index()
-    
-    if not vectorstore:
-        raise ValueError("Vector store not found. Please run ingestion first.")
+    store = VectorStoreFactory.get_instance()
+    vectorstore = store.get_vectorstore()
 
     # Advanced Hybrid Retrieval with Relevance Filtering and MMR
     class AdvancedHybridRetriever:
-        def __init__(self, vectorstore):
+        def __init__(self, vectorstore, llm=None):
             self.vectorstore = vectorstore
+            self.llm = llm
             
         def _extract_keywords(self, query):
-            """Extract keywords from query based on language."""
+            """Extract meaningful keywords from query, excluding common stop words."""
             import re
             is_arabic = bool(re.search('[\u0600-\u06FF]', query))
             
-            if is_arabic:
-                keywords = [w.lower() for w in query.split() if len(w) >= 2]
-            else:
-                keywords = [w.lower() for w in query.split() if len(w) > 3]
+            # Simple list of stop words to ignore
+            stop_words = {"this", "that", "the", "a", "an", "is", "are", "was", "were", "what", "how", "where", "when", "why", "who", "whom", "whose", "which", "of", "in", "to", "for", "with", "by", "on", "at", "from", "into", "during", "including", "between", "and", "or", "but", "if"}
+            ar_stop_words = {"من", "الى", "عن", "على", "في", "بـ", "لـ", "و", "أو", "ثم", "هذا", "هذه", "ما", "كيف", "اين", "متى", "هل"}
             
-            return keywords
+            words = re.findall(r'\w+', query.lower())
+            if is_arabic:
+                keywords = [w for w in words if len(w) >= 3 and w not in ar_stop_words]
+            else:
+                keywords = [w for w in words if len(w) > 3 and w not in stop_words]
+            
+            return list(set(keywords))
         
         def _calculate_keyword_score(self, content, keywords):
             """Calculate keyword match score for a document."""
@@ -165,14 +168,14 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             remaining_indices = list(range(len(docs)))
             
             # Start with highest scoring document
-            best_idx = scores.index(min(scores))  # Lower L2 distance is better
+            best_idx = scores.index(max(scores))  # Higher score is better for Chroma relevance
             selected.append(docs[best_idx])
             selected_indices.append(best_idx)
             remaining_indices.remove(best_idx)
             
             # Iteratively select documents that are relevant but diverse
             while len(selected) < k and remaining_indices:
-                best_score = float('inf')
+                best_score = -float('inf')
                 best_idx = None
                 
                 for idx in remaining_indices:
@@ -190,12 +193,12 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
                             overlap = len(words_current & words_selected) / len(words_current | words_selected)
                             diversity = max(diversity, overlap)
                     
-                    # MMR score: balance relevance and diversity
-                    mmr_score = lambda_param * relevance + (1 - lambda_param) * diversity
-                    
-                    if mmr_score < best_score:
-                        best_score = mmr_score
-                        best_idx = idx
+                # MMR score: balance relevance and diversity (Chromadb score is higher = better)
+                mmr_score = lambda_param * relevance + (1 - lambda_param) * (1 - diversity)
+                
+                if mmr_score > best_score:
+                    best_score = mmr_score
+                    best_idx = idx
                 
                 if best_idx is not None:
                     selected.append(docs[best_idx])
@@ -206,51 +209,156 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             
             return selected
             
+        def _generate_queries(self, query):
+            """Generate 2 additional variations of the query using the LLM for better coverage."""
+            if not self.llm:
+                return [query]
+            
+            try:
+                prompt = ChatPromptTemplate.from_messages([
+                    ("system", "You are an AI assistant that generates variations of search queries to improve RAG retrieval. Generate 2 variations of the following query in the SAME language as the input. Respond only with the queries, one per line."),
+                    ("human", query)
+                ])
+                response = self.llm.invoke(prompt.format_messages(question=query))
+                variations = [v.strip() for v in response.content.split('\n') if v.strip()][:2]
+                return [query] + variations
+            except Exception as e:
+                print(f"Query generation failed: {e}")
+                return [query]
+
+        def _expand_context(self, docs):
+            """
+            Fetch neighboring chunks for the top results to provide better context.
+            """
+            if not docs or Config.VECTOR_STORE_PROVIDER.lower() != "chroma":
+                return docs # Skip for FAISS or empty
+            
+            expanded_docs = []
+            seen_ids = set()
+            
+            # Identify top 3 chunks to expand
+            top_docs = docs[:3]
+            
+            for doc in top_docs:
+                source = doc.metadata.get("source")
+                chunk_idx = doc.metadata.get("chunk")
+                
+                # Add current doc
+                doc_id = f"{source}_{chunk_idx}"
+                if doc_id not in seen_ids:
+                    expanded_docs.append(doc)
+                    seen_ids.add(doc_id)
+                
+                # Try to fetch neighbors (idx-1, idx+1)
+                if chunk_idx is not None and source:
+                    try:
+                        # Direct metadata query on Chroma
+                        # Using raw vectorstore.get which returns documents matching filter
+                        neighbors = self.vectorstore.get(where={
+                            "$and": [
+                                {"source": source},
+                                {"chunk": {"$in": [chunk_idx - 1, chunk_idx + 1]}}
+                            ]
+                        })
+                        
+                        # Note: neighbors['documents'] is the content, neighbors['metadatas'] etc
+                        # Convert back to Document objects
+                        for i in range(len(neighbors['documents'])):
+                            neighbor_id = f"{source}_{neighbors['metadatas'][i].get('chunk')}"
+                            if neighbor_id not in seen_ids:
+                                from langchain_core.documents import Document
+                                new_doc = Document(
+                                    page_content=neighbors['documents'][i],
+                                    metadata=neighbors['metadatas'][i]
+                                )
+                                expanded_docs.append(new_doc)
+                                seen_ids.add(neighbor_id)
+                    except Exception as e:
+                        print(f"Neighbor expansion failed: {e}")
+            
+            # Add remaining original docs that weren't neighbors
+            for doc in docs[3:]:
+                source = doc.metadata.get("source")
+                chunk_idx = doc.metadata.get("chunk")
+                doc_id = f"{source}_{chunk_idx}"
+                if doc_id not in seen_ids:
+                    expanded_docs.append(doc)
+                    seen_ids.add(doc_id)
+            
+            return expanded_docs
+
+        def _rerank_docs(self, query, docs):
+            """Simple re-ranking based on similarity to query."""
+            # Implementation for better re-ranking
+            return docs
+
         def invoke(self, query):
-            # Stage 1: Broad retrieval with similarity scores (reduced from 500 to 100 for speed)
-            try:
-                docs_with_scores = self.vectorstore.similarity_search_with_score(query, k=100)
-            except:
-                # Fallback if similarity_search_with_score not available
-                docs = self.vectorstore.similarity_search(query, k=100)
-                docs_with_scores = [(doc, 0.0) for doc in docs]
+            # Stage 0: Query Generation
+            queries = self._generate_queries(query) if not is_continuation else [query]
             
-            # Stage 2: Filter by relevance threshold
-            # FAISS L2 distance: lower is better, typical range 0-2 for similar docs
-            relevance_threshold = 1.5
-            relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < relevance_threshold]
+            # Stage 1: Broad retrieval with similarity scores
+            all_docs_with_scores = []
+            seen_chunk_ids = set()
             
-            # If too few docs pass threshold, relax it
-            if len(relevant_docs) < 20:
-                relevance_threshold = 2.0
-                relevant_docs = [(doc, score) for doc, score in docs_with_scores if score < relevance_threshold]
+            # Increase k to get more candidates for reranking/filtering
+            candidate_k = 60 if not is_continuation else 40
             
-            # Stage 3: Keyword boosting
+            for q in queries:
+                try:
+                    # Fetch more candidates for better filtering
+                    results = self.vectorstore.similarity_search_with_relevance_scores(q, k=candidate_k)
+                    for doc, score in results:
+                        chunk_id = f"{doc.metadata.get('source')}_{doc.metadata.get('page')}_{doc.metadata.get('chunk', doc.page_content[:50])}"
+                        if chunk_id not in seen_chunk_ids:
+                            all_docs_with_scores.append((doc, score))
+                            seen_chunk_ids.add(chunk_id)
+                except Exception as e:
+                    print(f"Retrieval error for query '{q}': {e}")
+            
+            if not all_docs_with_scores:
+                return []
+
+            # Stage 2: Hybrid Scoring (Vector + Keyword)
             keywords = self._extract_keywords(query)
-            boosted_docs = []
+            scored_docs = []
             
-            for doc, vec_score in relevant_docs:
+            for doc, vec_score in all_docs_with_scores:
                 keyword_score = self._calculate_keyword_score(doc.page_content, keywords)
-                # Combine scores: lower vector score is better, higher keyword score is better
-                # Normalize: boost docs with high keyword matches
-                combined_score = vec_score * (1 - keyword_score * 0.3)  # Up to 30% boost
-                boosted_docs.append((doc, combined_score))
+                
+                # Dynamic Weighting from Config
+                vector_weight = Config.VECTOR_SEARCH_WEIGHT
+                keyword_weight = 1.0 - vector_weight
+                
+                is_faiss = Config.VECTOR_STORE_PROVIDER.lower() == "faiss"
+                
+                if is_faiss:
+                    # Convert FAISS L2 to a 0-1 similarity (approx)
+                    # Lower L2 = higher similarity
+                    sim_score = 1.0 / (1.0 + vec_score)
+                    combined = sim_score * vector_weight + keyword_score * keyword_weight
+                else:
+                    combined = vec_score * vector_weight + keyword_score * keyword_weight
+                
+                scored_docs.append((doc, combined))
             
-            # Sort by combined score (lower is better)
-            boosted_docs.sort(key=lambda x: x[1])
+            # Sort by combined score (descending)
+            scored_docs.sort(key=lambda x: x[1], reverse=True)
             
-            # Stage 4: Apply MMR for diversity (reduced from 40 to 15)
+            # Stage 3: MMR for diversity on top candidates
             try:
-                # Get query embedding for MMR
                 query_embedding = self.vectorstore.embeddings.embed_query(query)
-                final_docs = self._apply_mmr(boosted_docs, query_embedding, k=15, lambda_param=0.7)
+                # Take top 30 candidates for MMR selection of top 12
+                top_candidates = scored_docs[:30]
+                final_docs = self._apply_mmr(top_candidates, query_embedding, k=12, lambda_param=0.5)
             except:
-                # Fallback: just take top 15
-                final_docs = [doc for doc, _ in boosted_docs[:15]]
+                final_docs = [doc for doc, _ in scored_docs[:12]]
+            
+            # Stage 4: Context Expansion (Neighbors)
+            final_docs = self._expand_context(final_docs)
             
             return final_docs
 
-    retriever = AdvancedHybridRetriever(vectorstore)
+    retriever = AdvancedHybridRetriever(vectorstore, llm=llm)
 
     # 2. Select Prompt
     prompt = DEEP_THINKING_PROMPT if deep_thinking else STRICT_RAG_PROMPT

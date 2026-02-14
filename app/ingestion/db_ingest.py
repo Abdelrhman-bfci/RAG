@@ -3,7 +3,7 @@ import os
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
-from app.vectorstore.faiss_store import FAISSStore
+from app.vectorstore.factory import VectorStoreFactory
 
 import json
 import time
@@ -133,7 +133,7 @@ def ingest_database(tables: list = None, schema: str = None):
         yield f"Starting ingestion for {total_tables} tables{' in schema ' + schema if schema else ''}...\n"
         
         total_ingested_all = 0
-        faiss_store = FAISSStore()
+        store = VectorStoreFactory.get_instance()
         
         for idx, table in enumerate(tables_to_ingest):
             current_num = idx + 1
@@ -227,7 +227,7 @@ def ingest_database(tables: list = None, schema: str = None):
                     max_retries = 2
                     for attempt in range(max_retries):
                         try:
-                            faiss_store.add_documents(split_batch)
+                            chroma_store.add_documents(split_batch)
                             break
                         except Exception as e:
                             if attempt < max_retries - 1:

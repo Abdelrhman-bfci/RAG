@@ -119,6 +119,8 @@ async def get_current_config():
             "model": Config.GEMINI_MODEL,
             "api_key": Config.GEMINI_API_KEY
         },
+        "vector_store_provider": Config.VECTOR_STORE_PROVIDER,
+        "vector_search_weight": Config.VECTOR_SEARCH_WEIGHT,
         "show_summary_chunks": Config.SHOW_SUMMARY_CHUNKS
     }
 
@@ -438,8 +440,8 @@ async def delete_resource(res_type: str, name: str):
     """
     Delete a specific resource.
     """
-    from app.vectorstore.faiss_store import FAISSStore
-    faiss_store = FAISSStore()
+    from app.vectorstore.factory import VectorStoreFactory
+    store = VectorStoreFactory.get_instance()
     
     if res_type == "documents":
         # Find path in tracking
@@ -463,8 +465,8 @@ async def delete_resource(res_type: str, name: str):
             with open(DOC_TRACKING, "w") as f:
                 json.dump(tracking, f, indent=4)
             
-            # Remove from FAISS
-            faiss_store.delete_source(path_to_remove)
+            # Remove from Vector Store
+            store.delete_source(path_to_remove)
             return {"status": "success", "message": f"Deleted document {name}"}
             
     elif res_type == "databases":
@@ -482,9 +484,9 @@ async def delete_resource(res_type: str, name: str):
             with open(DB_TRACKING, "w") as f:
                 json.dump(tracking, f)
             
-            # Delete from FAISS
+            # Delete from Vector Store
             # Metadata source format defined in db_ingest.py: f"Table: {table}"
-            faiss_store.delete_source(f"Table: {name}")
+            store.delete_source(f"Table: {name}")
             
             return {"status": "success", "message": f"Deleted Table {name}"}
         else:
@@ -501,8 +503,8 @@ async def delete_resource(res_type: str, name: str):
                 with open(WEB_TRACKING, "w") as f:
                     json.dump(tracking, f, indent=4)
                 
-                # Remove from FAISS
-                faiss_store.delete_source(name)
+                # Remove from Vector Store
+                store.delete_source(name)
                 return {"status": "success", "message": f"Deleted website {name}"}
 
     elif res_type == "databases":
@@ -510,8 +512,8 @@ async def delete_resource(res_type: str, name: str):
             new_tables = [t for t in Config.INGEST_TABLES if t != name]
             Config.update_config({"INGEST_TABLES": ",".join(new_tables)})
             
-            # Remove from FAISS
-            faiss_store.delete_source(name)
+            # Remove from Vector Store
+            store.delete_source(name)
             return {"status": "success", "message": f"Deleted table {name}"}
 
     raise HTTPException(status_code=404, detail="Resource not found")
@@ -536,13 +538,22 @@ async def reset_all_resources():
     # 3. Clear Config Tables
     Config.update_config({"INGEST_TABLES": ""})
     
-    # 4. Clear FAISS Index
-    from app.vectorstore.faiss_store import FAISSStore
-    faiss_store = FAISSStore()
-    if os.path.exists(faiss_store.vector_db_path):
-        shutil.rmtree(faiss_store.vector_db_path)
+    # 4. Clear Vector Store
+    from app.vectorstore.factory import VectorStoreFactory
+    store = VectorStoreFactory.get_instance()
+    store.clear_all()
+    
+    # 5. Reset Crawled Ingestion Status and get count > 0 resources
+    from app.ingestion.offline_web_ingest import reset_crawled_ingestion_status
+    crawled_reset = reset_crawled_ingestion_status()
         
-    return {"status": "success", "message": "All resources reset successfully"}
+    return {
+        "status": "success", 
+        "message": "All resources reset successfully",
+        "details": {
+            "crawled": crawled_reset
+        }
+    }
 
 @app.get("/ingest/web/stream")
 async def stream_web_ingestion(url: str, depth: int = 10, max_pages: int = -1):
@@ -688,9 +699,9 @@ async def get_index_statistics():
     """
     Get statistics about the FAISS index content.
     """
-    from app.vectorstore.faiss_store import FAISSStore
-    faiss_store = FAISSStore()
-    return faiss_store.get_index_stats()
+    from app.vectorstore.factory import VectorStoreFactory
+    store = VectorStoreFactory.get_instance()
+    return store.get_index_stats()
 
 @app.post("/index/sync")
 async def sync_resources(background_tasks: BackgroundTasks):
@@ -711,9 +722,9 @@ async def preview_index_content(source: str):
     """
     Get content chunks for a specific source from the index.
     """
-    from app.vectorstore.faiss_store import FAISSStore
-    faiss_store = FAISSStore()
-    return faiss_store.get_source_content(source)
+    from app.vectorstore.factory import VectorStoreFactory
+    store = VectorStoreFactory.get_instance()
+    return store.get_source_content(source)
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=80, reload=True)

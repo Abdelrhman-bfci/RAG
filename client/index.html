@@ -915,6 +915,32 @@
                                     <option value="vllm">vLLM (Local)</option>
                                 </select>
                             </div>
+                            <div>
+                                <label class="block text-sm font-bold mb-2">Vector Store Provider</label>
+                                <select v-model="settings.vectorStoreProvider"
+                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                                    <option value="chroma">ChromaDB (Persistent)</option>
+                                    <option value="faiss">FAISS (Local Index)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="flex justify-between text-sm font-bold mb-2">
+                                    <span>Search Balance (Vector vs Keyword)</span>
+                                    <span class="text-blue-600 dark:text-blue-400">[[ settings.vectorSearchWeight
+                                        ]]</span>
+                                </label>
+                                <div class="flex items-center space-x-4">
+                                    <span class="text-xs text-gray-400">Keyword</span>
+                                    <input type="range" v-model.number="settings.vectorSearchWeight" min="0" max="1"
+                                        step="0.1"
+                                        class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                                    <span class="text-xs text-gray-400">Vector</span>
+                                </div>
+                                <p class="text-[10px] text-gray-500 mt-1">
+                                    Higher vector favors meaning; higher keyword favors exact terms.
+                                </p>
+                            </div>
 
                             <div
                                 class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
@@ -1087,6 +1113,8 @@
                     geminiKey: '',
                     llmModel: '',
                     embedModel: '',
+                    vectorStoreProvider: 'chroma',
+                    vectorSearchWeight: 0.7,
                     deepThinking: false,
                     showSummaryChunks: false
                 });
@@ -1263,6 +1291,8 @@
                         else if (data.provider === 'ollama') settings.value.llmModel = data.ollama.model;
                         else if (data.provider === 'vllm') settings.value.llmModel = data.vllm.model;
 
+                        settings.value.vectorStoreProvider = data.vector_store_provider || 'chroma';
+                        settings.value.vectorSearchWeight = data.vector_search_weight || 0.7;
                         settings.value.showSummaryChunks = data.show_summary_chunks;
 
                         if (settings.value.provider) await loadModels('llm');
@@ -1285,6 +1315,8 @@
                         "EMBEDDING_PROVIDER": settings.value.embedProvider,
                         "OPENAI_API_KEY": settings.value.openaiKey,
                         "GEMINI_API_KEY": settings.value.geminiKey,
+                        "VECTOR_STORE_PROVIDER": settings.value.vectorStoreProvider,
+                        "VECTOR_SEARCH_WEIGHT": settings.value.vectorSearchWeight,
                         "SHOW_SUMMARY_CHUNKS": settings.value.showSummaryChunks
                     };
                     if (settings.value.provider === 'openai') updates["OPENAI_LLM_MODEL"] = settings.value.llmModel;

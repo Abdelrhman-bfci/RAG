@@ -13,8 +13,11 @@ class Config:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     
-    # Vector Database Path (Local FAISS)
-    VECTOR_DB_PATH = os.getenv("VECTOR_DB_PATH", "faiss_index")
+    # Vector Database Settings
+    VECTOR_DB_PATH = os.getenv("VECTOR_DB_PATH", "chroma_db")
+    CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "rag_collection")
+    VECTOR_STORE_PROVIDER = os.getenv("VECTOR_STORE_PROVIDER", "chroma") # 'chroma' or 'faiss'
+    VECTOR_SEARCH_WEIGHT = float(os.getenv("VECTOR_SEARCH_WEIGHT", "0.7")) # 0.0 to 1.0 (Vector vs Keyword)
     
     # Resource Directory for PDFs
     RESOURCE_DIR = os.getenv("RESOURCE_DIR", "/RESOURCE")
@@ -140,7 +143,12 @@ class Config:
                     applied_updates.add(key)
                     # Also update in memory
                     if hasattr(cls, key):
-                        setattr(cls, key, value)
+                        if key == "SHOW_SUMMARY_CHUNKS":
+                            setattr(Config, key, str(value).lower() == "true")
+                        elif key == "VECTOR_SEARCH_WEIGHT":
+                            setattr(Config, key, float(value))
+                        else:
+                            setattr(Config, key, value)
             new_lines.append(updated_line)
             
         # Add any new keys that weren't in the file
@@ -148,7 +156,12 @@ class Config:
             if key not in applied_updates:
                 new_lines.append(f"{key}={value}\n")
                 if hasattr(cls, key):
-                    setattr(cls, key, value)
+                    if key == "SHOW_SUMMARY_CHUNKS":
+                        setattr(Config, key, str(value).lower() == "true")
+                    elif key == "VECTOR_SEARCH_WEIGHT":
+                        setattr(Config, key, float(value))
+                    else:
+                        setattr(Config, key, value)
                     
         with open(env_path, "w") as f:
             f.writelines(new_lines)

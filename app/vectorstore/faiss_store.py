@@ -39,6 +39,10 @@ class FAISSStore:
             )
         return None
 
+    def get_vectorstore(self):
+        """Alias for load_index to match ChromaStore interface."""
+        return self.load_index()
+
     def save_index(self, vectorstore: FAISS):
         """
         Save the FAISS index to disk.
@@ -188,3 +192,10 @@ class FAISSStore:
         if limit and limit > 0:
             return chunks[:limit]
         return chunks
+
+    def clear_all(self):
+        """Wipe the entire FAISS index."""
+        import shutil
+        if os.path.exists(self.vector_db_path):
+            shutil.rmtree(self.vector_db_path)
+        return True

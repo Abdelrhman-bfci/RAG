@@ -6,7 +6,7 @@ import hashlib
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
-from app.vectorstore.faiss_store import FAISSStore
+from app.vectorstore.factory import VectorStoreFactory
 import trafilatura
 from bs4 import BeautifulSoup
 import pymupdf4llm
@@ -54,7 +54,8 @@ def init_tracking_db():
             filename TEXT,
             chunks INTEGER,
             timestamp REAL,
-            last_updated REAL
+            last_updated REAL,
+            ingest_status INTEGER DEFAULT 1
         )
     ''')
     
@@ -82,10 +83,15 @@ def init_tracking_db():
     conn.close()
 
 def get_ingested_files():
-    """Get all ingested files from the database."""
+    """Get all ingested files from the database that have chunks and are marked as ingested."""
     conn = sqlite3.connect(METADATA_DB)
     cursor = conn.cursor()
-    cursor.execute('SELECT source_url, filename, chunks, timestamp FROM ingested_files ORDER BY last_updated DESC')
+    cursor.execute('''
+        SELECT source_url, filename, chunks, timestamp 
+        FROM ingested_files 
+        WHERE chunks > 0 AND ingest_status = 1
+        ORDER BY last_updated DESC
+    ''')
     results = cursor.fetchall()
     conn.close()
     return {row[0]: {"filename": row[1], "chunks": row[2], "timestamp": row[3]} for row in results}
@@ -101,8 +107,8 @@ def save_ingested_file(source_url, filename, chunks, conn=None):
     import time
     timestamp = time.time()
     cursor.execute('''
-        INSERT OR REPLACE INTO ingested_files (source_url, filename, chunks, timestamp, last_updated)
-        VALUES (?, ?, ?, COALESCE((SELECT timestamp FROM ingested_files WHERE source_url = ?), ?), ?)
+        INSERT OR REPLACE INTO ingested_files (source_url, filename, chunks, timestamp, last_updated, ingest_status)
+        VALUES (?, ?, ?, COALESCE((SELECT timestamp FROM ingested_files WHERE source_url = ?), ?), ?, 1)
     ''', (source_url, filename, chunks, source_url, timestamp, timestamp))
     conn.commit()
     
@@ -207,11 +213,8 @@ def ingest_offline_downloads(force_fresh: bool = False):
 
     yield f"Found {len(all_files)} files. Starting processing...\n"
 
-    faiss_store = FAISSStore()
-    # We load index once at start, or handle inside loop? 
-    # For batch processing, loading once and adding all is better for performance.
-    # However, if it's huge, we might need batching.
-    vectorstore = faiss_store.load_index()
+    store = VectorStoreFactory.get_instance()
+    vectorstore = store.get_vectorstore()
 
     processed_count = 0
     total_files = len(all_files)
@@ -290,12 +293,12 @@ def ingest_offline_downloads(force_fresh: bool = False):
                 chunks = text_splitter.split_documents(docs)
                 if chunks:
                     # Clear old chunks for this source
-                    faiss_store.delete_source(source_url)
+                    chroma_store.delete_source(source_url)
                     
                     if vectorstore:
                         vectorstore.add_documents(chunks)
                     else:
-                        vectorstore = FAISSStore().add_documents(chunks)
+                        vectorstore = chroma_store.add_documents(chunks)
                     
                     # Track this file in database - reuse connection
                     save_ingested_file(source_url, filename, len(chunks), conn=conn)
@@ -304,9 +307,7 @@ def ingest_offline_downloads(force_fresh: bool = False):
             
             if (i+1) % 10 == 0:
                 update_status("running", current=i+1, total=total_files, message=f"Processed {i+1} files", start_time=start_time, conn=conn)
-                # Save checkpoint
-                if vectorstore:
-                    faiss_store.save_index(vectorstore)
+                # Checkpoint: ChromaDB is persistent
 
         except Exception as e:
             yield f"  -> Error processing {file_path}: {e}\n"
@@ -314,14 +315,30 @@ def ingest_offline_downloads(force_fresh: bool = False):
 
     conn.close()
 
-    # Final Save
+    # Final Save handled by Chroma persistence
     if vectorstore:
-        try:
-            faiss_store.save_index(vectorstore)
-            yield "Index saved successfully.\n"
-        except Exception as e:
-            yield f"Error saving index: {e}\n"
+        yield "Data persisted in ChromaDB.\n"
 
     msg = f"SUCCESS: Ingested {processed_count} files from downloads."
     update_status("completed", message=msg, conn=conn)
     yield f"{msg}\n"
+
+def reset_crawled_ingestion_status():
+    """
+    Find all records where chunks > 0, update ingest_status to 0,
+    and return the list of source_urls.
+    """
+    conn = sqlite3.connect(METADATA_DB, timeout=30)
+    cursor = conn.cursor()
+    
+    # 1. Get resources and chunks count > 0
+    cursor.execute('SELECT source_url FROM ingested_files WHERE chunks > 0')
+    resources = [row[0] for row in cursor.fetchall()]
+    
+    # 2. Update ingest_status to false (0)
+    if resources:
+        cursor.execute('UPDATE ingested_files SET ingest_status = 0 WHERE chunks > 0')
+        conn.commit()
+    
+    conn.close()
+    return resources
