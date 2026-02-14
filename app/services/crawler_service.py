@@ -23,7 +23,7 @@ class CrawlerService:
         if not os.path.exists(self.download_folder):
             os.makedirs(self.download_folder)
 
-        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
         cursor = conn.cursor()
         # Enable Write-Ahead Logging for better concurrency
         cursor.execute('PRAGMA journal_mode=WAL')
@@ -44,7 +44,7 @@ class CrawlerService:
         return hashlib.sha256(content).hexdigest()
 
     def get_existing_file_by_checksum(self, checksum):
-        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute("SELECT filename FROM pages WHERE checksum = ? LIMIT 1", (checksum,))
         result = cursor.fetchone()
@@ -52,7 +52,7 @@ class CrawlerService:
         return result[0] if result else None
 
     def save_metadata_start(self, url, parent_url):
-        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
         cursor = conn.cursor()
         try:
             cursor.execute("INSERT INTO pages (url, parent_url) VALUES (?, ?)", (url, parent_url))
@@ -65,7 +65,7 @@ class CrawlerService:
             conn.close()
 
     def update_metadata_success(self, doc_id, filename, checksum):
-        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute("UPDATE pages SET filename = ?, checksum = ? WHERE id = ?", 
                        (filename, checksum, doc_id))
@@ -73,7 +73,7 @@ class CrawlerService:
         conn.close()
 
     def get_page_from_db(self, url):
-        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute("SELECT id, filename FROM pages WHERE url = ?", (url,))
         result = cursor.fetchone()

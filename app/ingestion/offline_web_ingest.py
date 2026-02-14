@@ -40,7 +40,7 @@ def extract_slider_text(soup):
 
 def init_tracking_db():
     """Initialize the tracking tables in the database."""
-    conn = sqlite3.connect(METADATA_DB, timeout=30)
+    conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
     cursor = conn.cursor()
     
     # Enable Write-Ahead Logging for better concurrency
@@ -108,7 +108,7 @@ def init_tracking_db():
 
 def get_ingested_files():
     """Get all ingested files from the database that have chunks and are marked as ingested."""
-    conn = sqlite3.connect(METADATA_DB)
+    conn = sqlite3.connect(METADATA_DB, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
         SELECT source_url, filename, chunks, timestamp 
@@ -124,7 +124,7 @@ def save_ingested_file(source_url, filename, chunks, conn=None):
     """Save or update an ingested file in the database."""
     local_conn = False
     if conn is None:
-        conn = sqlite3.connect(METADATA_DB, timeout=30)
+        conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
         local_conn = True
         
     cursor = conn.cursor()
@@ -153,7 +153,7 @@ def update_status(status, current=0, total=0, message="", start_time=None, conn=
     
     local_conn = False
     if conn is None:
-        conn = sqlite3.connect(METADATA_DB, timeout=30)
+        conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
         local_conn = True
         
     cursor = conn.cursor()
@@ -169,7 +169,7 @@ def update_status(status, current=0, total=0, message="", start_time=None, conn=
 
 def get_ingestion_status():
     """Get the current ingestion status from the database."""
-    conn = sqlite3.connect(METADATA_DB)
+    conn = sqlite3.connect(METADATA_DB, check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('SELECT status, current_batch, total_batches, message, timestamp, eta_seconds FROM ingestion_status WHERE id = 1')
     result = cursor.fetchone()
@@ -215,7 +215,7 @@ def ingest_offline_downloads(force_fresh: bool = False):
 
     if force_fresh:
         # Clear all ingested files if fresh start requested
-        conn = sqlite3.connect(METADATA_DB, timeout=30)
+        conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute('PRAGMA journal_mode=WAL')
         cursor.execute('DELETE FROM ingested_files')
@@ -251,7 +251,7 @@ def ingest_offline_downloads(force_fresh: bool = False):
     )
 
     import sqlite3
-    conn = sqlite3.connect(METADATA_DB, timeout=30)
+    conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
     # Enable WAL mode for the reader connection as well
     conn.execute('PRAGMA journal_mode=WAL')
     cursor = conn.cursor()
@@ -359,7 +359,7 @@ def reset_crawled_ingestion_status(full_wipe: bool = True):
     - If full_wipe is True, it deletes all records (default for reset).
     - If full_wipe is False, it just sets status to 0 (legacy behavior).
     """
-    conn = sqlite3.connect(METADATA_DB, timeout=30)
+    conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
     cursor = conn.cursor()
     
     if full_wipe:
