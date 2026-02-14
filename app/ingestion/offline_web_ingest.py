@@ -293,12 +293,12 @@ def ingest_offline_downloads(force_fresh: bool = False):
                 chunks = text_splitter.split_documents(docs)
                 if chunks:
                     # Clear old chunks for this source
-                    chroma_store.delete_source(source_url)
+                    store.delete_source(source_url)
                     
                     if vectorstore:
                         vectorstore.add_documents(chunks)
                     else:
-                        vectorstore = chroma_store.add_documents(chunks)
+                        vectorstore = store.add_documents(chunks)
                     
                     # Track this file in database - reuse connection
                     save_ingested_file(source_url, filename, len(chunks), conn=conn)

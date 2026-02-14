@@ -227,7 +227,7 @@ def ingest_database(tables: list = None, schema: str = None):
                     max_retries = 2
                     for attempt in range(max_retries):
                         try:
-                            chroma_store.add_documents(split_batch)
+                            store.add_documents(split_batch)
                             break
                         except Exception as e:
                             if attempt < max_retries - 1:

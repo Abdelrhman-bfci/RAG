@@ -222,5 +222,5 @@ def ingest_documents(force_fresh: bool = False):
         print(f"FATAL INGESTION ERROR: {traceback.format_exc()}")
         
     finally:
-        if vectorstore:
+        if vectorstore_instance:
             yield "Data persisted in ChromaDB.\n"
