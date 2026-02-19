@@ -114,6 +114,7 @@ class Config:
     DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER", "downloads")
     CRAWLER_DB = os.getenv("CRAWLER_DB", "crawler_data.db")
     DB_TIMEOUT = int(os.getenv("DB_TIMEOUT", "300"))
+    CRAWL_TIMEOUT = int(os.getenv("CRAWL_TIMEOUT", "180"))
     _allowed_ext_raw = os.getenv("ALLOWED_EXTENSIONS", ".pdf")
     ALLOWED_EXTENSIONS = {ext.strip() if ext.strip().startswith('.') else f".{ext.strip()}" 
                           for ext in _allowed_ext_raw.split(',') if ext.strip()}

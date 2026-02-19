@@ -147,7 +147,7 @@ class CrawlerService:
                     yield f"[DOWNLOADING] Depth {current_depth}: {current_url}\n"
                     processed_count += 1
                     
-                    response = requests.get(current_url, timeout=10)
+                    response = requests.get(current_url, timeout=Config.CRAWL_TIMEOUT)
                     if response.status_code != 200:
                         yield f"  -> Failed: Status {response.status_code}\n"
                         continue
