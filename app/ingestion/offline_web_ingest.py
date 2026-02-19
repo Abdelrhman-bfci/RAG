@@ -11,10 +11,9 @@ import trafilatura
 from bs4 import BeautifulSoup
 import pymupdf4llm
 from langchain_community.document_loaders import (
-    Docx2txtLoader, 
-    TextLoader, 
     CSVLoader, 
-    UnstructuredExcelLoader
+    UnstructuredExcelLoader,
+    PyMuPDFLoader
 )
 import sqlite3
 
@@ -40,7 +39,7 @@ def extract_slider_text(soup):
 
 def init_tracking_db():
     """Initialize the tracking tables in the database."""
-    conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
+    conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
     cursor = conn.cursor()
     
     # Enable Write-Ahead Logging for better concurrency
@@ -124,7 +123,7 @@ def save_ingested_file(source_url, filename, chunks, conn=None):
     """Save or update an ingested file in the database."""
     local_conn = False
     if conn is None:
-        conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
+        conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
         local_conn = True
         
     cursor = conn.cursor()
@@ -138,6 +137,33 @@ def save_ingested_file(source_url, filename, chunks, conn=None):
     
     if local_conn:
         conn.close()
+
+def save_ingested_files_bulk(file_data_list, conn=None):
+    """Save or update multiple ingested files in the database at once."""
+    local_conn = False
+    if conn is None:
+        conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
+        local_conn = True
+        
+    cursor = conn.cursor()
+    import time
+    timestamp = time.time()
+    
+    # We use a transaction for bulk updates
+    try:
+        cursor.execute("BEGIN TRANSACTION")
+        for source_url, filename, chunks in file_data_list:
+            cursor.execute('''
+                INSERT OR REPLACE INTO ingested_files (source_url, filename, chunks, timestamp, last_updated, ingest_status)
+                VALUES (?, ?, ?, COALESCE((SELECT timestamp FROM ingested_files WHERE source_url = ?), ?), ?, 1)
+            ''', (source_url, filename, chunks, source_url, timestamp, timestamp))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        if local_conn:
+            conn.close()
 
 def update_status(status, current=0, total=0, message="", start_time=None, conn=None):
     """Update the ingestion status in the database."""
@@ -153,7 +179,7 @@ def update_status(status, current=0, total=0, message="", start_time=None, conn=
     
     local_conn = False
     if conn is None:
-        conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
+        conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
         local_conn = True
         
     cursor = conn.cursor()
@@ -215,7 +241,7 @@ def ingest_offline_downloads(force_fresh: bool = False):
 
     if force_fresh:
         # Clear all ingested files if fresh start requested
-        conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
+        conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute('PRAGMA journal_mode=WAL')
         cursor.execute('DELETE FROM ingested_files')
@@ -250,8 +276,10 @@ def ingest_offline_downloads(force_fresh: bool = False):
         separators=["\n\n", "\n", " ", "", "---", "##", "#"] 
     )
 
+    bulk_data_buffer = []
+
     import sqlite3
-    conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
+    conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
     # Enable WAL mode for the reader connection as well
     conn.execute('PRAGMA journal_mode=WAL')
     cursor = conn.cursor()
@@ -302,10 +330,23 @@ def ingest_offline_downloads(force_fresh: bool = False):
             # --- PDF Processing ---
             elif ext == ".pdf":
                  try:
+                    # Primary: Convert to Markdown for better RAG
                     md_content = pymupdf4llm.to_markdown(file_path)
                     docs = [Document(page_content=md_content, metadata={"source": source_url})]
                  except Exception as e:
-                     yield f"  -> PDF Error: {e}\n"
+                     yield f"  -> pymupdf4llm Error: {e}. Falling back to standard loader...\n"
+                     try:
+                         # Fallback: Standard text extraction
+                         loader = PyMuPDFLoader(file_path)
+                         fallback_docs = loader.load()
+                         # Merge pages into one document for consistency if needed, 
+                         # or just use the list. Here we'll merge content or keep pages.
+                         # Let's keep pages but ensure source_url is set.
+                         for d in fallback_docs:
+                             d.metadata["source"] = source_url
+                         docs = fallback_docs
+                     except Exception as e_fallback:
+                         yield f"  -> CRITICAL PDF Error: {e_fallback}\n"
 
             # Skip other file types as per requirement
             else:
@@ -324,12 +365,16 @@ def ingest_offline_downloads(force_fresh: bool = False):
                     else:
                         vectorstore = store.add_documents(chunks)
                     
-                    # Track this file in database - reuse connection
-                    save_ingested_file(source_url, filename, len(chunks), conn=conn)
-                    
+                    # Track this file for bulk update
+                    bulk_data_buffer.append((source_url, filename, len(chunks)))
                     processed_count += 1
             
-            if (i+1) % 10 == 0:
+            # Periodically commit status and file tracking to avoid long locks and keep status updated
+            if (i+1) % 10 == 0 or (i+1) == total_files:
+                if bulk_data_buffer:
+                    save_ingested_files_bulk(bulk_data_buffer, conn=conn)
+                    bulk_data_buffer = []
+                
                 update_status("running", current=i+1, total=total_files, message=f"Processed {i+1} files", start_time=start_time, conn=conn)
                 # Checkpoint: ChromaDB is persistent
 
@@ -359,7 +404,7 @@ def reset_crawled_ingestion_status(full_wipe: bool = True):
     - If full_wipe is True, it deletes all records (default for reset).
     - If full_wipe is False, it just sets status to 0 (legacy behavior).
     """
-    conn = sqlite3.connect(METADATA_DB, timeout=30, check_same_thread=False)
+    conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
     cursor = conn.cursor()
     
     if full_wipe:
