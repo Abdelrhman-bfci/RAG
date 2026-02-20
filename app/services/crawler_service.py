@@ -147,13 +147,23 @@ class CrawlerService:
                     yield f"[DOWNLOADING] Depth {current_depth}: {current_url}\n"
                     processed_count += 1
                     
-                    response = requests.get(current_url, timeout=Config.CRAWL_TIMEOUT)
+                    start_download_time = time.time()
+                    response = requests.get(current_url, timeout=Config.CRAWL_TIMEOUT, stream=True)
                     if response.status_code != 200:
                         yield f"  -> Failed: Status {response.status_code}\n"
                         continue
 
-                    content = response.content
                     content_type_header = response.headers.get("Content-Type", "")
+                    content_buffer = bytearray()
+                    for chunk in response.iter_content(chunk_size=32768):
+                        if time.time() - start_download_time > Config.CRAWL_TIMEOUT:
+                            yield f"  -> Timeout: Absolute limit of {Config.CRAWL_TIMEOUT}s reached. Skipping.\n"
+                            response.close()
+                            raise requests.exceptions.Timeout(f"Absolute download timeout of {Config.CRAWL_TIMEOUT}s exceeded")
+                        if chunk:
+                            content_buffer.extend(chunk)
+                    
+                    content = bytes(content_buffer)
                     is_web_page = self.is_html(content_type_header)
                     ext = self.get_extension(response)
 
