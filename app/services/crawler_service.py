@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import time
+import random
 from collections import deque
 import sqlite3
 import os
@@ -148,9 +149,35 @@ class CrawlerService:
                     processed_count += 1
                     
                     start_download_time = time.time()
-                    response = requests.get(current_url, timeout=Config.CRAWL_TIMEOUT, stream=True)
-                    if response.status_code != 200:
-                        yield f"  -> Failed: Status {response.status_code}\n"
+                    
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                        "Accept-Language": "en-US,en;q=0.9",
+                    }
+
+                    response = None
+                    retries = Config.CRAWL_RETRIES
+                    for attempt in range(retries + 1):
+                        try:
+                            response = requests.get(
+                                current_url, 
+                                timeout=Config.CRAWL_TIMEOUT, 
+                                stream=True, 
+                                headers=headers
+                            )
+                            response.raise_for_status()
+                            break
+                        except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+                            if attempt < retries:
+                                wait_time = (2 ** attempt) + random.random()
+                                yield f"  -> Attempt {attempt + 1} failed: {e}. Retrying in {wait_time:.1f}s...\n"
+                                time.sleep(wait_time)
+                            else:
+                                yield f"  -> Failed after {retries + 1} attempts: {e}\n"
+                                response = None
+
+                    if not response or response.status_code != 200:
                         continue
 
                     content_type_header = response.headers.get("Content-Type", "")
@@ -197,7 +224,11 @@ class CrawlerService:
 
                     # 3. Update DB
                     self.update_metadata_success(doc_id, filename, checksum)
-                    time.sleep(0.5)
+                    
+                    # Random jittered delay to avoid rate limiting
+                    base_delay = Config.CRAWL_DELAY
+                    jittered_delay = base_delay * (0.5 + random.random())
+                    time.sleep(jittered_delay)
 
                 except Exception as e:
                     yield f"Error downloading {current_url}: {e}\n"
