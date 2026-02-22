@@ -117,10 +117,59 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
     """
     Creates and returns the RAG chain for Question Answering.
     """
-    # 1. Initialize Vector Store and Retriever
+    # 1. Initialize Vector Store
     store = VectorStoreFactory.get_instance()
     vectorstore = store.get_vectorstore()
 
+    # 2. Initialize LLM
+    if Config.LLM_PROVIDER == "ollama":
+        llm = ChatOllama(
+            base_url=Config.OLLAMA_BASE_URL,
+            model=Config.OLLAMA_LLM_MODEL,
+            temperature=0.2 if deep_thinking else 0.1,
+            num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
+            num_predict=-1,  # Unlimited tokens - generate until naturally complete
+            stop=[],  # Remove default stop sequences to allow complete responses
+            repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
+        )
+    elif Config.LLM_PROVIDER == "vllm":
+        llm = ChatOpenAI(
+            base_url=Config.VLLM_BASE_URL,
+            model=Config.VLLM_MODEL,
+            temperature=0.2 if deep_thinking else 0.1,
+            api_key="none",
+            max_tokens=8192  # Maximum tokens to generate in response
+        )
+    elif Config.LLM_PROVIDER == "openai":
+        llm = ChatOpenAI(
+            model=Config.OPENAI_LLM_MODEL,
+            base_url=Config.OPENAI_BASE_URL,
+            temperature=0.2 if deep_thinking else 0.1,
+            openai_api_key=Config.OPENAI_API_KEY,
+            max_tokens=8192  # Maximum tokens to generate in response
+        )
+    elif Config.LLM_PROVIDER == "gemini":
+        if ChatGoogleGenerativeAI is None:
+            raise ImportError("langchain-google-genai is not installed. Please run 'pip install langchain-google-genai'")
+        llm = ChatGoogleGenerativeAI(
+            model=Config.GEMINI_MODEL,
+            google_api_key=Config.GEMINI_API_KEY,
+            temperature=0.2 if deep_thinking else 0.1,
+            max_output_tokens=8192  # Maximum tokens to generate in response
+        )
+    else:
+        # Default fallback to Ollama
+        llm = ChatOllama(
+            model=Config.OLLAMA_LLM_MODEL,
+            base_url=Config.OLLAMA_BASE_URL,
+            temperature=0.2 if deep_thinking else 0.1,
+            num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
+            num_predict=-1,  # Unlimited tokens - generate until naturally complete
+            stop=[],  # Remove default stop sequences to allow complete responses
+            repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
+        )
+
+    # 3. Initialize Retriever
     # Advanced Hybrid Retrieval with Relevance Filtering and MMR
     class AdvancedHybridRetriever:
         def __init__(self, vectorstore, llm=None):
@@ -360,56 +409,6 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
 
     retriever = AdvancedHybridRetriever(vectorstore, llm=llm)
 
-    # 2. Select Prompt
-    prompt = DEEP_THINKING_PROMPT if deep_thinking else STRICT_RAG_PROMPT
-
-    # 3. Initialize LLM
-    if Config.LLM_PROVIDER == "ollama":
-        llm = ChatOllama(
-            base_url=Config.OLLAMA_BASE_URL,
-            model=Config.OLLAMA_LLM_MODEL,
-            temperature=0.2 if deep_thinking else 0.1,
-            num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
-            num_predict=-1,  # Unlimited tokens - generate until naturally complete
-            stop=[],  # Remove default stop sequences to allow complete responses
-            repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
-        )
-    elif Config.LLM_PROVIDER == "vllm":
-        llm = ChatOpenAI(
-            base_url=Config.VLLM_BASE_URL,
-            model=Config.VLLM_MODEL,
-            temperature=0.2 if deep_thinking else 0.1,
-            api_key="none",
-            max_tokens=8192  # Maximum tokens to generate in response
-        )
-    elif Config.LLM_PROVIDER == "openai":
-        llm = ChatOpenAI(
-            model=Config.OPENAI_LLM_MODEL,
-            base_url=Config.OPENAI_BASE_URL,
-            temperature=0.2 if deep_thinking else 0.1,
-            openai_api_key=Config.OPENAI_API_KEY,
-            max_tokens=8192  # Maximum tokens to generate in response
-        )
-    elif Config.LLM_PROVIDER == "gemini":
-        if ChatGoogleGenerativeAI is None:
-            raise ImportError("langchain-google-genai is not installed. Please run 'pip install langchain-google-genai'")
-        llm = ChatGoogleGenerativeAI(
-            model=Config.GEMINI_MODEL,
-            google_api_key=Config.GEMINI_API_KEY,
-            temperature=0.2 if deep_thinking else 0.1,
-            max_output_tokens=8192  # Maximum tokens to generate in response
-        )
-    else:
-        # Default fallback to Ollama
-        llm = ChatOllama(
-            model=Config.OLLAMA_LLM_MODEL,
-            base_url=Config.OLLAMA_BASE_URL,
-            temperature=0.2 if deep_thinking else 0.1,
-            num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
-            num_predict=-1,  # Unlimited tokens - generate until naturally complete
-            stop=[],  # Remove default stop sequences to allow complete responses
-            repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
-        )
 
     # 4. Construct the Chain with Enhanced Context Formatting
     def format_docs(docs):
