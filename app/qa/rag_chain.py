@@ -117,20 +117,29 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
     """
     Creates and returns the RAG chain for Question Answering.
     """
+    # 0. Defensive Initialization
+    llm = None
+    prompt = None
+    
+    print(f"DEBUG: Initializing RAG chain. Provider: {Config.LLM_PROVIDER}")
+
     # 1. Initialize Vector Store
     store = VectorStoreFactory.get_instance()
     vectorstore = store.get_vectorstore()
 
-    # 2. Initialize LLM
+    # 2. Select Prompt
+    prompt = DEEP_THINKING_PROMPT if deep_thinking else STRICT_RAG_PROMPT
+
+    # 3. Initialize LLM
     if Config.LLM_PROVIDER == "ollama":
         llm = ChatOllama(
             base_url=Config.OLLAMA_BASE_URL,
             model=Config.OLLAMA_LLM_MODEL,
             temperature=0.2 if deep_thinking else 0.1,
             num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
-            num_predict=-1,  # Unlimited tokens - generate until naturally complete
-            stop=[],  # Remove default stop sequences to allow complete responses
-            repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
+            num_predict=-1,
+            stop=[],
+            repeat_penalty=1.1
         )
     elif Config.LLM_PROVIDER == "vllm":
         llm = ChatOpenAI(
@@ -138,7 +147,7 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             model=Config.VLLM_MODEL,
             temperature=0.2 if deep_thinking else 0.1,
             api_key="none",
-            max_tokens=8192  # Maximum tokens to generate in response
+            max_tokens=8192
         )
     elif Config.LLM_PROVIDER == "openai":
         llm = ChatOpenAI(
@@ -146,7 +155,7 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             base_url=Config.OPENAI_BASE_URL,
             temperature=0.2 if deep_thinking else 0.1,
             openai_api_key=Config.OPENAI_API_KEY,
-            max_tokens=8192  # Maximum tokens to generate in response
+            max_tokens=8192
         )
     elif Config.LLM_PROVIDER == "gemini":
         if ChatGoogleGenerativeAI is None:
@@ -155,19 +164,25 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             model=Config.GEMINI_MODEL,
             google_api_key=Config.GEMINI_API_KEY,
             temperature=0.2 if deep_thinking else 0.1,
-            max_output_tokens=8192  # Maximum tokens to generate in response
+            max_output_tokens=8192
         )
     else:
         # Default fallback to Ollama
+        print(f"DEBUG: Falling back to Ollama default")
         llm = ChatOllama(
             model=Config.OLLAMA_LLM_MODEL,
             base_url=Config.OLLAMA_BASE_URL,
             temperature=0.2 if deep_thinking else 0.1,
             num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
-            num_predict=-1,  # Unlimited tokens - generate until naturally complete
-            stop=[],  # Remove default stop sequences to allow complete responses
-            repeat_penalty=1.1  # Slight penalty to avoid repetition while maintaining completeness
+            num_predict=-1,
+            stop=[],
+            repeat_penalty=1.1
         )
+    
+    if llm is None:
+        print("DEBUG: CRITICAL ERROR - LLM is still None after initialization block")
+    else:
+        print(f"DEBUG: LLM successfully initialized as {type(llm).__name__}")
 
     # 3. Initialize Retriever
     # Advanced Hybrid Retrieval with Relevance Filtering and MMR
