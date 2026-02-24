@@ -112,7 +112,7 @@ def get_ingested_files():
     cursor.execute('''
         SELECT source_url, filename, chunks, timestamp 
         FROM ingested_files 
-        WHERE chunks > 0 AND ingest_status = 1
+        WHERE ingest_status = 1
         ORDER BY last_updated DESC
     ''')
     results = cursor.fetchall()
@@ -276,24 +276,37 @@ def ingest_offline_downloads(force_fresh: bool = False):
         separators=["\n\n", "\n", " ", "", "---", "##", "#"] 
     )
 
-    bulk_data_buffer = []
-
     import sqlite3
     conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
-    # Enable WAL mode for the reader connection as well
+    # Enable WAL mode
     conn.execute('PRAGMA journal_mode=WAL')
     cursor = conn.cursor()
+
+    # Get already ingested files to skip
+    ingested_map = {}
+    if not force_fresh:
+        ingested_map = get_ingested_files()
+        yield f"Found {len(ingested_map)} already ingested files. These will be skipped.\n"
+
+    bulk_data_buffer = []
+
 
     for i, file_path in enumerate(all_files):
         try:
             filename = os.path.basename(file_path)
-            # Try to get URL from DB to use as source
+            # Determine source_url
+            source_url = None
             cursor.execute("SELECT url FROM pages WHERE filename = ?", (filename,))
             result = cursor.fetchone()
-            source_url = result[0] if result else f"file://{file_path}" # Fallback if not in DB
+            if result:
+                source_url = result[0]
+            else:
+                source_url = f"file://{file_path}"
 
-            # Check if this source is already indexed? (Simplified: we overwrite/update)
-            # For efficiency, we could check DB or FAISS, but let's assume update request.
+            # Skip Logic
+            if not force_fresh and source_url in ingested_map:
+                yield f"[{i+1}/{total_files}] Skipping (already ingested): {filename}\n"
+                continue
             
             yield f"[{i+1}/{total_files}] Processing: {filename}\n"
             
