@@ -616,13 +616,45 @@
                     </div>
                     <div
                         class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i
-                                class="fas fa-database text-asu-blue"></i> Offline Ingestion</h3>
+                        <h3 class="text-lg font-bold mb-4 flex items-center justify-between gap-2">
+                            <span class="flex items-center gap-2">
+                                <i class="fas fa-database text-asu-blue"></i> Offline Ingestion
+                            </span>
+                            <span v-if="offlineIngestStatus.status !== 'idle'" :class="{
+                                    'bg-blue-100 text-blue-700': offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running',
+                                    'bg-green-100 text-green-700': offlineIngestStatus.status === 'completed',
+                                    'bg-red-100 text-red-700': offlineIngestStatus.status === 'error'
+                                }" class="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">
+                                {{ offlineIngestStatus.status }}
+                            </span>
+                        </h3>
                         <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Ingest downloaded files from the
                             downloads folder into the RAG system.</p>
+
+                        <div v-if="offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running'"
+                            class="mb-4">
+                            <div class="flex justify-between text-[10px] font-bold text-gray-500 mb-1 uppercase">
+                                <span>Progress</span>
+                                <span>{{ Math.round((offlineIngestStatus.current_batch /
+                                    offlineIngestStatus.total_batches) * 100) || 0 }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                                <div class="bg-asu-blue h-full transition-all duration-500"
+                                    :style="{ width: (offlineIngestStatus.current_batch / offlineIngestStatus.total_batches * 100) + '%' }">
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-gray-400 mt-1 italic">{{ offlineIngestStatus.message }}</p>
+                        </div>
+
                         <button @click="startOfflineIngest"
-                            class="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition-all">Ingest
-                            Downloaded Files</button>
+                            :disabled="offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running'"
+                            :class="offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running' ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'"
+                            class="w-full text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
+                            <i v-if="offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running'"
+                                class="fas fa-circle-notch fa-spin"></i>
+                            {{ offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running' ?
+                            'Ingesting...' : 'Ingest Downloaded Files' }}
+                        </button>
                     </div>
                     <div
                         class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
@@ -1148,6 +1180,7 @@
                 const summaryProgress = ref([]);
                 const chunkSummaries = ref([]);
                 const finalSummary = ref("");
+                const offlineIngestStatus = ref({ status: 'idle', current_batch: 0, total_batches: 0, message: '', eta_seconds: null });
 
                 // Typewriter effect logic
                 async function processStreamBuffer() {
@@ -1849,27 +1882,30 @@
                 function pollIngestionStatus() {
                     if (ingestionPollInterval) return;
 
-                    ingestionLogs.value.crawler = ["Starting background ingestion..."];
-
                     ingestionPollInterval = setInterval(async () => {
                         try {
                             const res = await fetch(`${API_BASE}/ingest/status`);
                             const status = await res.json();
 
+                            offlineIngestStatus.value = status;
+
                             if (status.status === 'idle') {
-                                // If we just started, ignore idle for a moment or check timestamp
                                 if (ingestionLogs.value.crawler.length > 1) {
-                                    ingestionLogs.value.crawler.push("System idle.");
+                                    if (ingestionLogs.value.crawler[ingestionLogs.value.crawler.length - 1] !== "System idle.") {
+                                        ingestionLogs.value.crawler.push("System idle.");
+                                    }
                                     clearInterval(ingestionPollInterval);
                                     ingestionPollInterval = null;
                                 }
-                            } else if (status.status === 'processing') {
-                                const msg = `[${status.current_batch}/${status.total_batches}] ${status.message} (ETA: ${status.eta_seconds}s)`;
+                            } else if (status.status === 'processing' || status.status === 'running') {
+                                const msg = `[${status.current_batch}/${status.total_batches}] ${status.message} ${status.eta_seconds ? '(ETA: ' + status.eta_seconds + 's)' : ''}`;
                                 if (ingestionLogs.value.crawler[ingestionLogs.value.crawler.length - 1] !== msg) {
                                     ingestionLogs.value.crawler.push(msg);
                                 }
                             } else if (status.status === 'completed') {
-                                ingestionLogs.value.crawler.push("Ingestion completed successfully.");
+                                if (ingestionLogs.value.crawler[ingestionLogs.value.crawler.length - 1] !== "Ingestion completed successfully.") {
+                                    ingestionLogs.value.crawler.push("Ingestion completed successfully.");
+                                }
                                 clearInterval(ingestionPollInterval);
                                 ingestionPollInterval = null;
                                 fetchResources();
@@ -1936,6 +1972,7 @@
                     resourceSearch, filteredResourceList,
                     crawlerUrl, crawlerDepth,
                     summaryFile, summaryProgress, chunkSummaries, finalSummary,
+                    offlineIngestStatus,
                     toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, startCrawl, startOfflineIngest, startNewChat, handleSummaryFileUpload,
                     // Login State
                     isAuthenticated, showLoginModal, loginUsername, loginPassword, handleLogin, logout
