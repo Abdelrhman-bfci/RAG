@@ -195,21 +195,25 @@ def update_status(status, current=0, total=0, message="", start_time=None, conn=
 
 def get_ingestion_status():
     """Get the current ingestion status from the database."""
-    conn = sqlite3.connect(METADATA_DB, check_same_thread=False)
-    cursor = conn.cursor()
-    cursor.execute('SELECT status, current_batch, total_batches, message, timestamp, eta_seconds FROM ingestion_status WHERE id = 1')
-    result = cursor.fetchone()
-    conn.close()
-    
-    if result:
-        return {
-            "status": result[0],
-            "current_batch": result[1],
-            "total_batches": result[2],
-            "message": result[3],
-            "timestamp": result[4],
-            "eta_seconds": result[5]
-        }
+    try:
+        conn = sqlite3.connect(METADATA_DB, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute('SELECT status, current_batch, total_batches, message, timestamp, eta_seconds FROM ingestion_status WHERE id = 1')
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {
+                "status": result[0],
+                "current_batch": result[1],
+                "total_batches": result[2],
+                "message": result[3],
+                "timestamp": result[4],
+                "eta_seconds": result[5]
+            }
+    except Exception as e:
+        print(f"Error fetching ingestion status: {e}")
+        
     return {"status": "idle", "current_batch": 0, "total_batches": 0, "message": "", "timestamp": 0, "eta_seconds": None}
 
 def get_loader(file_path: str):
@@ -225,19 +229,26 @@ def get_loader(file_path: str):
          return UnstructuredExcelLoader(file_path)
     return None
 
-def ingest_offline_downloads(force_fresh: bool = False):
+def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
     """
     Ingest files from the DOWNLOAD_FOLDER.
     """
+    def _log(msg):
+        if not silent:
+            return msg
+        return None
+
     if not os.path.exists(DOWNLOAD_FOLDER):
-        yield f"Error: Download folder {DOWNLOAD_FOLDER} does not exist.\n"
+        msg = f"Error: Download folder {DOWNLOAD_FOLDER} does not exist.\n"
+        if not silent: yield msg
         return
 
     # Initialize tracking database
     init_tracking_db()
     
     update_status("running", message="Scanning downloaded files...")
-    yield "Scanning downloaded files...\n"
+    msg = _log("Scanning downloaded files...\n")
+    if msg: yield msg
 
     if force_fresh:
         # Clear all ingested files if fresh start requested
@@ -247,7 +258,8 @@ def ingest_offline_downloads(force_fresh: bool = False):
         cursor.execute('DELETE FROM ingested_files')
         conn.commit()
         conn.close()
-        yield "Fresh start: Cleared previous tracking data.\n"
+        msg = _log("Fresh start: Cleared previous tracking data.\n")
+        if msg: yield msg
 
     # Gather all files
     all_files = []
@@ -255,13 +267,14 @@ def ingest_offline_downloads(force_fresh: bool = False):
         for file in files:
             all_files.append(os.path.join(root, file))
 
-    if not all_files:
         msg = "No files found in downloads folder."
         update_status("completed", message=msg)
-        yield f"{msg}\n"
+        msg_log = _log(f"{msg}\n")
+        if msg_log: yield msg_log
         return
 
-    yield f"Found {len(all_files)} files. Starting processing...\n"
+    msg = _log(f"Found {len(all_files)} files. Starting processing...\n")
+    if msg: yield msg
 
     store = VectorStoreFactory.get_instance()
     vectorstore = store.get_vectorstore()
@@ -286,7 +299,8 @@ def ingest_offline_downloads(force_fresh: bool = False):
     ingested_map = {}
     if not force_fresh:
         ingested_map = get_ingested_files()
-        yield f"Found {len(ingested_map)} already ingested files. These will be skipped.\n"
+        msg = _log(f"Found {len(ingested_map)} already ingested files. These will be skipped.\n")
+        if msg: yield msg
 
     bulk_data_buffer = []
 
@@ -305,10 +319,12 @@ def ingest_offline_downloads(force_fresh: bool = False):
 
             # Skip Logic
             if not force_fresh and source_url in ingested_map:
-                yield f"[{i+1}/{total_files}] Skipping (already ingested): {filename}\n"
+                msg = _log(f"[{i+1}/{total_files}] Skipping (already ingested): {filename}\n")
+                if msg: yield msg
                 continue
             
-            yield f"[{i+1}/{total_files}] Processing: {filename}\n"
+            msg = _log(f"[{i+1}/{total_files}] Processing: {filename}\n")
+            if msg: yield msg
             
             docs = []
             ext = os.path.splitext(file_path)[1].lower()
@@ -347,7 +363,8 @@ def ingest_offline_downloads(force_fresh: bool = False):
                     md_content = pymupdf4llm.to_markdown(file_path)
                     docs = [Document(page_content=md_content, metadata={"source": source_url})]
                  except Exception as e:
-                     yield f"  -> pymupdf4llm Error: {e}. Falling back to standard loader...\n"
+                     msg = _log(f"  -> pymupdf4llm Error: {e}. Falling back to standard loader...\n")
+                     if msg: yield msg
                      try:
                          # Fallback: Standard text extraction
                          loader = PyMuPDFLoader(file_path)
@@ -359,11 +376,13 @@ def ingest_offline_downloads(force_fresh: bool = False):
                              d.metadata["source"] = source_url
                          docs = fallback_docs
                      except Exception as e_fallback:
-                         yield f"  -> CRITICAL PDF Error: {e_fallback}\n"
+                         msg = _log(f"  -> CRITICAL PDF Error: {e_fallback}\n")
+                         if msg: yield msg
 
             # Skip other file types as per requirement
             else:
-                yield f"  -> Skipped: {ext} (only HTML and PDF allowed)\n"
+                msg = _log(f"  -> Skipped: {ext} (only HTML and PDF allowed)\n")
+                if msg: yield msg
                 continue
 
             # --- Vectorization ---
@@ -396,20 +415,25 @@ def ingest_offline_downloads(force_fresh: bool = False):
             if "readonly" in error_msg.lower() or "1032" in error_msg:
                 db_dir = os.path.dirname(os.path.abspath(METADATA_DB))
                 vs_dir = os.path.abspath(Config.VECTOR_DB_PATH)
-                yield f"  -> CRITICAL PERMISSION ERROR: The database is read-only.\n"
-                yield f"  -> Fix by running: sudo chown -R $USER:$USER {db_dir} {vs_dir}\n"
-            yield f"  -> Error processing {file_path}: {e}\n"
+                msg1 = _log(f"  -> CRITICAL PERMISSION ERROR: The database is read-only.\n")
+                msg2 = _log(f"  -> Fix by running: sudo chown -R $USER:$USER {db_dir} {vs_dir}\n")
+                if msg1: yield msg1
+                if msg2: yield msg2
+            msg = _log(f"  -> Error processing {file_path}: {e}\n")
+            if msg: yield msg
             continue
 
     conn.close()
 
     # Final Save handled by Chroma persistence
     if vectorstore:
-        yield "Data persisted in ChromaDB.\n"
+        msg = _log("Data persisted in ChromaDB.\n")
+        if msg: yield msg
 
     msg = f"SUCCESS: Ingested {processed_count} files from downloads."
     update_status("completed", message=msg, conn=conn)
-    yield f"{msg}\n"
+    msg_log = _log(f"{msg}\n")
+    if msg_log: yield msg_log
 
 def reset_crawled_ingestion_status(full_wipe: bool = True):
     """

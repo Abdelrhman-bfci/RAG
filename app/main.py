@@ -696,6 +696,27 @@ async def stream_offline_ingestion(fresh: bool = False):
         }
     )
 
+@app.post("/ingest/offline/start")
+async def start_offline_ingestion(background_tasks: BackgroundTasks, fresh: bool = False):
+    """
+    Start offline ingestion in the background.
+    """
+    def run_ingest():
+        # Call with silent=True to avoid yield errors in background
+        for _ in ingest_offline_downloads(force_fresh=fresh, silent=True):
+            pass
+            
+    background_tasks.add_task(run_ingest)
+    return {"status": "accepted", "message": "Offline ingestion started in background"}
+
+@app.get("/ingest/status")
+async def get_ingestion_progress():
+    """
+    Poll the current ingestion progress from the database.
+    """
+    from app.ingestion.offline_web_ingest import get_ingestion_status
+    return get_ingestion_status()
+
 
 @app.get("/")
 async def get_chat_interface():

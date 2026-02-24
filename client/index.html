@@ -1209,6 +1209,7 @@
                     await fetchResources();
                     isDark.value = false;
                     applyTheme();
+                    pollIngestionStatus();
                 });
 
                 watch(isDark, applyTheme);
@@ -1831,19 +1832,58 @@
                 }
 
                 async function startOfflineIngest() {
-                    const url = `${API_BASE}/ingest/offline/stream`;
-                    ingestionLogs.value.crawler = [];
-                    const res = await fetch(url);
-                    const reader = res.body.getReader();
-                    const decoder = new TextDecoder();
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const lines = decoder.decode(value).split('\n');
-                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.crawler.push(l); });
+                    try {
+                        const res = await fetch(`${API_BASE}/ingest/offline/start`, { method: 'POST' });
+                        if (res.ok) {
+                            showNotification("Background ingestion started");
+                            pollIngestionStatus();
+                        } else {
+                            showNotification("Failed to start ingestion", "error");
+                        }
+                    } catch (e) {
+                        showNotification("Error: " + e.message, "error");
                     }
-                    fetchResources();
-                    showNotification("Offline ingestion completed!");
+                }
+
+                let ingestionPollInterval = null;
+                function pollIngestionStatus() {
+                    if (ingestionPollInterval) return;
+
+                    ingestionLogs.value.crawler = ["Starting background ingestion..."];
+
+                    ingestionPollInterval = setInterval(async () => {
+                        try {
+                            const res = await fetch(`${API_BASE}/ingest/status`);
+                            const status = await res.json();
+
+                            if (status.status === 'idle') {
+                                // If we just started, ignore idle for a moment or check timestamp
+                                if (ingestionLogs.value.crawler.length > 1) {
+                                    ingestionLogs.value.crawler.push("System idle.");
+                                    clearInterval(ingestionPollInterval);
+                                    ingestionPollInterval = null;
+                                }
+                            } else if (status.status === 'processing') {
+                                const msg = `[${status.current_batch}/${status.total_batches}] ${status.message} (ETA: ${status.eta_seconds}s)`;
+                                if (ingestionLogs.value.crawler[ingestionLogs.value.crawler.length - 1] !== msg) {
+                                    ingestionLogs.value.crawler.push(msg);
+                                }
+                            } else if (status.status === 'completed') {
+                                ingestionLogs.value.crawler.push("Ingestion completed successfully.");
+                                clearInterval(ingestionPollInterval);
+                                ingestionPollInterval = null;
+                                fetchResources();
+                                showNotification("Offline ingestion completed!");
+                            } else if (status.status === 'error') {
+                                ingestionLogs.value.crawler.push("ERROR: " + status.message);
+                                clearInterval(ingestionPollInterval);
+                                ingestionPollInterval = null;
+                                showNotification("Ingestion failed", "error");
+                            }
+                        } catch (e) {
+                            console.error("Polling error:", e);
+                        }
+                    }, 2000);
                 }
 
                 async function openPreview(name) {
