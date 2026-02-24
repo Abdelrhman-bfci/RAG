@@ -267,6 +267,7 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
         for file in files:
             all_files.append(os.path.join(root, file))
 
+    if not all_files:
         msg = "No files found in downloads folder."
         update_status("completed", message=msg)
         msg_log = _log(f"{msg}\n")
@@ -423,8 +424,6 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
             if msg: yield msg
             continue
 
-    conn.close()
-
     # Final Save handled by Chroma persistence
     if vectorstore:
         msg = _log("Data persisted in ChromaDB.\n")
@@ -432,6 +431,7 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
 
     msg = f"SUCCESS: Ingested {processed_count} files from downloads."
     update_status("completed", message=msg, conn=conn)
+    conn.close()
     msg_log = _log(f"{msg}\n")
     if msg_log: yield msg_log
 
