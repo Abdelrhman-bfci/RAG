@@ -682,6 +682,31 @@ async def stream_crawler(url: str, depth: int = 2):
         }
     )
 
+def _crawl_then_ingest_stream(url: str, depth: int, fresh: bool):
+    """Generator: run crawler then offline ingest for one unified stream."""
+    from app.services.crawler_service import CrawlerService
+    service = CrawlerService()
+    for chunk in service.crawl_website(url, depth):
+        yield chunk
+    yield "\n--- Crawl complete. Starting ingestion ---\n"
+    for chunk in ingest_offline_downloads(force_fresh=fresh):
+        yield chunk
+
+@app.get("/crawl-and-ingest/stream")
+async def stream_crawl_then_ingest(url: str, depth: int = 2, fresh: bool = False):
+    """
+    Crawl a URL (saves to download folder), then ingest from downloads into the vector store.
+    Single stream for both phases. Uses the same vector store as the rest of the app.
+    """
+    return StreamingResponse(
+        _crawl_then_ingest_stream(url, depth, fresh),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
 @app.get("/ingest/offline/stream")
 async def stream_offline_ingestion(fresh: bool = False):
     """

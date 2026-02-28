@@ -1,23 +1,31 @@
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
+import os
 import time
 import random
-from collections import deque
 import sqlite3
-import os
 import mimetypes
 import hashlib
+from collections import deque
+from urllib.parse import urljoin, urlparse, urlunparse
+
+import requests
+from bs4 import BeautifulSoup
+
 from app.config import Config
 import logging
 
-# Set up logging
 logger = logging.getLogger(__name__)
+
+# Default User-Agent for crawl requests
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/121.0.0.0 Safari/537.36"
+)
 
 class CrawlerService:
     def __init__(self):
         self.db_path = Config.CRAWLER_DB
         self.download_folder = Config.DOWNLOAD_FOLDER
+        self.skip_images = getattr(Config, "CRAWL_SKIP_IMAGES", False)
         self.init_system()
 
     def init_system(self):
@@ -82,38 +90,62 @@ class CrawlerService:
         return result
 
     def get_extension(self, response):
-        content_type = response.headers.get('content-type', '').split(';')[0]
+        content_type = response.headers.get('content-type', '').split(';')[0].strip()
         extension = mimetypes.guess_extension(content_type)
         if not extension:
-            if "html" in content_type: return ".html"
+            if "html" in (content_type or ""):
+                return ".html"
             return ".dat"
         return extension
+
+    def normalize_url(self, url: str) -> str:
+        """Strip fragment and normalize path to reduce duplicate URLs."""
+        parsed = urlparse(url)
+        path = parsed.path.rstrip("/") or "/"
+        normalized = urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            path,
+            parsed.params,
+            parsed.query,
+            "",  # no fragment
+        ))
+        return normalized
 
     def is_html(self, content_type):
         return "text/html" in content_type.lower()
 
-    def crawl_website(self, start_url: str, max_depth: int = 2):
-        if not start_url:
+    def crawl_website(self, start_url: str, max_depth: int = 2, max_pages: int = -1):
+        """
+        Crawl a website starting from start_url.
+        - max_depth: maximum link depth (0 = start page only).
+        - max_pages: cap on new downloads (-1 = no limit).
+        """
+        if not start_url or not start_url.strip():
             yield "Error: No URL provided.\n"
             return
 
-        yield f"Starting crawl for: {start_url} (Depth: {max_depth})\n"
-        
+        start_url = self.normalize_url(start_url.strip())
+        yield f"Starting crawl for: {start_url} (Depth: {max_depth}, Max pages: {'unlimited' if max_pages == -1 else max_pages})\n"
+
         queue = deque([(start_url, 0, None)])
         original_domain = urlparse(start_url).netloc
         visited = set()
-        
-        # Allowed binary types from config
         ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
 
         processed_count = 0
-        
+
         while queue:
+            if max_pages != -1 and processed_count >= max_pages:
+                yield f"Reached max_pages limit ({max_pages}). Stopping.\n"
+                break
+
             current_url, current_depth, parent_url = queue.popleft()
-            
+            current_url = self.normalize_url(current_url)
+
             if current_depth > max_depth:
                 continue
-            
+
             if current_url in visited:
                 continue
             visited.add(current_url)
@@ -151,7 +183,7 @@ class CrawlerService:
                     start_download_time = time.time()
                     
                     headers = {
-                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                        "User-Agent": getattr(Config, "CRAWL_USER_AGENT", None) or DEFAULT_USER_AGENT,
                         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                         "Accept-Language": "en-US,en;q=0.9",
                     }
@@ -169,6 +201,7 @@ class CrawlerService:
                             response.raise_for_status()
                             break
                         except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+                            logger.warning("Crawl request failed %s: %s", current_url, e)
                             if attempt < retries:
                                 wait_time = (2 ** attempt) + random.random()
                                 yield f"  -> Attempt {attempt + 1} failed: {e}. Retrying in {wait_time:.1f}s...\n"
@@ -231,6 +264,7 @@ class CrawlerService:
                     time.sleep(jittered_delay)
 
                 except Exception as e:
+                    logger.exception("Error downloading %s", current_url)
                     yield f"Error downloading {current_url}: {e}\n"
                     continue
 
@@ -239,39 +273,26 @@ class CrawlerService:
                 try:
                     soup = BeautifulSoup(content, "html.parser")
                     
-                    def add_to_queue(raw_url):
+                    def add_to_queue(raw_url, is_image: bool = False):
+                        if is_image and self.skip_images:
+                            return
                         full_url = urljoin(current_url, raw_url)
                         parsed = urlparse(full_url)
-                        
-                        clean_url = parsed.scheme + "://" + parsed.netloc + parsed.path
-                        if parsed.query:
-                            clean_url += "?" + parsed.query
-                        
-                        if (clean_url not in visited and 
-                            parsed.netloc == original_domain and 
-                            parsed.scheme in ['http', 'https']):
-                            
-                            queue.append((clean_url, current_depth + 1, current_url))
+                        clean_url = self.normalize_url(full_url)
+                        if (clean_url not in visited
+                                and parsed.netloc == original_domain
+                                and parsed.scheme in ("http", "https")):
+                            queue.append((full_url, current_depth + 1, current_url))
 
-                    # 1. Links
                     for link in soup.find_all("a", href=True):
-                        add_to_queue(link.get("href"))
+                        add_to_queue(link.get("href"), is_image=False)
 
-                    # 2. Images (if you want to traverse them, or just download)
-                    # Note: Original code downloaded images if found. 
-                    # If we want to support image walking, we add them. 
-                    # Based on requirements "crawle... html, pdf pages", we might skip img src traversal for depth
-                    # But the reference code did `add_to_queue(img.get("src"))`. 
-                    # Use discretion: often images don't have further links.
-                    # I will keep the reference behavior but usually images are leaves.
-                    for img in soup.find_all("img", src=True):
-                       # add_to_queue(img.get("src")) # Logic: Images are usually leaves, no need to add to queue for *crawling* unless we look for hidden links inside images? 
-                       # Actually, in the reference code, it DOES add image src to queue.
-                       # But `queue.popleft` will process it, download it as binary, and NOT parse it as HTML.
-                       # So it effectively just downloads the image.
-                       add_to_queue(img.get("src"))
+                    if not self.skip_images:
+                        for img in soup.find_all("img", src=True):
+                            add_to_queue(img.get("src"), is_image=True)
 
                 except Exception as e:
+                    logger.warning("Error parsing HTML %s: %s", current_url, e)
                     yield f"Error parsing HTML: {e}\n"
 
         yield f"Crawl completed. Processed {processed_count} new files.\n"

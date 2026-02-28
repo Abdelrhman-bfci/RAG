@@ -609,9 +609,17 @@
                                 <input v-model.number="crawlerDepth" type="number" min="1" max="10"
                                     class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm">
                             </div>
-                            <button @click="startCrawl"
-                                class="w-full bg-asu-blue text-white py-3 rounded-xl font-bold hover:bg-blue-900 transition-all">Start
-                                Crawl</button>
+                            <div class="flex gap-3">
+                                <button @click="startCrawl"
+                                    class="flex-1 bg-asu-blue text-white py-3 rounded-xl font-bold hover:bg-blue-900 transition-all">Crawl Only</button>
+                                <button @click="startCrawlAndIngest"
+                                    :disabled="crawlAndIngestRunning"
+                                    :class="crawlAndIngestRunning ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'"
+                                    class="flex-1 text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
+                                    <i v-if="crawlAndIngestRunning" class="fas fa-circle-notch fa-spin"></i>
+                                    {{ crawlAndIngestRunning ? 'Crawling & Ingesting...' : 'Crawl & Ingest' }}
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div
@@ -629,7 +637,7 @@
                             </span>
                         </h3>
                         <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Ingest downloaded files from the
-                            downloads folder into the RAG system.</p>
+                            downloads folder into the RAG system. Use <strong>Crawl & Ingest</strong> above to crawl a URL and ingest in one step, or crawl first then click here.</p>
 
                         <div v-if="offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running'"
                             class="mb-4">
@@ -655,12 +663,18 @@
                             {{ offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running' ?
                             'Ingesting...' : 'Ingest Downloaded Files' }}
                         </button>
+                        <button @click="startOfflineIngestStream"
+                            :disabled="offlineIngestStreamRunning"
+                            :class="offlineIngestStreamRunning ? 'bg-gray-400' : 'bg-gray-600 hover:bg-gray-700'"
+                            class="w-full text-white py-2 rounded-xl font-medium transition-all flex items-center justify-center gap-2 mt-2">
+                            <i v-if="offlineIngestStreamRunning" class="fas fa-circle-notch fa-spin"></i>
+                            {{ offlineIngestStreamRunning ? 'Ingesting (stream)...' : 'Offline Ingest (stream logs)' }}
+                        </button>
                     </div>
                     <div
                         class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
                         <div v-for="log in ingestionLogs.crawler" class="py-0.5">> {{ log }}</div>
-                        <div v-if="ingestionLogs.crawler.length === 0">> Crawler and offline ingestion logs appear here.
-                        </div>
+                        <div v-if="ingestionLogs.crawler.length === 0">> Crawl, offline web ingest, and crawl-and-ingest logs appear here.</div>
                     </div>
                 </div>
             </div>
@@ -1791,6 +1805,35 @@
                     showNotification("Crawl completed!");
                 }
 
+                const crawlAndIngestRunning = ref(false);
+                async function startCrawlAndIngest() {
+                    if (!crawlerUrl.value) {
+                        showNotification("Please enter a URL", "error");
+                        return;
+                    }
+                    crawlAndIngestRunning.value = true;
+                    ingestionLogs.value.crawler = [];
+                    try {
+                        const url = `${API_BASE}/crawl-and-ingest/stream?url=${encodeURIComponent(crawlerUrl.value)}&depth=${crawlerDepth.value}&fresh=false`;
+                        const res = await fetch(url);
+                        const reader = res.body.getReader();
+                        const decoder = new TextDecoder();
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            const lines = decoder.decode(value).split('\n');
+                            lines.forEach(l => { if (l.trim()) ingestionLogs.value.crawler.push(l); });
+                        }
+                        showNotification("Crawl & ingest completed!");
+                        fetchResources();
+                        pollIngestionStatus();
+                    } catch (e) {
+                        showNotification("Crawl & ingest failed: " + e.message, "error");
+                    } finally {
+                        crawlAndIngestRunning.value = false;
+                    }
+                }
+
                 async function handleSummaryFileUpload(event) {
                     const file = event.target.files[0];
                     if (!file) return;
@@ -1875,6 +1918,31 @@
                         }
                     } catch (e) {
                         showNotification("Error: " + e.message, "error");
+                    }
+                }
+
+                const offlineIngestStreamRunning = ref(false);
+                async function startOfflineIngestStream() {
+                    offlineIngestStreamRunning.value = true;
+                    ingestionLogs.value.crawler = [];
+                    try {
+                        const url = `${API_BASE}/ingest/offline/stream?fresh=false`;
+                        const res = await fetch(url);
+                        const reader = res.body.getReader();
+                        const decoder = new TextDecoder();
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            const lines = decoder.decode(value).split('\n');
+                            lines.forEach(l => { if (l.trim()) ingestionLogs.value.crawler.push(l); });
+                        }
+                        showNotification("Offline ingest completed!");
+                        fetchResources();
+                        pollIngestionStatus();
+                    } catch (e) {
+                        showNotification("Offline ingest failed: " + e.message, "error");
+                    } finally {
+                        offlineIngestStreamRunning.value = false;
                     }
                 }
 
@@ -1970,10 +2038,10 @@
                     previewSourceState, isUploading, uploadProgress, notification, confirmState,
                     streamBuffer, isProcessingStream,
                     resourceSearch, filteredResourceList,
-                    crawlerUrl, crawlerDepth,
+                    crawlerUrl, crawlerDepth, crawlAndIngestRunning,
                     summaryFile, summaryProgress, chunkSummaries, finalSummary,
-                    offlineIngestStatus,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, startCrawl, startOfflineIngest, startNewChat, handleSummaryFileUpload,
+                    offlineIngestStatus, offlineIngestStreamRunning,
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, startCrawl, startCrawlAndIngest, startOfflineIngest, startOfflineIngestStream, startNewChat, handleSummaryFileUpload,
                     // Login State
                     isAuthenticated, showLoginModal, loginUsername, loginPassword, handleLogin, logout
                 };

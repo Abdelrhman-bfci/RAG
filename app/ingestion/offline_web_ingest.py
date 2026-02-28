@@ -1,8 +1,6 @@
 import os
-import json
 import time
-import glob
-import hashlib
+import sqlite3
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
@@ -11,14 +9,20 @@ import trafilatura
 from bs4 import BeautifulSoup
 import pymupdf4llm
 from langchain_community.document_loaders import (
-    CSVLoader, 
+    CSVLoader,
     UnstructuredExcelLoader,
-    PyMuPDFLoader
+    PyMuPDFLoader,
+    Docx2txtLoader,
+    TextLoader,
 )
-import sqlite3
 
 METADATA_DB = Config.CRAWLER_DB
 DOWNLOAD_FOLDER = Config.DOWNLOAD_FOLDER
+
+# File extensions supported by offline ingest
+OFFLINE_ALLOWED_EXTENSIONS = {".html", ".pdf", ".docx", ".txt", ".md", ".csv", ".xlsx", ".xls"}
+MIN_HTML_CONTENT_LENGTH = 50
+MIN_TEXT_CONTENT_LENGTH = 10
 
 def extract_slider_text(soup):
     """Extract text from common slider/carousel elements."""
@@ -35,7 +39,30 @@ def extract_slider_text(soup):
             if text and len(text) > 20: # Filter out very short text
                 slider_texts.append(text)
     
-    return "\n\n".join(list(dict.fromkeys(slider_texts))) # Order-preserving deduplication
+    return "\n\n".join(list(dict.fromkeys(slider_texts)))  # Order-preserving deduplication
+
+
+def table_exists(cursor, table_name: str) -> bool:
+    """Check if a table exists in the current database."""
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table_name,)
+    )
+    return cursor.fetchone() is not None
+
+
+def get_source_url_for_file(cursor, file_path: str, filename: str) -> str:
+    """Resolve source URL from crawler DB pages table, or use file:// path."""
+    if table_exists(cursor, "pages"):
+        try:
+            cursor.execute("SELECT url FROM pages WHERE filename = ?", (filename,))
+            result = cursor.fetchone()
+            if result:
+                return result[0]
+        except sqlite3.OperationalError:
+            pass
+    return f"file://{file_path}"
+
 
 def init_tracking_db():
     """Initialize the tracking tables in the database."""
@@ -219,6 +246,8 @@ def get_ingestion_status():
 def get_loader(file_path: str):
     """Returns the appropriate LangChain loader based on file extension."""
     ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".pdf":
+        return None  # Handled separately with pymupdf4llm
     if ext == ".docx":
         return Docx2txtLoader(file_path)
     elif ext in [".txt", ".md"]:
@@ -226,8 +255,31 @@ def get_loader(file_path: str):
     elif ext == ".csv":
         return CSVLoader(file_path)
     elif ext in [".xlsx", ".xls"]:
-         return UnstructuredExcelLoader(file_path)
+        return UnstructuredExcelLoader(file_path)
     return None
+
+
+def load_text_file_with_encoding_fallback(file_path: str, source_url: str):
+    """Load .txt/.md with encoding fallback; returns list of Document or empty."""
+    for encoding in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
+        try:
+            loader = TextLoader(file_path, encoding=encoding)
+            docs = loader.load()
+            for d in docs:
+                d.metadata["source"] = source_url
+            return docs
+        except (UnicodeDecodeError, OSError):
+            continue
+    return []
+
+
+def enrich_chunks_metadata(chunks, default_page=0):
+    """Add chunk index and page to each chunk for citations and context expansion."""
+    for i, doc in enumerate(chunks):
+        doc.metadata["chunk"] = i
+        if "page" not in doc.metadata or doc.metadata["page"] is None:
+            doc.metadata["page"] = default_page
+    return chunks
 
 def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
     """
@@ -261,20 +313,22 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
         msg = _log("Fresh start: Cleared previous tracking data.\n")
         if msg: yield msg
 
-    # Gather all files
+    # Gather all files (only allowed extensions)
     all_files = []
     for root, dirs, files in os.walk(DOWNLOAD_FOLDER):
         for file in files:
-            all_files.append(os.path.join(root, file))
+            ext = os.path.splitext(file)[1].lower()
+            if ext in OFFLINE_ALLOWED_EXTENSIONS:
+                all_files.append(os.path.join(root, file))
 
     if not all_files:
-        msg = "No files found in downloads folder."
+        msg = "No supported files found in downloads folder."
         update_status("completed", message=msg)
         msg_log = _log(f"{msg}\n")
         if msg_log: yield msg_log
         return
 
-    msg = _log(f"Found {len(all_files)} files. Starting processing...\n")
+    msg = _log(f"Found {len(all_files)} supported files. Starting processing...\n")
     if msg: yield msg
 
     store = VectorStoreFactory.get_instance()
@@ -287,10 +341,9 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHUNK_SIZE,
         chunk_overlap=Config.CHUNK_OVERLAP,
-        separators=["\n\n", "\n", " ", "", "---", "##", "#"] 
+        separators=["\n\n", "\n", " ", "", "---", "##", "#"]
     )
 
-    import sqlite3
     conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
     # Enable WAL mode
     conn.execute('PRAGMA journal_mode=WAL')
@@ -309,14 +362,7 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
     for i, file_path in enumerate(all_files):
         try:
             filename = os.path.basename(file_path)
-            # Determine source_url
-            source_url = None
-            cursor.execute("SELECT url FROM pages WHERE filename = ?", (filename,))
-            result = cursor.fetchone()
-            if result:
-                source_url = result[0]
-            else:
-                source_url = f"file://{file_path}"
+            source_url = get_source_url_for_file(cursor, file_path, filename)
 
             # Skip Logic
             if not force_fresh and source_url in ingested_map:
@@ -342,7 +388,7 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                 if not text_content:
                     text_content = soup.get_text(separator='\n\n')
                 
-                if text_content and len(text_content.strip()) > 50:
+                if text_content and len(text_content.strip()) > MIN_HTML_CONTENT_LENGTH:
                     readme_content = f"# {title}\n\n"
                     readme_content += f"**Source:** {source_url}\n"
                     readme_content += f"**Ingestion Date:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -367,12 +413,8 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                      msg = _log(f"  -> pymupdf4llm Error: {e}. Falling back to standard loader...\n")
                      if msg: yield msg
                      try:
-                         # Fallback: Standard text extraction
                          loader = PyMuPDFLoader(file_path)
                          fallback_docs = loader.load()
-                         # Merge pages into one document for consistency if needed, 
-                         # or just use the list. Here we'll merge content or keep pages.
-                         # Let's keep pages but ensure source_url is set.
                          for d in fallback_docs:
                              d.metadata["source"] = source_url
                          docs = fallback_docs
@@ -380,36 +422,73 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                          msg = _log(f"  -> CRITICAL PDF Error: {e_fallback}\n")
                          if msg: yield msg
 
-            # Skip other file types as per requirement
+            # --- DOCX, TXT, MD, CSV, XLSX (offline documents) ---
             else:
-                msg = _log(f"  -> Skipped: {ext} (only HTML and PDF allowed)\n")
-                if msg: yield msg
-                continue
+                if ext in [".txt", ".md"]:
+                    docs = load_text_file_with_encoding_fallback(file_path, source_url)
+                    if not docs:
+                        msg = _log(f"  -> Skipped: could not decode {filename}\n")
+                        if msg: yield msg
+                        continue
+                else:
+                    loader = get_loader(file_path)
+                    if loader:
+                        try:
+                            loaded = loader.load()
+                            for d in loaded:
+                                d.metadata["source"] = source_url
+                            docs = loaded
+                        except Exception as e_loader:
+                            msg = _log(f"  -> Loader error for {ext}: {e_loader}\n")
+                            if msg: yield msg
+                            continue
+                    else:
+                        msg = _log(f"  -> Skipped: {ext} (unsupported)\n")
+                        if msg: yield msg
+                        continue
 
             # --- Vectorization ---
             if docs:
                 chunks = text_splitter.split_documents(docs)
+                chunks = enrich_chunks_metadata(chunks, default_page=0)
                 if chunks:
-                    # Clear old chunks for this source
-                    store.delete_source(source_url)
-                    
-                    if vectorstore:
-                        vectorstore.add_documents(chunks)
+                    # Skip empty or too-short single-chunk content
+                    if len(chunks) == 1 and len(chunks[0].page_content.strip()) < MIN_TEXT_CONTENT_LENGTH:
+                        msg = _log(f"  -> Skipped: content too short ({filename})\n")
+                        if msg: yield msg
                     else:
-                        vectorstore = store.add_documents(chunks)
-                    
-                    # Track this file for bulk update
-                    bulk_data_buffer.append((source_url, filename, len(chunks)))
-                    processed_count += 1
+                        store.delete_source(source_url)
+                        if vectorstore:
+                            vectorstore.add_documents(chunks)
+                        else:
+                            vectorstore = store.add_documents(chunks)
+                        bulk_data_buffer.append((source_url, filename, len(chunks)))
+                        processed_count += 1
+                        msg = _log(f"  -> Indexed {len(chunks)} chunks.\n")
+                        if msg: yield msg
             
-            # Periodically commit status and file tracking to avoid long locks and keep status updated
-            if (i+1) % 10 == 0 or (i+1) == total_files:
+            # Periodically commit status, file tracking, and FAISS checkpoint
+            if (i + 1) % 10 == 0 or (i + 1) == total_files:
                 if bulk_data_buffer:
                     save_ingested_files_bulk(bulk_data_buffer, conn=conn)
                     bulk_data_buffer = []
-                
-                update_status("running", current=i+1, total=total_files, message=f"Processed {i+1} files", start_time=start_time, conn=conn)
-                # Checkpoint: ChromaDB is persistent
+                update_status(
+                    "running",
+                    current=i + 1,
+                    total=total_files,
+                    message=f"Processed {i + 1}/{total_files} files",
+                    start_time=start_time,
+                    conn=conn,
+                )
+                if (
+                    vectorstore
+                    and getattr(Config, "VECTOR_STORE_PROVIDER", "chroma").lower() == "faiss"
+                    and hasattr(store, "save_index")
+                ):
+                    try:
+                        store.save_index(vectorstore)
+                    except Exception:
+                        pass
 
         except Exception as e:
             error_msg = str(e)
@@ -424,10 +503,12 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
             if msg: yield msg
             continue
 
-    # Final Save handled by Chroma persistence
-    if vectorstore:
-        msg = _log("Data persisted in ChromaDB.\n")
-        if msg: yield msg
+    # Final persistence (Chroma is auto-persisted; FAISS needs explicit save)
+    if vectorstore and getattr(Config, "VECTOR_STORE_PROVIDER", "chroma").lower() == "faiss" and hasattr(store, "save_index"):
+        try:
+            store.save_index(vectorstore)
+        except Exception:
+            pass
 
     msg = f"SUCCESS: Ingested {processed_count} files from downloads."
     update_status("completed", message=msg, conn=conn)

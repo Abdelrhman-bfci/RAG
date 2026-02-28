@@ -11,7 +11,7 @@ import trafilatura
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
-from app.vectorstore.faiss_store import FAISSStore
+from app.vectorstore.factory import VectorStoreFactory
 import pymupdf4llm
 
 TRACKING_FILE = "web_metadata.json"
@@ -84,6 +84,14 @@ def update_status(status, current=0, total=0, message="", start_time=None):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
+def enrich_chunks_metadata(chunks, default_page=0):
+    """Add chunk index and page to each chunk for citations and context expansion."""
+    for i, doc in enumerate(chunks):
+        doc.metadata["chunk"] = i
+        if "page" not in doc.metadata or doc.metadata["page"] is None:
+            doc.metadata["page"] = default_page
+    return chunks
+
 def normalize_url(url: str) -> str:
     """Strip fragments and trailing slashes, but keep pagination params."""
     parsed = urlparse(url)
@@ -149,8 +157,8 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
             os.remove(TRACKING_FILE)
 
     store = WebMetadataStore()
-    faiss_store = FAISSStore()
-    vectorstore = faiss_store.load_index()
+    store_vs = VectorStoreFactory.get_instance()
+    vectorstore = store_vs.get_vectorstore()
 
     links = urls if urls else Config.WEBSITE_LINKS
     if not links:
@@ -287,25 +295,26 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                                 separators=["\n\n", "\n", " ", ""]
                             )
                             chunks = text_splitter.split_documents([doc])
+                            chunks = enrich_chunks_metadata(chunks, default_page=0)
                             
                             yield f"  -> Indexing {len(chunks)} chunks...\n"
                             
-                            # Clean old chunks from FAISS first
-                            faiss_store.delete_source(current_url)
+                            # Clean old chunks first
+                            store_vs.delete_source(current_url)
                             
                             if vectorstore:
                                 vectorstore.add_documents(chunks)
                             else:
-                                vectorstore = FAISSStore().add_documents(chunks) # This handles creation
+                                vectorstore = store_vs.add_documents(chunks)
                             
                             # Update chunk count
                             meta = store.get_page(current_url)
                             meta["chunk_count"] = len(chunks)
                             store.update_page(current_url, meta)
                             
-                            # Save periodic checkpoint
-                            if processed_pages % 5 == 0:
-                                faiss_store.save_index(vectorstore)
+                            # Save periodic checkpoint (FAISS only)
+                            if processed_pages % 5 == 0 and Config.VECTOR_STORE_PROVIDER.lower() == "faiss" and hasattr(store_vs, "save_index"):
+                                store_vs.save_index(vectorstore)
 
                     elif 'application/pdf' in content_type or filename.endswith('.pdf'):
                         yield f"  -> Processing PDF with pymupdf4llm...\n"
@@ -321,14 +330,15 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                                     separators=["\n\n", "\n", " ", ""]
                                 )
                                 chunks = text_splitter.split_documents([doc])
+                                chunks = enrich_chunks_metadata(chunks, default_page=0)
                                 
                                 yield f"  -> Indexing {len(chunks)} PDF chunks...\n"
-                                faiss_store.delete_source(current_url)
+                                store_vs.delete_source(current_url)
                                 
                                 if vectorstore:
                                     vectorstore.add_documents(chunks)
                                 else:
-                                    vectorstore = FAISSStore().add_documents(chunks)
+                                    vectorstore = store_vs.add_documents(chunks)
                                 
                                 # Update chunk count
                                 meta = store.get_page(current_url)
@@ -370,9 +380,9 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                 except Exception as e:
                     yield f"  -> Link extraction error: {e}\n"
 
-    # Final Save
-    if vectorstore:
-        faiss_store.save_index(vectorstore)
+    # Final Save (FAISS: persist index; Chroma: already persistent)
+    if vectorstore and Config.VECTOR_STORE_PROVIDER.lower() == "faiss" and hasattr(store_vs, "save_index"):
+        store_vs.save_index(vectorstore)
     
     msg = f"SUCCESS: Ingested {processed_pages} pages."
     update_status("completed", message=msg)

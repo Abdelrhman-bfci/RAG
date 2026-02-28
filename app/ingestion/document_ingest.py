@@ -15,6 +15,20 @@ from app.vectorstore.factory import VectorStoreFactory
 import pymupdf4llm
 from langchain_core.documents import Document
 
+def enrich_chunks_with_metadata(chunks):
+    """Add chunk index and page to each chunk's metadata for citations and context expansion."""
+    by_source = {}
+    for doc in chunks:
+        src = doc.metadata.get("source", "")
+        if src not in by_source:
+            by_source[src] = 0
+        idx = by_source[src]
+        doc.metadata["chunk"] = idx
+        by_source[src] = idx + 1
+        if "page" not in doc.metadata or doc.metadata["page"] is None:
+            doc.metadata["page"] = 0
+    return chunks
+
 TRACKING_FILE = "ingested_files.json"
 STATUS_FILE = "ingestion_status.json"
 
@@ -119,6 +133,7 @@ def ingest_documents(force_fresh: bool = False):
 
             yield f"Reading: {os.path.basename(file_path)}\n"
             
+            ext = os.path.splitext(file_path)[1].lower()
             # Ensure we remove old versions of this file from the index before adding new ones
             try:
                 # Clear existing entries for this source
@@ -160,6 +175,7 @@ def ingest_documents(force_fresh: bool = False):
     )
     
     splitted_docs = text_splitter.split_documents(new_documents)
+    splitted_docs = enrich_chunks_with_metadata(splitted_docs)
     total_chunks = len(splitted_docs)
     yield f"Generated {total_chunks} new chunks. Starting vectorization...\n"
 

@@ -117,6 +117,8 @@ class Config:
     CRAWL_TIMEOUT = int(os.getenv("CRAWL_TIMEOUT", "300"))
     CRAWL_RETRIES = int(os.getenv("CRAWL_RETRIES", "3"))
     CRAWL_DELAY = float(os.getenv("CRAWL_DELAY", "1.0"))
+    CRAWL_SKIP_IMAGES = os.getenv("CRAWL_SKIP_IMAGES", "false").lower() in ("true", "1", "yes")
+    CRAWL_USER_AGENT = os.getenv("CRAWL_USER_AGENT", "")  # Empty = use default in crawler_service
     _allowed_ext_raw = os.getenv("ALLOWED_EXTENSIONS", ".pdf")
     ALLOWED_EXTENSIONS = {ext.strip() if ext.strip().startswith('.') else f".{ext.strip()}" 
                           for ext in _allowed_ext_raw.split(',') if ext.strip()}
@@ -124,6 +126,7 @@ class Config:
     # Document Summarization Settings
     SUMMARY_CHUNK_SIZE = int(os.getenv("SUMMARY_CHUNK_SIZE", "4000"))
     SUMMARY_CHUNK_OVERLAP = int(os.getenv("SUMMARY_CHUNK_OVERLAP", "200"))
+    SUMMARY_MAX_WORKERS = int(os.getenv("SUMMARY_MAX_WORKERS", "4"))
     SHOW_SUMMARY_CHUNKS = os.getenv("SHOW_SUMMARY_CHUNKS", "False").lower() == "true"
 
     @classmethod

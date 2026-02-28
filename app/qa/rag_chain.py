@@ -68,7 +68,7 @@ STEP 1: UNDERSTAND THE QUESTION
 - Note the question language (CRITICAL: English question → English answer, Arabic question → Arabic answer)
 
 STEP 2: ANALYZE AVAILABLE CONTEXT
-- Review all {len(sources)} sources provided
+- Review all the sources provided in the context
 - Identify relevant information across sources
 - Note connections and relationships between data points
 - Identify any gaps in available information
@@ -316,24 +316,29 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
                 # Try to fetch neighbors (idx-1, idx+1)
                 if chunk_idx is not None and source:
                     try:
-                        # Direct metadata query on Chroma
-                        # Using raw vectorstore.get which returns documents matching filter
-                        neighbors = self.vectorstore.get(where={
-                            "$and": [
-                                {"source": source},
-                                {"chunk": {"$in": [chunk_idx - 1, chunk_idx + 1]}}
-                            ]
-                        })
+                        # Chroma: use collection.get with where filter
+                        collection = getattr(self.vectorstore, "_collection", None)
+                        if collection is not None:
+                            neighbors = collection.get(
+                                where={"$and": [
+                                    {"source": source},
+                                    {"chunk": {"$in": [chunk_idx - 1, chunk_idx + 1]}}
+                                ]},
+                                include=["documents", "metadatas"]
+                            )
+                        else:
+                            neighbors = {"documents": [], "metadatas": []}
                         
-                        # Note: neighbors['documents'] is the content, neighbors['metadatas'] etc
                         # Convert back to Document objects
-                        for i in range(len(neighbors['documents'])):
-                            neighbor_id = f"{source}_{neighbors['metadatas'][i].get('chunk')}"
+                        docs_list = neighbors.get("documents") or []
+                        metas_list = neighbors.get("metadatas") or []
+                        for i in range(len(docs_list)):
+                            neighbor_id = f"{source}_{metas_list[i].get('chunk')}"
                             if neighbor_id not in seen_ids:
                                 from langchain_core.documents import Document
                                 new_doc = Document(
-                                    page_content=neighbors['documents'][i],
-                                    metadata=neighbors['metadatas'][i]
+                                    page_content=docs_list[i],
+                                    metadata=metas_list[i]
                                 )
                                 expanded_docs.append(new_doc)
                                 seen_ids.add(neighbor_id)
