@@ -21,6 +21,7 @@ faiss_index_v3/
 downloads/
 offine_downloads/
 RESOURCE/
+venv/
 
 # OS files
 .DS_Store

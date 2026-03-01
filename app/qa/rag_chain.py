@@ -219,6 +219,9 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             Apply Maximum Marginal Relevance to reduce redundancy.
             lambda_param: 0 = max diversity, 1 = max relevance
             """
+            if not docs_with_scores:
+                return []
+                
             if len(docs_with_scores) <= k:
                 return [doc for doc, _ in docs_with_scores]
             
@@ -232,37 +235,37 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             remaining_indices = list(range(len(docs)))
             
             # Start with highest scoring document
-            best_idx = scores.index(max(scores))  # Higher score is better for Chroma relevance
+            best_idx = 0 # Already sorted by score
             selected.append(docs[best_idx])
             selected_indices.append(best_idx)
             remaining_indices.remove(best_idx)
             
             # Iteratively select documents that are relevant but diverse
             while len(selected) < k and remaining_indices:
-                best_score = -float('inf')
+                best_mmr_score = -float('inf')
                 best_idx = None
                 
                 for idx in remaining_indices:
-                    # Relevance score (lower is better for L2)
+                    # Relevance score (normalized if possible, but scores are already combined)
                     relevance = scores[idx]
                     
                     # Diversity: check similarity to already selected docs
-                    # Simple diversity: check content overlap
-                    diversity = 0
+                    max_similarity = 0
                     for sel_idx in selected_indices:
-                        # Simple Jaccard similarity on words
+                        # Simple Jaccard similarity on words as fallback if embeddings not easily comparable
                         words_current = set(docs[idx].page_content.lower().split())
                         words_selected = set(docs[sel_idx].page_content.lower().split())
                         if words_current and words_selected:
                             overlap = len(words_current & words_selected) / len(words_current | words_selected)
-                            diversity = max(diversity, overlap)
+                            max_similarity = max(max_similarity, overlap)
                     
-                # MMR score: balance relevance and diversity (Chromadb score is higher = better)
-                mmr_score = lambda_param * relevance + (1 - lambda_param) * (1 - diversity)
-                
-                if mmr_score > best_score:
-                    best_score = mmr_score
-                    best_idx = idx
+                    # MMR score: balance relevance and diversity
+                    # Higher relevance is better, lower max_similarity (higher diversity) is better
+                    mmr_score = lambda_param * relevance + (1 - lambda_param) * (1 - max_similarity)
+                    
+                    if mmr_score > best_mmr_score:
+                        best_mmr_score = mmr_score
+                        best_idx = idx
                 
                 if best_idx is not None:
                     selected.append(docs[best_idx])
