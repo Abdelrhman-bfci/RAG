@@ -74,7 +74,7 @@ class ChromaStore:
         return success
 
     def get_index_stats(self):
-        """Get statistics about the Chroma collection with robust error handling."""
+        """Get statistics about the Chroma collection with robust error handling and batching."""
         stats = {
             "total_documents": 0,
             "total_chunks": 0,
@@ -91,33 +91,41 @@ class ChromaStore:
                 return stats
             
             # Use count() for efficiency
-            stats["total_chunks"] = collection.count()
+            total_chunks = collection.count()
+            stats["total_chunks"] = total_chunks
             
-            # Get only metadata sources to aggregate document stats
-            # We limit to avoid memory issues if there are 40k+ chunks
-            # but for source counting we need to understand which sources exist.
-            # A better way is to use get(include=['metadatas']) but with a reasonable limit
-            # or just accept that counting all sources might be slow.
-            # For now, let's optimize the chunk count which is the main user complaint.
-            
-            results = collection.get(include=["metadatas"])
-            if results and "metadatas" in results:
-                metadatas = results["metadatas"]
-                for meta in metadatas:
-                    if not meta: continue
-                    source = meta.get("source", "Unknown")
-                    if source.startswith(("http://", "https://")):
-                        source_name = source
-                    elif "Table: " in source:
-                        source_name = source.replace("Table: ", "")
-                    else:
-                        source_name = os.path.basename(source) if "/" in source or "\\" in source else source
-                    
-                    if source_name not in stats["sources"]:
-                        stats["sources"][source_name] = 0
-                    stats["sources"][source_name] += 1
+            if total_chunks == 0:
+                return stats
+
+            # Batch retrieval of metadatas to avoid memory/timeout issues
+            batch_size = 5000
+            for i in range(0, total_chunks, batch_size):
+                results = collection.get(
+                    include=["metadatas"], 
+                    limit=batch_size, 
+                    offset=i
+                )
                 
-                stats["total_documents"] = len(stats["sources"])
+                if results and "metadatas" in results:
+                    metadatas = results["metadatas"]
+                    for meta in metadatas:
+                        if not meta: continue
+                        
+                        # Check both 'source' and 'table' as used in ingestion scripts
+                        source = meta.get("source") or meta.get("table") or "Unknown"
+                        
+                        if source.startswith(("http://", "https://")):
+                            source_name = source
+                        elif "Table: " in source:
+                            source_name = source.replace("Table: ", "")
+                        else:
+                            source_name = os.path.basename(source) if "/" in source or "\\" in source else source
+                        
+                        if source_name not in stats["sources"]:
+                            stats["sources"][source_name] = 0
+                        stats["sources"][source_name] += 1
+                
+            stats["total_documents"] = len(stats["sources"])
         except Exception as e:
             print(f"Error retrieving Chroma stats: {e}")
             
