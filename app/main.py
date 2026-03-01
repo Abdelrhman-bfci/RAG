@@ -769,11 +769,18 @@ async def upload_file(file: UploadFile = File(...)):
 @app.get("/index/stats")
 async def get_index_statistics():
     """
-    Get statistics about the FAISS index content.
+    Get statistics about the FAISS or Chroma index content.
     """
-    from app.vectorstore.factory import VectorStoreFactory
-    store = VectorStoreFactory.get_instance()
-    return store.get_index_stats()
+    try:
+        from app.vectorstore.factory import VectorStoreFactory
+        store = VectorStoreFactory.get_instance()
+        return store.get_index_stats()
+    except Exception as e:
+        print(f"Error in /index/stats: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to retrieve index statistics", "details": str(e)}
+        )
 
 @app.post("/index/sync")
 async def sync_resources(background_tasks: BackgroundTasks):

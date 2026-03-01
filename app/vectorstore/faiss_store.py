@@ -131,32 +131,33 @@ class FAISSStore:
         """
         Analyze the index and return statistics about ingested documents.
         """
-        vectorstore = self.load_index()
-        if not vectorstore:
-            return {"total_documents": 0, "total_chunks": 0, "sources": {}}
+        stats = {"total_documents": 0, "total_chunks": 0, "sources": {}}
+        try:
+            vectorstore = self.load_index()
+            if not vectorstore:
+                return stats
+                
+            docstore = vectorstore.docstore._dict
+            stats["total_chunks"] = len(docstore)
             
-        docstore = vectorstore.docstore._dict
-        stats = {
-            "total_documents": 0, # Unique sources
-            "total_chunks": len(docstore),
-            "sources": {}
-        }
-        
-        for doc_id, doc in docstore.items():
-            source = doc.metadata.get("source", "Unknown")
-            # Distinguish between URLs and file paths
-            if source.startswith(("http://", "https://")):
-                source_name = source
-            elif "Table: " in source:
-                source_name = source # Tables are already prefixed
-            else:
-                source_name = os.path.basename(source) if "/" in source or "\\" in source else source
+            for doc_id, doc in docstore.items():
+                source = doc.metadata.get("source", "Unknown")
+                # Distinguish between URLs and file paths
+                if source.startswith(("http://", "https://")):
+                    source_name = source
+                elif "Table: " in source:
+                    source_name = source # Tables are already prefixed
+                else:
+                    source_name = os.path.basename(source) if "/" in source or "\\" in source else source
+                
+                if source_name not in stats["sources"]:
+                    stats["sources"][source_name] = 0
+                stats["sources"][source_name] += 1
+                
+            stats["total_documents"] = len(stats["sources"])
+        except Exception as e:
+            print(f"Error retrieving FAISS stats: {e}")
             
-            if source_name not in stats["sources"]:
-                stats["sources"][source_name] = 0
-            stats["sources"][source_name] += 1
-            
-        stats["total_documents"] = len(stats["sources"])
         return stats
 
     def get_source_content(self, source_name: str, limit: int = None):

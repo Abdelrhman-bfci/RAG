@@ -74,34 +74,49 @@ class ChromaStore:
         return success
 
     def get_index_stats(self):
-        """Get statistics about the Chroma collection."""
-        vectorstore = self.get_vectorstore()
-        collection = vectorstore._collection
-        
-        # Get all metadata to aggregate statistics
-        results = collection.get(include=["metadatas"])
-        metadatas = results["metadatas"]
-        
+        """Get statistics about the Chroma collection with robust error handling."""
         stats = {
             "total_documents": 0,
-            "total_chunks": len(metadatas),
+            "total_chunks": 0,
             "sources": {}
         }
         
-        for meta in metadatas:
-            source = meta.get("source", "Unknown")
-            if source.startswith(("http://", "https://")):
-                source_name = source
-            elif "Table: " in source:
-                source_name = source
-            else:
-                source_name = os.path.basename(source) if "/" in source or "\\" in source else source
+        try:
+            vectorstore = self.get_vectorstore()
+            if not vectorstore:
+                return stats
+                
+            collection = vectorstore._collection
+            if not collection:
+                return stats
             
-            if source_name not in stats["sources"]:
-                stats["sources"][source_name] = 0
-            stats["sources"][source_name] += 1
+            # Get all metadata to aggregate statistics
+            results = collection.get(include=["metadatas"])
+            if not results or "metadatas" not in results:
+                return stats
+                
+            metadatas = results["metadatas"]
+            stats["total_chunks"] = len(metadatas)
             
-        stats["total_documents"] = len(stats["sources"])
+            for meta in metadatas:
+                if not meta: continue
+                source = meta.get("source", "Unknown")
+                if source.startswith(("http://", "https://")):
+                    source_name = source
+                elif "Table: " in source:
+                    source_name = source
+                else:
+                    source_name = os.path.basename(source) if "/" in source or "\\" in source else source
+                
+                if source_name not in stats["sources"]:
+                    stats["sources"][source_name] = 0
+                stats["sources"][source_name] += 1
+                
+            stats["total_documents"] = len(stats["sources"])
+        except Exception as e:
+            print(f"Error retrieving Chroma stats: {e}")
+            # Return empty stats on error rather than crashing
+            
         return stats
 
     def get_source_content(self, source_name: str, limit: int = None):
