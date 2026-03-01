@@ -146,7 +146,8 @@ class FAISSStore:
                 if source.startswith(("http://", "https://")):
                     source_name = source
                 elif "Table: " in source:
-                    source_name = source # Tables are already prefixed
+                    # Strip prefix for consistent matching with resource lists
+                    source_name = source.replace("Table: ", "")
                 else:
                     source_name = os.path.basename(source) if "/" in source or "\\" in source else source
                 

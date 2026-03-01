@@ -393,13 +393,22 @@ async def list_resources():
     """
     List all ingested resources by type.
     """
+    # Get actual stats from vector store to ensure consistency
+    try:
+        from app.vectorstore.factory import VectorStoreFactory
+        store = VectorStoreFactory.get_instance()
+        stats = store.get_index_stats()
+        index_sources = stats.get("sources", {})
+    except:
+        index_sources = {}
+
     resources = {
         "documents": [],
         "websites": [],
         "databases": [],
         "crawled": []
     }
-    
+
     # Documents
     if os.path.exists(DOC_TRACKING):
         try:
@@ -408,6 +417,17 @@ async def list_resources():
                 resources["documents"] = [os.path.basename(path) for path in tracking.keys()]
         except: pass
     
+    # Fallback: find documents in index but not in tracking
+    for src in index_sources:
+        if not src.startswith("http") and src not in resources["documents"] and src not in resources["websites"] and src not in resources["databases"]:
+             # If it looks like a table name from Config, it might be database
+            from app.config import Config
+            if src in (Config.INGEST_TABLES or []):
+                if src not in resources["databases"]:
+                    resources["databases"].append(src)
+            elif "." in src: # Likely a file if it has an extension
+                resources["documents"].append(src)
+    
     # Websites
     if os.path.exists(WEB_TRACKING):
         try:
@@ -415,8 +435,12 @@ async def list_resources():
                 tracking = json.load(f)
                 resources["websites"] = list(tracking.keys())
         except: pass
+    
+    # Fallback for websites from index
+    for src in index_sources:
+        if src.startswith("http") and src not in resources["websites"]:
+            resources["websites"].append(src)
         
-    # Databases
     # Databases
     if os.path.exists(DB_TRACKING):
         try:
@@ -428,11 +452,14 @@ async def list_resources():
     try:
         from app.ingestion.offline_web_ingest import get_ingested_files
         ingested = get_ingested_files()
-        resources["crawled"] = list(ingested.keys())
-    except Exception as e:
-        print(f"Error loading crawled files: {e}")
+        resources["crawled"] = ingested
+    except:
         pass
-    
+
+    # Final deduplication
+    for k in resources:
+        resources[k] = list(set(resources[k]))
+
     return resources
 
 @app.delete("/resources/{res_type}/{name:path}")
