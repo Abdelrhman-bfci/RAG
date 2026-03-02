@@ -74,29 +74,59 @@ class ChromaStore:
         return success
 
     def get_index_stats(self):
-        """Get statistics about the Chroma collection with robust error handling and batching."""
+        """
+        Extract statistics from ChromaDB about chunks and sources.
+        """
         stats = {
-            "total_documents": 0,
             "total_chunks": 0,
-            "sources": {}
+            "total_documents": 0,
+            "sources": {},
+            "provider": "chroma",
+            "collection": self.collection_name,
+            "path": os.path.abspath(self.persist_directory),
+            "debug_info": []
         }
         
         try:
+            from app.vectorstore.factory import logger
+            logger.info(f"Retrieving stats for Chroma collection: {self.collection_name}")
+            stats["debug_info"].append(f"Initializing Chroma with path: {stats['path']}")
+            
             vectorstore = self.get_vectorstore()
             if not vectorstore:
+                stats["error"] = "Failed to initialize vectorstore"
                 return stats
                 
-            collection = vectorstore._collection
+            collection = getattr(vectorstore, "_collection", None)
             if not collection:
+                stats["error"] = "vectorstore._collection is None"
+                # Try listing collections to see what's available
+                try:
+                    import chromadb
+                    client = chromadb.PersistentClient(path=self.persist_directory)
+                    colls = client.list_collections()
+                    stats["available_collections"] = [c.name for c in colls]
+                except Exception as e_coll:
+                    stats["list_coll_error"] = str(e_coll)
                 return stats
             
             # Use count() for efficiency
             total_chunks = collection.count()
             stats["total_chunks"] = total_chunks
+            stats["debug_info"].append(f"collection.count() returned {total_chunks}")
             
             if total_chunks == 0:
+                # Still check if other collections exist
+                try:
+                    import chromadb
+                    client = chromadb.PersistentClient(path=self.persist_directory)
+                    colls = client.list_collections()
+                    stats["available_collections"] = [c.name for c in colls]
+                    stats["debug_info"].append(f"Found {len(colls)} collections: {stats['available_collections']}")
+                except:
+                    pass
                 return stats
-
+            
             # Batch retrieval of metadatas to avoid memory/timeout issues
             batch_size = 5000
             for i in range(0, total_chunks, batch_size):
@@ -119,17 +149,24 @@ class ChromaStore:
                         elif "Table: " in source:
                             source_name = source.replace("Table: ", "")
                         else:
+                            # Handle both Windows and Unix style paths for source
                             source_name = os.path.basename(source) if "/" in source or "\\" in source else source
                         
                         if source_name not in stats["sources"]:
                             stats["sources"][source_name] = 0
                         stats["sources"][source_name] += 1
-                
-            stats["total_documents"] = len(stats["sources"])
-        except Exception as e:
-            print(f"Error retrieving Chroma stats: {e}")
             
-        return stats
+            stats["total_documents"] = len(stats["sources"])
+            return stats
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"Error retrieving index stats: {str(e)}"
+            print(error_msg)
+            print(traceback.format_exc())
+            stats["error"] = error_msg
+            stats["traceback"] = traceback.format_exc()
+            return stats
 
     def get_source_content(self, source_name: str, limit: int = None):
         """Retrieve content chunks for a specific source."""
