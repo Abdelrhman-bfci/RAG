@@ -88,8 +88,7 @@ class ChromaStore:
         }
         
         try:
-            from app.vectorstore.factory import logger
-            logger.info(f"Retrieving stats for Chroma collection: {self.collection_name}")
+            print(f"Retrieving stats for Chroma collection: {self.collection_name}")
             stats["debug_info"].append(f"Initializing Chroma with path: {stats['path']}")
             
             vectorstore = self.get_vectorstore()
