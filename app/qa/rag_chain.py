@@ -34,7 +34,7 @@ STEP 3: CONSTRUCT ANSWER
 CRITICAL COMPLIANCE RULES:
 1. **Answer ONLY using information from the Context** - No external knowledge.
 2. **Tone**: Be helpful, professional, and friendly. Avoid overly robotic or defensive language.
-3. **If information is missing**: Be helpful! Do NOT just say "I don't know" or "The context doesn't mention...". Instead, clearly state what *is* available in the context that relates to the user's question. If completely unrelated, politely apologize and suggest what the user *might* find in the provided context.
+3. **If information is missing**: If the answer is not in the context, say "I don't know based on the provided resources". Do not synthesize vaguely related information or make up an answer.
 4. **MANDATORY INLINE CITATIONS**: Every single fact, claim, or item MUST be followed by [Source, Page].
    - CORRECT: "Software Engineering [CS_Catalog.pdf, Page 12]"
    - WRONG: Listing sources only at the end
@@ -87,7 +87,7 @@ CRITICAL INSTRUCTIONS:
 2. **COMPLETE INFORMATION**: When listing items, provide ALL items found. Never truncate or summarize.
 3. **FULL RESPONSES**: Provide complete analysis without cutting short.
 4. **CONTEXT ONLY**: Use only information from provided context.
-5. **TONE & ACCURACY**: Be thorough and helpful. If a direct answer isn't available, EXPLAIN what *is* available that might be relevant to the user's topic. Avoid robotic "I cannot answer" or "The text does not state" responses. Synthesize the closest available information.
+5. **TONE & ACCURACY**: If the answer is not in the context, say "I don't know based on the provided resources". Do not make up information or synthesize unrelated context.
 6. **LANGUAGE MATCHING**: 
    - Question in English → Response in English
    - Question in Arabic → Response in Arabic
@@ -106,7 +106,7 @@ STEP 4: VERIFY QUALITY
 - Professional academic tone
 - Clear structure and organization
 
-If information is missing, explain what is available in a helpful way in the user's language."""),
+If the answer is not in the context, say "I don't know based on the provided resources"."""),
     ("human", """Context (organized by source):
 {context}
 
@@ -367,67 +367,48 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             return docs
 
         def invoke(self, query):
-            # Stage 0: Query Generation
-            queries = self._generate_queries(query) if not is_continuation else [query]
+            # Stage 1: Broad vector search exactly like Octopiai
+            candidate_k = 100
             
-            # Stage 1: Broad retrieval with similarity scores
-            all_docs_with_scores = []
+            try:
+                # Direct similarity search (FAISS compatible without scoring bug)
+                initial_docs = self.vectorstore.similarity_search(query, k=candidate_k)
+            except Exception as e:
+                print(f"Retrieval error: {e}")
+                return []
+                
+            # Stage 2: Direct Keyword Matching and Sorting (Octopiai logic)
+            keywords = [w.lower() for w in query.split() if len(w) > 3]
+            
+            website_docs = []
+            priority_docs = []
+            other_docs = []
             seen_chunk_ids = set()
             
-            # Increase k to get more candidates for reranking/filtering
-            candidate_k = 60 if not is_continuation else 40
-            
-            for q in queries:
-                try:
-                    # Fetch more candidates for better filtering
-                    results = self.vectorstore.similarity_search_with_relevance_scores(q, k=candidate_k)
-                    for doc, score in results:
-                        chunk_id = f"{doc.metadata.get('source')}_{doc.metadata.get('page')}_{doc.metadata.get('chunk', doc.page_content[:50])}"
-                        if chunk_id not in seen_chunk_ids:
-                            all_docs_with_scores.append((doc, score))
-                            seen_chunk_ids.add(chunk_id)
-                except Exception as e:
-                    print(f"Retrieval error for query '{q}': {e}")
-            
-            if not all_docs_with_scores:
-                return []
-
-            # Stage 2: Hybrid Scoring (Vector + Keyword)
-            keywords = self._extract_keywords(query)
-            scored_docs = []
-            
-            for doc, vec_score in all_docs_with_scores:
-                keyword_score = self._calculate_keyword_score(doc.page_content, keywords)
+            for d in initial_docs:
+                chunk_id = f"{d.metadata.get('source')}_{d.metadata.get('page')}_{d.metadata.get('chunk', d.page_content[:50])}"
+                if chunk_id in seen_chunk_ids:
+                    continue
+                seen_chunk_ids.add(chunk_id)
                 
-                # Dynamic Weighting from Config
-                vector_weight = Config.VECTOR_SEARCH_WEIGHT
-                keyword_weight = 1.0 - vector_weight
+                content_lower = d.page_content.lower()
+                source = d.metadata.get("source", "").lower()
                 
-                is_faiss = Config.VECTOR_STORE_PROVIDER.lower() == "faiss"
+                is_website = source.startswith("http")
                 
-                if is_faiss:
-                    # Convert FAISS L2 to a 0-1 similarity (approx)
-                    # Lower L2 = higher similarity
-                    sim_score = 1.0 / (1.0 + vec_score)
-                    combined = sim_score * vector_weight + keyword_score * keyword_weight
+                if is_website:
+                    website_docs.append(d)
+                elif any(kw in content_lower for kw in keywords):
+                    priority_docs.append(d)
                 else:
-                    combined = vec_score * vector_weight + keyword_score * keyword_weight
-                
-                scored_docs.append((doc, combined))
+                    other_docs.append(d)
             
-            # Sort by combined score (descending)
-            scored_docs.sort(key=lambda x: x[1], reverse=True)
+            # Order: Websites first, then keyword matches, then others
+            # This completely bypasses the MMR algorithm and relies purely on mathematical relevance and exact keyword match
+            combined = website_docs + priority_docs + other_docs
+            final_docs = combined[:30]
             
-            # Stage 3: MMR for diversity on top candidates
-            try:
-                query_embedding = self.vectorstore.embeddings.embed_query(query)
-                # Take top 30 candidates for MMR selection of top 12
-                top_candidates = scored_docs[:30]
-                final_docs = self._apply_mmr(top_candidates, query_embedding, k=12, lambda_param=0.5)
-            except:
-                final_docs = [doc for doc, _ in scored_docs[:12]]
-            
-            # Stage 4: Context Expansion (Neighbors)
+            # Keep context expansion to ensure we don't break paragraph flow
             final_docs = self._expand_context(final_docs)
             
             return final_docs
