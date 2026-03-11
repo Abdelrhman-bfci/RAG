@@ -207,6 +207,7 @@ Standalone Question:
                 _shared_reranker = CrossEncoder(Config.RERANKER_MODEL, max_length=512)
             self.reranker = _shared_reranker
             
+        def invoke(self, query):
             try:
                 # Ensure query is a string
                 if not isinstance(query, str):
