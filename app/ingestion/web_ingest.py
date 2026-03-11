@@ -13,42 +13,104 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.factory import VectorStoreFactory
 import pymupdf4llm
-
-TRACKING_FILE = "web_metadata.json"
 STATUS_FILE = "web_ingestion_status.json"
-DOWNLOAD_FOLDER = "downloads"
+DOWNLOAD_FOLDER = Config.DOWNLOAD_FOLDER
+
+import sqlite3
 
 class WebMetadataStore:
-    def __init__(self, file_path=TRACKING_FILE):
-        self.file_path = file_path
-        self.data = self._load()
+    def __init__(self, db_path=Config.CRAWLER_DB):
+        self.db_path = db_path
+        self._init_db()
 
-    def _load(self):
-        if os.path.exists(self.file_path):
-            try:
-                with open(self.file_path, "r") as f:
-                    return json.load(f)
-            except:
-                return {}
-        return {}
-
-    def save(self):
-        with open(self.file_path, "w") as f:
-            json.dump(self.data, f, indent=4)
+    def _init_db(self):
+        conn = sqlite3.connect(self.db_path, timeout=Config.DB_TIMEOUT, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS pages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT UNIQUE,
+                filename TEXT,
+                checksum TEXT,
+                parent_url TEXT,
+                chunk_count INTEGER DEFAULT 0,
+                timestamp REAL DEFAULT 0
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_checksum ON pages(checksum)')
+        
+        # Migrate existing schema if needed
+        try:
+            cursor.execute("PRAGMA table_info(pages)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'chunk_count' not in columns:
+                cursor.execute('ALTER TABLE pages ADD COLUMN chunk_count INTEGER DEFAULT 0')
+            if 'timestamp' not in columns:
+                cursor.execute('ALTER TABLE pages ADD COLUMN timestamp REAL DEFAULT 0')
+        except:
+            pass
+            
+        conn.commit()
+        conn.close()
 
     def get_page(self, url):
-        return self.data.get(url)
+        conn = sqlite3.connect(self.db_path, timeout=Config.DB_TIMEOUT, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute("SELECT filename, checksum, parent_url, chunk_count, timestamp FROM pages WHERE url = ?", (url,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                "filename": row[0],
+                "checksum": row[1],
+                "parent_url": row[2],
+                "chunk_count": row[3],
+                "timestamp": row[4]
+            }
+        return None
 
     def update_page(self, url, metadata):
-        # metadata: {filename, checksum, parent_url, chunk_count, timestamp}
-        self.data[url] = metadata
-        self.save()
+        conn = sqlite3.connect(self.db_path, timeout=Config.DB_TIMEOUT, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO pages (url, filename, checksum, parent_url, chunk_count, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(url) DO UPDATE SET
+                filename=excluded.filename,
+                checksum=excluded.checksum,
+                parent_url=excluded.parent_url,
+                chunk_count=excluded.chunk_count,
+                timestamp=excluded.timestamp
+        ''', (
+            url, 
+            metadata.get("filename"), 
+            metadata.get("checksum"), 
+            metadata.get("parent_url"), 
+            metadata.get("chunk_count", 0), 
+            metadata.get("timestamp", 0)
+        ))
+        conn.commit()
+        conn.close()
 
     def get_by_checksum(self, checksum):
-        for url, meta in self.data.items():
-            if meta.get("checksum") == checksum:
-                return meta.get("filename")
-        return None
+        if not checksum: return None
+        conn = sqlite3.connect(self.db_path, timeout=Config.DB_TIMEOUT, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute("SELECT filename FROM pages WHERE checksum = ?", (checksum,))
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else None
+        
+    def clear_all(self):
+        conn = sqlite3.connect(self.db_path, timeout=Config.DB_TIMEOUT, check_same_thread=False)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM pages")
+            conn.commit()
+        except:
+            pass
+        finally:
+            conn.close()
 
 def calculate_checksum(content):
     """Calculates SHA256 hash of binary content."""
@@ -151,12 +213,11 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
     if not os.path.exists(DOWNLOAD_FOLDER):
         os.makedirs(DOWNLOAD_FOLDER)
 
+    store = WebMetadataStore()
+    
     if force_fresh:
         yield "Fresh start requested. Clearing metadata...\n"
-        if os.path.exists(TRACKING_FILE):
-            os.remove(TRACKING_FILE)
-
-    store = WebMetadataStore()
+        store.clear_all()
     store_vs = VectorStoreFactory.get_instance()
     vectorstore = store_vs.get_vectorstore()
 

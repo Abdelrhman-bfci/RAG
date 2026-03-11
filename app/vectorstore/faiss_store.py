@@ -2,27 +2,55 @@ import os
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
+from langchain_core.embeddings import Embeddings
+from typing import List
 from app.config import Config
+
+class NomicPrefixWrapper(Embeddings):
+    """Wraps an embedding model to add Nomic-specific prefixes for better retrieval."""
+    def __init__(self, base_embeddings: Embeddings):
+        self.base_embeddings = base_embeddings
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        prefixed_texts = [f"search_document: {t}" for t in texts]
+        return self.base_embeddings.embed_documents(prefixed_texts)
+
+    def embed_query(self, text: str) -> List[float]:
+        return self.base_embeddings.embed_query(f"search_query: {text}")
 
 class FAISSStore:
     def __init__(self):
+        base_embeddings = None
         if Config.EMBEDDING_PROVIDER == "ollama":
-            self.embeddings = OllamaEmbeddings(
+            base_embeddings = OllamaEmbeddings(
                 base_url=Config.OLLAMA_BASE_URL,
                 model=Config.OLLAMA_EMBEDDING_MODEL
             )
         elif Config.EMBEDDING_PROVIDER == "vllm":
             # vLLM provides an OpenAI-compatible /v1/embeddings endpoint
-            self.embeddings = OpenAIEmbeddings(
+            base_embeddings = OpenAIEmbeddings(
                 model=Config.VLLM_EMBEDDING_MODEL,
                 openai_api_base=Config.VLLM_BASE_URL, # Ensure this includes /v1
                 openai_api_key="none"
             )
         else:
-            self.embeddings = OpenAIEmbeddings(
+            base_embeddings = OpenAIEmbeddings(
                 model=Config.EMBEDDING_MODEL,
                 openai_api_key=Config.OPENAI_API_KEY
             )
+            
+        # Wrap Nomic models automatically
+        is_nomic = False
+        if Config.EMBEDDING_PROVIDER == "ollama" and "nomic" in Config.OLLAMA_EMBEDDING_MODEL.lower():
+            is_nomic = True
+        elif Config.EMBEDDING_PROVIDER == "vllm" and "nomic" in Config.VLLM_EMBEDDING_MODEL.lower():
+            is_nomic = True
+        
+        if is_nomic:
+            self.embeddings = NomicPrefixWrapper(base_embeddings)
+            print("DEBUG: Using NomicPrefixWrapper for FAISS")
+        else:
+            self.embeddings = base_embeddings
         
         self.vector_db_path = Config.VECTOR_DB_PATH
 

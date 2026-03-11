@@ -10,110 +10,14 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from app.config import Config
 from app.vectorstore.factory import VectorStoreFactory
+from sentence_transformers import CrossEncoder
 import time
 import traceback
 import json
 
-# --- Enhanced Prompt Templates with Chain-of-Thought ---
-STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are a helpful and professional academic assistant. Follow this systematic process:
+# Global shared reranker singleton
+_shared_reranker = None
 
-STEP 1: ANALYZE THE QUESTION
-- Identify the key concepts and requirements
-- Determine the question language (English/Arabic) - THIS IS CRITICAL
-- Understand what type of answer is needed (factual, list, explanation, etc.)
-
-STEP 2: ASSESS CONTEXT RELEVANCE  
-- Review the provided context sources and chunks
-- Identify which sources contain relevant information
-- Note the number of sources and chunks available
-
-STEP 3: CONSTRUCT ANSWER
-{language_instruction}
-
-CRITICAL COMPLIANCE RULES:
-1. **Answer ONLY using information from the Context** - No external knowledge.
-2. **Tone**: Be helpful, professional, and friendly. Avoid overly robotic or defensive language.
-3. **If information is missing**: If the answer is not in the context, say "I don't know based on the provided resources". Do not synthesize vaguely related information or make up an answer.
-4. **MANDATORY INLINE CITATIONS**: Every single fact, claim, or item MUST be followed by [Source, Page].
-   - CORRECT: "Software Engineering [CS_Catalog.pdf, Page 12]"
-   - WRONG: Listing sources only at the end
-5. **COMPLETE LISTS**: When listing items (courses, professors, programs), provide ALL items found. DO NOT truncate or say "and more".
-6. **FULL RESPONSES**: If answer requires long response, provide COMPLETE answer without cutting short.
-
-DATABASE & RELATION RULES:
-- **Resolved Foreign Keys**: Use `_name` fields (like `department_name`) for human-readable answers.
-- **Implicit Relations**: Connect related data (e.g., courses → departments → faculties).
-- **Schema Awareness**: `institutes` = Faculties/Colleges, `departments` = academic departments.
-
-STEP 4: QUALITY CHECK
-- Verify all facts are cited with [Source, Page]
-- Confirm answer language matches question language
-- Ensure completeness (no truncated lists)
-- Check that only context information is used"""),
-    ("human", """Context (organized by source):
-{context}
-
-Question: {question}
-
-Think step-by-step and provide a complete, well-cited answer in the same language as the question.""")
-])
-
-DEEP_THINKING_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are an expert academic analyst. Follow this systematic approach:
-
-STEP 1: UNDERSTAND THE QUESTION
-{language_instruction}
-- Identify key concepts and analytical requirements
-- Determine the depth of analysis needed
-- Note the question language (CRITICAL: English question → English answer, Arabic question → Arabic answer)
-
-STEP 2: ANALYZE AVAILABLE CONTEXT
-- Review all the sources provided in the context
-- Identify relevant information across sources
-- Note connections and relationships between data points
-- Identify any gaps in available information
-
-STEP 3: SYNTHESIZE COMPREHENSIVE ANSWER
-- Combine information from multiple sources
-- Provide analytical insights and patterns
-- Structure response with clear sections
-- Use professional and helpful academic language in the SAME language as question
-
-CRITICAL INSTRUCTIONS:
-1. **MANDATORY INLINE CITATIONS**: Every major statement and EVERY item in lists MUST have [Source, Page].
-   - FORMAT: [Document.pdf, Page X] or [Table: TableName]
-   - Attach citations to each specific point, not grouped at end
-2. **COMPLETE INFORMATION**: When listing items, provide ALL items found. Never truncate or summarize.
-3. **FULL RESPONSES**: Provide complete analysis without cutting short.
-4. **CONTEXT ONLY**: Use only information from provided context.
-5. **TONE & ACCURACY**: If the answer is not in the context, say "I don't know based on the provided resources". Do not make up information or synthesize unrelated context.
-6. **LANGUAGE MATCHING**: 
-   - Question in English → Response in English
-   - Question in Arabic → Response in Arabic
-   - Translate context information to match question language if needed
-
-RELATIONAL DATA LOGIC:
-- **Connect the Dots**: Link data across tables (Course → Department → Faculty)
-- **Use enriched fields**: Prefer `_name` fields for human-readable output
-- **Terminology**: Treat `institutes` as Faculties/Colleges
-- **Aggregation**: Summarize trends and groupings where appropriate
-
-STEP 4: VERIFY QUALITY
-- All facts cited inline
-- Language matches question
-- Complete information provided
-- Professional academic tone
-- Clear structure and organization
-
-If the answer is not in the context, say "I don't know based on the provided resources"."""),
-    ("human", """Context (organized by source):
-{context}
-
-Question: {question}
-
-Provide a comprehensive, analytical answer with complete information and inline citations.""")
-])
 
 def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = "", conversation_history: list = None):
     """
@@ -129,17 +33,117 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
     store = VectorStoreFactory.get_instance()
     vectorstore = store.get_vectorstore()
 
-    # 2. Select Prompt
-    prompt = DEEP_THINKING_PROMPT if deep_thinking else STRICT_RAG_PROMPT
+    # 1.5 Initialize Session Memory if History Exists
+    history_retriever = None
+    if conversation_history and len(conversation_history) > 0:
+        try:
+            from app.services.session_memory import LanceDBSessionMemory
+            # store.embeddings should exist if FAISSStore or ChromaStore initializes them
+            session_memory = LanceDBSessionMemory(
+                store.embeddings, 
+                k=Config.LLM_HISTORY_K, 
+                score_threshold=Config.LLM_HISTORY_SCORE_THRESHOLD
+            )
+            
+            # Format each pair of user/assistant messages as distinct documents
+            history_strings = []
+            for msg in conversation_history:
+                role = msg.get("role", "unknown").capitalize()
+                content = msg.get("content", "")
+                history_strings.append(f"{role}: {content}")
+                
+            session_memory.add_history(history_strings)
+            history_retriever = session_memory.get_retriever()
+            print("DEBUG: Loaded LanceDB Session Memory Retriever")
+        except Exception as e:
+            print(f"DEBUG Error initializing session memory: {e}")
+
+    # 2. Select Prompt (Matching Octopiai exactly)
+    # Master Chat Template
+    chat_prompt = ChatPromptTemplate.from_template("""
+You are a professional Document Assistant acting as a closed-domain reasoning engine.
+        
+CORE DIRECTIVE:
+You must answer the user's question using ONLY the information provided in the "Context" below. You are strictly forbidden from using outside knowledge, external facts, or training data to answer.
+
+INSTRUCTIONS:
+1. **Search**: Look for the answer in the Context.
+2. **Match**: If the answer is explicitly written there, rewrite it.
+3. **Logical Inference**: You are allowed to infer relationships based on document structure.
+4. **Synthesis**: You may combine information from multiple parts of the Context to form a complete answer.
+5. **Formatting**: Preserve lists, tables, and data structures from the original text when beneficial for clarity.
+6. **Citations**: For every claim you make, you must include a clickable links to all sources and directly after every use.
+6.1. Use the Markdown format: `[Source Name](URL)`.
+6.2. If a page number is available, include it: `[Source Name (Page X)](URL)`.
+
+CHAT HISTORY RULES:
+- The "Chat History" is provided solely for resolving references (e.g., "it", "he", "that course").
+- If the Current Question represents a topic change, **completely ignore** the subject matter of the Chat History.
+
+FALLBACK:
+If the answer cannot be reasonably derived from the provided Context using the rules above, you MUST output exactly:
+"I cannot answer this based on the provided documents."
+
+PROHIBITED ACTIONS:
+- Do NOT write stories, poems, or jokes.
+- Do NOT use outside knowledge (e.g. do not explain general concepts like "what is engineering" unless defined in Context).
+- Do NOT ignore these rules.
+
+Context:
+{context}
+
+Chat History:
+{history}
+
+Question: {question}
+    """)
+
+    # Document Analysis Template (Deep Thinking Mode)
+    doc_prompt = ChatPromptTemplate.from_template("""
+You are an expert analyst reviewing the provided full documents.
+CONTEXT (Full Documents):
+{context}
+
+HISTORY:
+{history}
+
+USER QUESTION:
+{question}
+
+INSTRUCTIONS:
+1. Provide a comprehensive answer proportional to the document size.
+2. Structure your response using Markdown: use clear Headings, Subheadings, and Bullet Points.
+3. If the documents contain data, format it into Tables where appropriate.
+4. Do not omit key details. Prioritize completeness over brevity.
+    """)
+
+    # Query Rephrase Template
+    rephrase_prompt = ChatPromptTemplate.from_template("""
+Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question.
+The standalone question must be fully self-contained and understood without the chat history. Do not answer the question, just rephrase it.
+
+Chat History:
+{history}
+
+Follow Up Input:
+{question}
+
+Standalone Question:
+    """)
+
+    prompt = doc_prompt if deep_thinking else chat_prompt
 
     # 3. Initialize LLM
     if Config.LLM_PROVIDER == "ollama":
+        num_ctx = Config.DOC_LLM_NUM_CTX if deep_thinking else Config.OLLAMA_CONTEXT_WINDOW
+        num_predict = -1 if deep_thinking else Config.CHAT_LLM_NUM_PREDICT
+        
         llm = ChatOllama(
             base_url=Config.OLLAMA_BASE_URL,
             model=Config.OLLAMA_LLM_MODEL,
-            temperature=0.2 if deep_thinking else 0.1,
-            num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
-            num_predict=-1,
+            temperature=0,
+            num_ctx=num_ctx,
+            num_predict=num_predict,
             stop=[],
             repeat_penalty=1.1
         )
@@ -147,7 +151,7 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
         llm = ChatOpenAI(
             base_url=Config.VLLM_BASE_URL,
             model=Config.VLLM_MODEL,
-            temperature=0.2 if deep_thinking else 0.1,
+            temperature=0,
             api_key="none",
             max_tokens=8192
         )
@@ -155,7 +159,7 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
         llm = ChatOpenAI(
             model=Config.OPENAI_LLM_MODEL,
             base_url=Config.OPENAI_BASE_URL,
-            temperature=0.2 if deep_thinking else 0.1,
+            temperature=0,
             openai_api_key=Config.OPENAI_API_KEY,
             max_tokens=8192
         )
@@ -165,7 +169,7 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
         llm = ChatGoogleGenerativeAI(
             model=Config.GEMINI_MODEL,
             google_api_key=Config.GEMINI_API_KEY,
-            temperature=0.2 if deep_thinking else 0.1,
+            temperature=0,
             max_output_tokens=8192
         )
     else:
@@ -174,7 +178,7 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
         llm = ChatOllama(
             model=Config.OLLAMA_LLM_MODEL,
             base_url=Config.OLLAMA_BASE_URL,
-            temperature=0.2 if deep_thinking else 0.1,
+            temperature=0,
             num_ctx=Config.OLLAMA_CONTEXT_WINDOW,
             num_predict=-1,
             stop=[],
@@ -187,319 +191,137 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
         print(f"DEBUG: LLM successfully initialized as {type(llm).__name__}")
 
     # 3. Initialize Retriever
-    # Advanced Hybrid Retrieval with Relevance Filtering and MMR
+    # Advanced Hybrid Retrieval matching Octopiai exactly
     class AdvancedHybridRetriever:
-        def __init__(self, vectorstore, llm=None):
+        def __init__(self, vectorstore, llm=None, history_retriever=None):
             self.vectorstore = vectorstore
-            self.llm = llm
+            self.llm = llm # Kept for signature compatibility
+            self.history_retriever = history_retriever
             
-        def _extract_keywords(self, query):
-            """Extract meaningful keywords from query, excluding common stop words."""
-            import re
-            is_arabic = bool(re.search('[\u0600-\u06FF]', query))
+            global _shared_reranker
+            if Config.USE_RERANKER and _shared_reranker is None:
+                print(f"DEBUG: Loading Shared Re-Ranker '{Config.RERANKER_MODEL}'...")
+                # Lazy load to avoid slowing down startup if disabled
+                _shared_reranker = CrossEncoder(Config.RERANKER_MODEL, max_length=512)
+            self.reranker = _shared_reranker
             
-            # Simple list of stop words to ignore
-            stop_words = {"this", "that", "the", "a", "an", "is", "are", "was", "were", "what", "how", "where", "when", "why", "who", "whom", "whose", "which", "of", "in", "to", "for", "with", "by", "on", "at", "from", "into", "during", "including", "between", "and", "or", "but", "if"}
-            ar_stop_words = {"من", "الى", "عن", "على", "في", "بـ", "لـ", "و", "أو", "ثم", "هذا", "هذه", "ما", "كيف", "اين", "متى", "هل"}
-            
-            words = re.findall(r'\w+', query.lower())
-            if is_arabic:
-                keywords = [w for w in words if len(w) >= 3 and w not in ar_stop_words]
-            else:
-                keywords = [w for w in words if len(w) > 3 and w not in stop_words]
-            
-            return list(set(keywords))
-        
-        def _calculate_keyword_score(self, content, keywords):
-            """Calculate keyword match score for a document."""
-            content_lower = content.lower()
-            matches = sum(1 for kw in keywords if kw in content_lower)
-            return matches / len(keywords) if keywords else 0
-        
-        def _apply_mmr(self, docs_with_scores, query_embedding, k=40, lambda_param=0.7):
-            """
-            Apply Maximum Marginal Relevance to reduce redundancy.
-            lambda_param: 0 = max diversity, 1 = max relevance
-            """
-            if not docs_with_scores:
-                return []
-                
-            if len(docs_with_scores) <= k:
-                return [doc for doc, _ in docs_with_scores]
-            
-            # Separate docs and scores
-            docs = [doc for doc, _ in docs_with_scores]
-            scores = [score for _, score in docs_with_scores]
-            
-            # Simple MMR: select diverse documents
-            selected = []
-            selected_indices = []
-            remaining_indices = list(range(len(docs)))
-            
-            # Start with highest scoring document
-            best_idx = 0 # Already sorted by score
-            selected.append(docs[best_idx])
-            selected_indices.append(best_idx)
-            remaining_indices.remove(best_idx)
-            
-            # Iteratively select documents that are relevant but diverse
-            while len(selected) < k and remaining_indices:
-                best_mmr_score = -float('inf')
-                best_idx = None
-                
-                for idx in remaining_indices:
-                    # Relevance score (normalized if possible, but scores are already combined)
-                    relevance = scores[idx]
-                    
-                    # Diversity: check similarity to already selected docs
-                    max_similarity = 0
-                    for sel_idx in selected_indices:
-                        # Simple Jaccard similarity on words as fallback if embeddings not easily comparable
-                        words_current = set(docs[idx].page_content.lower().split())
-                        words_selected = set(docs[sel_idx].page_content.lower().split())
-                        if words_current and words_selected:
-                            overlap = len(words_current & words_selected) / len(words_current | words_selected)
-                            max_similarity = max(max_similarity, overlap)
-                    
-                    # MMR score: balance relevance and diversity
-                    # Higher relevance is better, lower max_similarity (higher diversity) is better
-                    mmr_score = lambda_param * relevance + (1 - lambda_param) * (1 - max_similarity)
-                    
-                    if mmr_score > best_mmr_score:
-                        best_mmr_score = mmr_score
-                        best_idx = idx
-                
-                if best_idx is not None:
-                    selected.append(docs[best_idx])
-                    selected_indices.append(best_idx)
-                    remaining_indices.remove(best_idx)
-                else:
-                    break
-            
-            return selected
-            
-        def _generate_queries(self, query):
-            """Generate 2 additional variations of the query using the LLM for better coverage."""
-            if not self.llm:
-                return [query]
-            
-            try:
-                prompt = ChatPromptTemplate.from_messages([
-                    ("system", "You are an AI assistant that generates variations of search queries to improve RAG retrieval. Generate 2 variations of the following query in the SAME language as the input. Respond only with the queries, one per line."),
-                    ("human", query)
-                ])
-                response = self.llm.invoke(prompt.format_messages(question=query))
-                variations = [v.strip() for v in response.content.split('\n') if v.strip()][:2]
-                return [query] + variations
-            except Exception as e:
-                print(f"Query generation failed: {e}")
-                return [query]
-
-        def _expand_context(self, docs):
-            """
-            Fetch neighboring chunks for the top results to provide better context.
-            """
-            if not docs or Config.VECTOR_STORE_PROVIDER.lower() != "chroma":
-                return docs # Skip for FAISS or empty
-            
-            expanded_docs = []
-            seen_ids = set()
-            
-            # Identify top 3 chunks to expand
-            top_docs = docs[:3]
-            
-            for doc in top_docs:
-                source = doc.metadata.get("source")
-                chunk_idx = doc.metadata.get("chunk")
-                
-                # Add current doc
-                doc_id = f"{source}_{chunk_idx}"
-                if doc_id not in seen_ids:
-                    expanded_docs.append(doc)
-                    seen_ids.add(doc_id)
-                
-                # Try to fetch neighbors (idx-1, idx+1)
-                if chunk_idx is not None and source:
-                    try:
-                        # Chroma: use collection.get with where filter
-                        collection = getattr(self.vectorstore, "_collection", None)
-                        if collection is not None:
-                            neighbors = collection.get(
-                                where={"$and": [
-                                    {"source": source},
-                                    {"chunk": {"$in": [chunk_idx - 1, chunk_idx + 1]}}
-                                ]},
-                                include=["documents", "metadatas"]
-                            )
-                        else:
-                            neighbors = {"documents": [], "metadatas": []}
-                        
-                        # Convert back to Document objects
-                        docs_list = neighbors.get("documents") or []
-                        metas_list = neighbors.get("metadatas") or []
-                        for i in range(len(docs_list)):
-                            neighbor_id = f"{source}_{metas_list[i].get('chunk')}"
-                            if neighbor_id not in seen_ids:
-                                from langchain_core.documents import Document
-                                new_doc = Document(
-                                    page_content=docs_list[i],
-                                    metadata=metas_list[i]
-                                )
-                                expanded_docs.append(new_doc)
-                                seen_ids.add(neighbor_id)
-                    except Exception as e:
-                        print(f"Neighbor expansion failed: {e}")
-            
-            # Add remaining original docs that weren't neighbors
-            for doc in docs[3:]:
-                source = doc.metadata.get("source")
-                chunk_idx = doc.metadata.get("chunk")
-                doc_id = f"{source}_{chunk_idx}"
-                if doc_id not in seen_ids:
-                    expanded_docs.append(doc)
-                    seen_ids.add(doc_id)
-            
-            return expanded_docs
-
-        def _rerank_docs(self, query, docs):
-            """Simple re-ranking based on similarity to query."""
-            # Implementation for better re-ranking
-            return docs
-
         def invoke(self, query):
-            # Stage 1: Broad vector search exactly like Octopiai
-            candidate_k = 100
-            
             try:
-                # Direct similarity search (FAISS compatible without scoring bug)
-                initial_docs = self.vectorstore.similarity_search(query, k=candidate_k)
+                # 1. Broad vector search
+                k_search = 50 if Config.USE_RERANKER else 100
+                initial_docs = self.vectorstore.similarity_search(query, k=k_search)
+                
+                # Merge in session history if available
+                if self.history_retriever:
+                    hist_docs = self.history_retriever.invoke(query)
+                    if hist_docs:
+                        for d in hist_docs:
+                            d.metadata["source"] = "Chat History"
+                        initial_docs.extend(hist_docs)
+                        
             except Exception as e:
                 print(f"Retrieval error: {e}")
                 return []
+            
+            if not initial_docs:
+                return []
                 
-            # Stage 2: Direct Keyword Matching and Sorting (Octopiai logic)
-            keywords = [w.lower() for w in query.split() if len(w) > 3]
-            
-            website_docs = []
-            priority_docs = []
-            other_docs = []
-            seen_chunk_ids = set()
-            
-            for d in initial_docs:
-                chunk_id = f"{d.metadata.get('source')}_{d.metadata.get('page')}_{d.metadata.get('chunk', d.page_content[:50])}"
-                if chunk_id in seen_chunk_ids:
-                    continue
-                seen_chunk_ids.add(chunk_id)
+            if Config.USE_RERANKER:
+                # 2a. Re-rank using BAAI Cross-Encoder
+                pairs = [[query, doc.page_content] for doc in initial_docs]
+                scores = self.reranker.predict(pairs)
                 
-                content_lower = d.page_content.lower()
-                source = d.metadata.get("source", "").lower()
+                ranked_candidates = []
+                for i, doc in enumerate(initial_docs):
+                    score = float(scores[i])
+                    if score < Config.RERANKER_THRESHOLD:
+                        continue
+                    doc.metadata["score"] = score
+                    ranked_candidates.append(doc)
                 
-                is_website = source.startswith("http")
-                
-                if is_website:
-                    website_docs.append(d)
-                elif any(kw in content_lower for kw in keywords):
-                    priority_docs.append(d)
-                else:
-                    other_docs.append(d)
-            
-            # Order: Websites first, then keyword matches, then others
-            # This completely bypasses the MMR algorithm and relies purely on mathematical relevance and exact keyword match
-            combined = website_docs + priority_docs + other_docs
-            final_docs = combined[:30]
-            
-            # Keep context expansion to ensure we don't break paragraph flow
-            final_docs = self._expand_context(final_docs)
-            
-            return final_docs
-
-    retriever = AdvancedHybridRetriever(vectorstore, llm=llm)
-
-
-    # 4. Construct the Chain with Enhanced Context Formatting
-    def format_docs(docs):
-        """
-        Enhanced context formatting with source grouping and relevance indicators.
-        """
-        # Group documents by source for better context
-        grouped = {}
-        for i, doc in enumerate(docs):
-            source = os.path.basename(doc.metadata.get("source", "Unknown"))
-            if source not in grouped:
-                grouped[source] = []
-            
-            page = doc.metadata.get("page", "N/A")
-            if isinstance(page, int):
-                page = page + 1
-            
-            grouped[source].append({
-                "content": doc.page_content,
-                "page": page,
-                "index": i + 1
-            })
-        
-        # Format grouped context
-        context_parts = []
-        context_parts.append("\n" + "="*60)
-        context_parts.append(f"RETRIEVED CONTEXT ({len(docs)} chunks from {len(grouped)} sources)")
-        context_parts.append("="*60)
-        
-        for source_idx, (source, chunks) in enumerate(grouped.items(), 1):
-            context_parts.append(f"\n{'─'*60}")
-            context_parts.append(f"SOURCE #{source_idx}: {source}")
-            context_parts.append(f"CHUNKS: {len(chunks)}")
-            context_parts.append(f"{'─'*60}")
-            
-            for chunk in chunks:
-                context_parts.append(f"\n[CHUNK #{chunk['index']}] [PAGE: {chunk['page']}]")
-                context_parts.append(f"CONTENT: {chunk['content']}")
-                context_parts.append("")  # Empty line for readability
-        
-        return "\n".join(context_parts)
-
-    def detect_language_instruction(question):
-        import re
-        is_arabic = bool(re.search('[\u0600-\u06FF]', question))
-        
-        # Continuation Instruction (English or Arabic)
-        cont_instr = ""
-        if is_continuation:
-            if is_arabic:
-                cont_instr = "\nتنبيه مهم: أنت الآن تكمل إجابة سابقة تم قطعها. ابدأ مباشرة من حيث انتهيت. لا تكرر أي جملة أو معلومة ذكرتها سابقاً."
+                # Sort by highest score
+                ranked_candidates.sort(key=lambda x: x.metadata["score"], reverse=True)
+                return ranked_candidates[:Config.LLM_K_FINAL]
             else:
-                cont_instr = "\nIMPORTANT: You are continuing a previous response that was cut off. DO NOT REPEAT any information already provided. Start exactly from the next point or sentence."
+                # 2b. Fallback: Extract priority terms exactly like old logic
+                keywords = [w.lower() for w in query.split() if len(w) > 3]
+                
+                website_docs = []
+                priority_docs = []
+                other_docs = []
+                seen_chunk_ids = set()
+                
+                for d in initial_docs:
+                    chunk_id = f"{d.metadata.get('source')}_{d.metadata.get('page')}_{d.metadata.get('chunk', d.page_content[:50])}"
+                    if chunk_id in seen_chunk_ids:
+                        continue
+                    seen_chunk_ids.add(chunk_id)
+                    
+                    content_lower = d.page_content.lower()
+                    source = d.metadata.get("source", "").lower()
+                    
+                    # Boost website sources as they are usually more specific to recent queries
+                    is_website = source.startswith("http")
+                    
+                    if is_website:
+                        website_docs.append(d)
+                    elif any(kw in content_lower for kw in keywords):
+                        priority_docs.append(d)
+                    else:
+                        other_docs.append(d)
+                
+                # Order: Websites first, then keyword matches, then others
+                combined = website_docs + priority_docs + other_docs
+                return combined[:Config.LLM_K_FINAL]
 
-        if is_arabic:
-            return f"""THE USER ASKED IN ARABIC. YOU MUST ANSWER IN ARABIC. {cont_instr}
-            قواعد الاستشهاد (MANDATORY CITATIONS): 
-            يجب وضع المرجع بجانب كل حقيقة أو دورة تدريبية أو ملف بصيغة [اسم_الملف, صفحة X]. 
-            مثال: [Course_Catalog.pdf, صفحة 5].
-            لا تذكر كلمة SOURCE أو PAGE داخل القوسين، فقط الاسم والصفحة.
-            لا تكتفي بذكر المراجع في النهاية، بل ضعها بجانب كل نقطة."""
-        else:
-            return f"""THE USER ASKED IN ENGLISH. YOU MUST ANSWER IN ENGLISH. {cont_instr}
-            CITATION RULES (MANDATORY): 
-            Every single fact or item must have an inline reference like [Document.pdf, Page X]. 
-            Example: [CS_Manual.pdf, Page 12].
-            Do NOT include labels like 'SOURCE:' or 'PAGE:' inside the brackets, just the filename and page number.
-            Do not just list them at the end; place them next to the specific information."""
+    retriever = AdvancedHybridRetriever(vectorstore, llm=llm, history_retriever=history_retriever)
 
-    def process_question(q):
-        # Prepend conversation history if provided
+
+    # 4. Construct the Chain (Matching Octopiai entirely)
+    def format_docs(docs):
+        # Simply return docs as ranked by retriever
+        sorted_docs = docs
+        
+        context_parts = []
+        for i, doc in enumerate(sorted_docs):
+            context_parts.append(f"--- Document Chunk {i+1} ---\n{doc.page_content}")
+        
+        return "\n\n".join(context_parts)
+
+    def process_history():
+        # Octopiai passes history as a distinct variable block rather than prepending 
         history_text = ""
         if conversation_history and len(conversation_history) > 0:
             from app.services.chat_session import format_history_for_prompt
-            history_text = format_history_for_prompt(conversation_history) + "\n"
-        
+            history_text = format_history_for_prompt(conversation_history)
+        return history_text
+
+    # Rephrase Chain
+    rephrase_chain = rephrase_prompt | llm | StrOutputParser()
+
+    def get_search_query(q):
+        history = process_history()
+        if not history.strip():
+            return q
+        try:
+            return rephrase_chain.invoke({"history": history, "question": q})
+        except:
+            return q
+
+    def process_question(q):
         if is_continuation and last_answer:
-            return f"{history_text}--- START OF CONTINUATION REQUEST ---\nYOU PREVIOUSLY SAID:\n[[[ {last_answer} ]]]\n\nNOW CONTINUE DIRECTLY from exactly where you left off. DO NOT REPEAT ANY LIST ITEMS OR SENTENCES FROM ABOVE. Provide the remaining missing information for the question: {q}\n--- CONTINUE BELOW ---"
-        return f"{history_text}{q} [MANDATORY: Cite every single course/item in brackets like [Document.pdf, Page X]]"
+            return f"--- CONTINUATION ---\nContinue from:\n{last_answer}\n\nQuestion: {q}"
+        return q
 
     rag_chain = (
         {
-            "context": RunnableLambda(lambda x: retriever.invoke(x)) | format_docs, 
-            "question": RunnableLambda(process_question),
-            "language_instruction": RunnableLambda(detect_language_instruction)
+            "rephrased_query": RunnableLambda(get_search_query),
+            "original_question": RunnablePassthrough()
+        }
+        | {
+            "context": RunnableLambda(lambda x: retriever.invoke(x["rephrased_query"])) | format_docs, 
+            "history": RunnableLambda(lambda _: process_history()),
+            "question": RunnableLambda(lambda x: process_question(x["rephrased_query"]))
         }
         | prompt
         | llm

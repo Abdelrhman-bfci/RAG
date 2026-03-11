@@ -12,7 +12,6 @@ from langchain_community.document_loaders import (
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.factory import VectorStoreFactory
-import pymupdf4llm
 from langchain_core.documents import Document
 
 def enrich_chunks_with_metadata(chunks):
@@ -29,8 +28,9 @@ def enrich_chunks_with_metadata(chunks):
             doc.metadata["page"] = 0
     return chunks
 
-TRACKING_FILE = "ingested_files.json"
-STATUS_FILE = "ingestion_status.json"
+# File paths for saving ingestion status
+TRACKING_FILE = "/tmp/ingested_files_v2.json"
+STATUS_FILE = "/tmp/ingestion_status_v2.json"
 
 def load_tracking_data():
     """Load the tracking registry from disk."""
@@ -144,9 +144,9 @@ def ingest_documents(force_fresh: bool = False):
                 print(f"Warning: Failed to clear old index for {file_path}: {e}")
 
             if ext == ".pdf":
-                # Use pymupdf4llm for high-quality Markdown conversion
-                md_content = pymupdf4llm.to_markdown(file_path)
-                docs = [Document(page_content=md_content, metadata={"source": file_path})]
+                # Use PyMuPDFLoader matching Octopiai for faster, straightforward loading
+                loader = PyMuPDFLoader(file_path)
+                docs = loader.load()
                 new_documents.extend(docs)
                 processed_files_metadata.append((file_path, file_id))
             else:
@@ -187,43 +187,42 @@ def ingest_documents(force_fresh: bool = False):
         yield "Wiping existing vector store for fresh build...\n"
         vectorstore_instance.clear_all()
 
-    # PROCESS ONE CHUNK AT A TIME
+    # PROCESS IN BATCHES matching Octopiai
+    batch_size = 100
+    total_batches = (total_chunks + batch_size - 1) // batch_size
     start_time = time.time()
     
     import gc
     import traceback
     
     try:
-        for i, doc in enumerate(splitted_docs):
-            current_num = i + 1
+        for i in range(0, total_chunks, batch_size):
+            current_batch_num = i // batch_size + 1
+            batch_msg = f"Ingesting batch {current_batch_num}/{total_batches} (Chunks {i+1}-{min(i+batch_size, total_chunks)})"
+            
+            update_status("running", current=current_batch_num, total=total_batches, message=batch_msg, start_time=start_time)
+            yield f"{batch_msg}\n"
+            
+            batch = splitted_docs[i:i + batch_size]
             
             max_retries = 2
             success = False
             for attempt in range(max_retries):
                 try:
-                    vectorstore_instance.add_documents([doc])
+                    vectorstore_instance.add_documents(batch)
                     success = True
                     break
                 except Exception as e:
                     if attempt < max_retries - 1:
                         time.sleep(1)
                         continue
-                    yield f"ERROR processing chunk {current_num} after retries: {e}\n"
-                    print(f"CRITICAL ERROR embedding chunk {current_num}: {traceback.format_exc()}")
+                    yield f"ERROR processing batch {current_batch_num} after retries: {e}\n"
+                    print(f"CRITICAL ERROR embedding batch {current_batch_num}: {traceback.format_exc()}")
             
             if not success:
                 continue
             
-            msg = f"Ingesting chunk {current_num}/{total_chunks}"
-            if current_num % 5 == 0:
-                yield f"{msg}\n"
-            
-            if current_num % 10 == 0:
-                update_status("running", current=current_num, total=total_chunks, message=msg, start_time=start_time)
-                gc.collect() 
-            
-            if current_num % 50 == 0:
-                yield "Checkpoint: Data is already persisted in ChromaDB.\n"
+            gc.collect()
 
         for file_path, file_id in processed_files_metadata:
             tracking_data[file_path] = file_id

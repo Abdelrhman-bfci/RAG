@@ -14,9 +14,9 @@ class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     
     # Vector Database Settings
-    VECTOR_DB_PATH = os.getenv("VECTOR_DB_PATH", "chroma_db")
+    VECTOR_DB_PATH = os.getenv("VECTOR_DB_PATH", "faiss_index_v4")
     CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "rag_collection")
-    VECTOR_STORE_PROVIDER = os.getenv("VECTOR_STORE_PROVIDER", "chroma") # 'chroma' or 'faiss'
+    VECTOR_STORE_PROVIDER = os.getenv("VECTOR_STORE_PROVIDER", "faiss") # 'chroma' or 'faiss'
     VECTOR_SEARCH_WEIGHT = float(os.getenv("VECTOR_SEARCH_WEIGHT", "0.7")) # 0.0 to 1.0 (Vector vs Keyword)
     
     # Resource Directory for PDFs
@@ -27,8 +27,20 @@ class Config:
     DATABASE_URL = os.getenv("DATABASE_URL")
     
     # PDF Ingestion Settings
-    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1100"))
-    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "180"))
+    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "2000"))
+    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
+
+    # Reranker Settings
+    USE_RERANKER = os.getenv("USE_RERANKER", "true").lower() == "true"
+    RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+    RERANKER_THRESHOLD = float(os.getenv("RERANKER_THRESHOLD", "0.1"))
+    LLM_K_FINAL = int(os.getenv("LLM_K_FINAL", "10"))
+    LLM_HISTORY_K = int(os.getenv("LLM_HISTORY_K", "3"))
+    LLM_HISTORY_SCORE_THRESHOLD = float(os.getenv("LLM_HISTORY_SCORE_THRESHOLD", "0.35"))
+
+    # Mode-specific LLM settings
+    CHAT_LLM_NUM_PREDICT = int(os.getenv("CHAT_LLM_NUM_PREDICT", "512"))
+    DOC_LLM_NUM_CTX = int(os.getenv("DOC_LLM_NUM_CTX", "32768"))
 
     # Website Ingestion Settings
     _website_links_raw = os.getenv("WEBSITE_LINKS", "")
@@ -54,7 +66,7 @@ class Config:
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
     VLLM_EMBEDDING_MODEL = os.getenv("VLLM_EMBEDDING_MODEL", "nomic-embed-text")
-    OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
+    OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "qwen2.5:7b")
     OLLAMA_CONTEXT_WINDOW = int(os.getenv("OLLAMA_CONTEXT_WINDOW", "32768"))
 
     # vLLM Settings (OpenAI Compatible)
