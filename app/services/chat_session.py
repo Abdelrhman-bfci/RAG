@@ -96,7 +96,12 @@ def format_history_for_prompt(history: List[Dict[str, str]]) -> str:
     
     formatted = "Previous Conversation:\n"
     for msg in history:
-        role = "User" if msg["role"] == "user" else "Assistant"
-        formatted += f"{role}: {msg['content']}\n\n"
+        if not isinstance(msg, dict):
+            # Skip if msg is somehow a string or other type
+            continue
+        role_raw = msg.get("role", "user")
+        role = "User" if role_raw == "user" else "Assistant"
+        content = msg.get("content", "")
+        formatted += f"{role}: {content}\n\n"
     
     return formatted

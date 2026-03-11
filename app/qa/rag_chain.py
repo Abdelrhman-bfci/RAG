@@ -48,6 +48,8 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
             # Format each pair of user/assistant messages as distinct documents
             history_strings = []
             for msg in conversation_history:
+                if not isinstance(msg, dict):
+                    continue
                 role = msg.get("role", "unknown").capitalize()
                 content = msg.get("content", "")
                 history_strings.append(f"{role}: {content}")
@@ -205,8 +207,11 @@ Standalone Question:
                 _shared_reranker = CrossEncoder(Config.RERANKER_MODEL, max_length=512)
             self.reranker = _shared_reranker
             
-        def invoke(self, query):
             try:
+                # Ensure query is a string
+                if not isinstance(query, str):
+                    query = str(query)
+                
                 # 1. Broad vector search
                 k_search = 50 if Config.USE_RERANKER else 100
                 initial_docs = self.vectorstore.similarity_search(query, k=k_search)
@@ -319,9 +324,9 @@ Standalone Question:
             "original_question": RunnablePassthrough()
         }
         | {
-            "context": RunnableLambda(lambda x: retriever.invoke(x["rephrased_query"])) | format_docs, 
+            "context": RunnableLambda(lambda x: retriever.invoke(x.get("rephrased_query", "")) if isinstance(x, dict) else retriever.invoke(str(x))) | format_docs, 
             "history": RunnableLambda(lambda _: process_history()),
-            "question": RunnableLambda(lambda x: process_question(x["rephrased_query"]))
+            "question": RunnableLambda(lambda x: process_question(x.get("rephrased_query", "")) if isinstance(x, dict) else process_question(str(x)))
         }
         | prompt
         | llm
