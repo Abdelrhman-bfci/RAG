@@ -460,11 +460,34 @@
                                 </div>
                                 <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
                             </div>
-                            <div v-if="msg.metadata" class="mt-2 flex flex-wrap gap-2 opacity-80">
+                            
+                            <!-- OCTOPIAI STYLE METADATA BUTTONS -->
+                            <div v-if="msg.role === 'assistant' && msg.metadata" class="mt-3 flex flex-wrap gap-2 items-center animate-fade-in px-4">
+                                <button @click="openLogicModal(msg.metadata)" 
+                                        class="inline-flex items-center gap-1.5 bg-purple-50 dark:bg-purple-900/40 hover:bg-purple-100 dark:hover:bg-purple-900/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[11px] px-2 py-1 rounded-full transition-all cursor-pointer shadow-sm hover:shadow"
+                                        title="View Logic & History">
+                                    <i class="fa-solid fa-microchip"></i>
+                                    <span class="font-medium">Logic</span>
+                                </button>
+
+                                <button @click="openContextModal(msg.metadata.chunks)" 
+                                        class="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-900/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] px-2 py-1 rounded-full transition-all cursor-pointer shadow-sm hover:shadow"
+                                        title="View Retrieved Context">
+                                    <i class="fa-solid fa-layer-group"></i>
+                                    <span class="font-medium">Context</span>
+                                    <span class="ml-0.5 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 text-[9px] px-1.5 py-0.5 rounded-full">{{ msg.metadata.chunks?.length || 0 }}</span>
+                                </button>
+
+                                <div class="w-px h-3 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+
+                                <span class="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-[11px] font-semibold px-2 py-1 rounded-full border border-gray-200 dark:border-gray-600">
+                                    <i class="fa-regular fa-clock"></i> {{ msg.metadata.performance?.total }}
+                                </span>
+                            </div>
+
+                            <div v-if="msg.metadata" class="mt-2 flex flex-wrap gap-2 opacity-80 px-4">
                                 <span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-[10px]"><i
                                         class="fas fa-microchip mr-1"></i>{{ msg.metadata.model }}</span>
-                                <span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-[10px]"><i
-                                        class="fas fa-clock mr-1"></i>{{ msg.metadata.performance.total }}</span>
                                 <span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-[10px]"><i
                                         class="fas fa-brain mr-1"></i>{{ msg.metadata.tokens }} tokens</span>
                                 <button v-if="index === messages.length - 1 && msg.role === 'assistant'"
@@ -480,6 +503,95 @@
                         </div>
                     </div>
 
+                </div>
+
+                <!-- OCTOPIAI STYLE MODAL -->
+                <div v-if="showModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" @click.self="showModal = false">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-700 transform transition-all scale-100">
+                        
+                        <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start rounded-t-xl"
+                             :class="getHeaderClass(selectedModalData?.type)">
+                            <div class="flex gap-4">
+                                <div class="w-10 h-10 rounded-lg flex items-center justify-center shadow-sm"
+                                     :class="getIconBgClass(selectedModalData?.type)">
+                                    <i class="text-lg" :class="getIconClass(selectedModalData?.type)"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-base text-gray-800 dark:text-gray-100">{{ selectedModalData?.title }}</h3>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="text-xs px-2 py-0.5 rounded uppercase font-semibold"
+                                              :class="getBadgeClass(selectedModalData?.type)">
+                                            {{ selectedModalData?.type || 'CONTENT' }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center gap-2">
+                                <button @click="showModal = false" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500 transition-colors">
+                                    <i class="fa-solid fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex-1 overflow-y-auto p-6 bg-white dark:bg-gray-900">
+                            
+                            <div v-if="selectedModalData?.type === 'LOGIC'" class="space-y-6">
+                                <div>
+                                    <h4 class="text-xs font-bold text-purple-500 uppercase mb-2 tracking-wider"><i class="fa-solid fa-magnifying-glass"></i> Rephrased Query</h4>
+                                    <div class="bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-800 font-medium text-gray-700 dark:text-gray-200">
+                                        {{ selectedModalData.query || "No rephrasing performed (Direct Query)" }}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider flex items-center justify-between">
+                                        <span><i class="fa-solid fa-history"></i> Relevant Conversation History</span>
+                                        <span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 rounded-full">{{ selectedModalData.history?.length || 0 }} turns</span>
+                                    </h4>
+                                    
+                                    <div v-if="!selectedModalData.history || selectedModalData.history.length === 0" class="text-gray-400 italic text-sm text-center py-4 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+                                        No relevant history found.
+                                    </div>
+
+                                    <div v-else class="space-y-3">
+                                        <div v-for="(turn, idx) in selectedModalData.history" :key="idx" class="text-sm border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden">
+                                            <div class="bg-gray-50 dark:bg-gray-800 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 flex justify-between">
+                                                <span>Turn {{ idx + 1 }}</span>
+                                            </div>
+                                            <div class="p-3 bg-white dark:bg-gray-900 whitespace-pre-wrap font-mono text-xs text-gray-600 dark:text-gray-400">{{ turn.content }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-else-if="selectedModalData?.type === 'CONTEXT'" class="space-y-6">
+                                 <div v-for="(chunk, idx) in selectedModalData.items" :key="idx" class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm">
+                                    <div class="bg-blue-50/50 dark:bg-blue-900/20 px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-regular fa-file-lines text-blue-500"></i>
+                                            <span class="font-bold text-sm text-gray-700 dark:text-gray-200">{{ chunk.source }}</span>
+                                            
+                                            <span v-if="chunk.score !== undefined" class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-200 dark:border-green-800 flex items-center gap-1">
+                                                <i class="fa-solid fa-bullseye text-[9px]"></i>
+                                                {{ typeof chunk.score === 'number' ? chunk.score.toFixed(2) : chunk.score }}
+                                            </span>
+                                        </div>
+                                        <span class="text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded text-gray-500">Page {{ chunk.page || 'N/A' }}</span>
+                                    </div>
+                                    <div class="p-3 bg-white dark:bg-gray-900">
+                                         <div class="markdown-body font-mono text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                                            {{ chunk.content }}
+                                        </div>
+                                    </div>
+                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="p-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end items-center">
+                            <button @click="showModal = false" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-xs font-bold text-gray-600 dark:text-gray-300 transition-colors">Close</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Input Area -->
@@ -1292,34 +1404,81 @@
                 function toggleTheme() { isDark.value = !isDark.value; }
 
                 function renderMarkdown(text) {
-                    const renderer = new marked.Renderer();
-                    renderer.text = function (token) {
-                        const content = typeof token === 'string' ? token : token.text;
-                        if (!content) return '';
-                        return content.replace(/\[([^\]]+)\]/g, (match, inner) => {
-                            let clean = inner.replace(/SOURCE:/gi, '').replace(/PAGE:/gi, '').replace(/\|/g, ',').trim();
-                            const parts = clean.split(',').map(s => s.trim());
-                            let possibleFile = parts[0].replace(/^\(|\)$/g, '').trim();
-                            const sourcePath = sourceMap.value[possibleFile] || Object.values(sourceMap.value).find(s => s.includes(possibleFile));
-                            if (sourcePath) {
-                                const isUrl = sourcePath.startsWith('http');
-                                const safeName = possibleFile.replace(/'/g, "\\'");
-                                const icon = isUrl ? 'fa-globe' : (possibleFile.includes('Table:') ? 'fa-table' : 'fa-file-alt');
-                                const openUrl = isUrl ? sourcePath : `${API_BASE}/files/${possibleFile}`;
-                                return `
-                                    <span class="citation-group">
-                                        <span class="citation-link" onclick="window.previewSourceInModal('${safeName}')" title="View Index: ${possibleFile}">
-                                            <i class="fas ${icon}"></i> ${possibleFile}
-                                        </span>
-                                        <button class="citation-direct-btn" onclick="window.open('${openUrl}', '_blank')" title="Open Original">
-                                            <i class="fas fa-external-link-alt"></i>
-                                        </button>
-                                    </span>`;
-                            }
-                            return match;
-                        });
+                    if (!text) return "";
+
+                    // 1. Standard markdown parsing
+                    let html = marked.parse(text);
+
+                    // 2. ADOPT OCTOPIAI BEAUTIFUL CITATION STYLE
+                    // Standard markdown links [label](url) inside content
+                    html = html.replace(/<a href="(.*?)">(.*?)<\/a>/g, (match, url, label) => {
+                        const isDoc = url.includes('/files/') || url.endsWith('.pdf') || url.endsWith('.docx');
+                        const icon = isDoc ? 'fa-file-pdf' : 'fa-arrow-up-right-from-square';
+
+                        return `<a href="${url}" 
+                                   target="_blank" 
+                                   rel="noopener noreferrer" 
+                                   class="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded-md text-xs font-semibold border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all mx-1 shadow-sm"
+                                   title="Open Source Link">
+                                    <i class="fa-solid ${icon} text-[10px]"></i>
+                                    ${label}
+                                </a>`;
+                    });
+
+                    // 3. Keep existing LLM-style raw citations [[Source: filename]] if they arrive
+                    html = html.replace(/\[\[Source: (.*?)\]\]/g, (match, path) => {
+                        const filename = path.split('/').pop();
+                        const url = `/files/${path.startsWith('./') ? path.substring(2) : path}`;
+                        return `<a href="${url}" target="_blank" class="inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded-full text-xs font-medium border border-amber-200 dark:border-amber-800 hover:underline mx-1 transition-colors">
+                                    <i class="fa-solid fa-file-pdf text-[10px]"></i> ${filename}
+                                </a>`;
+                    });
+
+                    return html;
+                }
+
+                // --- OCTOPIAI MODAL SUPPORT FUNCTIONS ---
+                const showModal = ref(false);
+                const selectedModalData = ref(null);
+
+                function openLogicModal(meta) {
+                    selectedModalData.value = {
+                        title: "Reasoning Trace",
+                        type: "LOGIC",
+                        query: meta.search_query,
+                        history: meta.history
                     };
-                    return marked.parse(text, { renderer });
+                    showModal.value = true;
+                }
+
+                function openContextModal(chunks) {
+                    selectedModalData.value = {
+                        title: "Retrieved Context",
+                        type: "CONTEXT",
+                        items: chunks || []
+                    };
+                    showModal.value = true;
+                }
+
+                function getHeaderClass(type) {
+                    if (type === 'LOGIC') return 'bg-purple-50 dark:bg-purple-900/30';
+                    if (type === 'CONTEXT') return 'bg-blue-50 dark:bg-blue-900/30';
+                    return 'bg-gray-50 dark:bg-gray-800/50';
+                }
+                function getIconBgClass(type) {
+                    if (type === 'LOGIC') return 'bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-300';
+                    if (type === 'CONTEXT') return 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300';
+                    return 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+                }
+                function getIconClass(type) {
+                    if (type === 'LOGIC') return 'fa-solid fa-microchip';
+                    if (type === 'CONTEXT') return 'fa-solid fa-layer-group';
+                    return 'fa-regular fa-file-code';
+                }
+                function getBadgeClass(type) {
+                    if (type === 'LOGIC') return 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300';
+                    if (type === 'CONTEXT') return 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300';
+                    return 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
                 }
 
                 const scrollToBottom = () => nextTick(() => { if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight; });
@@ -1467,7 +1626,7 @@
                                         currentUsedDocs.value = data.used_docs || [];
 
                                         // Enhance citations with smart handling
-                                        botMsg.content = enhanceCitations(botMsg.content, data.sources, data.used_docs);
+                                        // botMsg.content = enhanceCitations(botMsg.content, data.sources, data.used_docs); // Removed, handled by renderMarkdown
                                         await nextTick();
                                         scrollToBottom();
                                     }
@@ -1503,177 +1662,6 @@
                         await nextTick();
                         scrollToBottom();
                     }
-                }
-
-                function enhanceCitations(content, sources, usedDocs) {
-                    /**
-                     * Enhance citations with smart handling:
-                     * - URLs: Open in new tab
-                     * - PDFs: Open document viewer
-                     * - Tables: Show index preview
-                     */
-                    if (!content) return content;
-
-                    // Pattern to match citations: [Source, Page X] or [Table: name]
-                    const citationPattern = /\[([^\]]+?(?:\.(?:pdf|txt|csv|html|md)|Table:\s*\w+|https?:\/\/[^\]]+)),\s*(?:Page|صفحة)?\s*(\d+|N\/A)?\]/gi;
-
-                    return content.replace(citationPattern, (match, source, page) => {
-                        // Determine source type
-                        const isUrl = source.startsWith('http://') || source.startsWith('https://');
-                        const isTable = source.startsWith('Table:');
-                        const isPdf = source.toLowerCase().endsWith('.pdf');
-
-                        // Get source name
-                        let sourceName = source;
-                        if (isTable) {
-                            sourceName = source.replace('Table:', '').trim();
-                        } else if (isUrl) {
-                            try {
-                                sourceName = new URL(source).hostname;
-                            } catch (e) {
-                                sourceName = source;
-                            }
-                        } else {
-                            sourceName = source.split('/').pop();
-                        }
-
-                        // Find full source path
-                        const sourcePath = sourceMap.value[source] || sourceMap.value[sourceName] || source;
-
-                        // Find used doc for preview
-                        const usedDoc = usedDocs?.find(doc => {
-                            if (isTable) {
-                                return doc.source === source;
-                            }
-                            const docSource = doc.source.split('/').pop();
-                            return (docSource === sourceName || doc.source === source) && (!page || doc.page == page);
-                        });
-
-                        // Create citation with appropriate icon
-                        let icon = 'fa-file-alt';
-                        if (isUrl) icon = 'fa-globe';
-                        else if (isTable) icon = 'fa-table';
-                        else if (isPdf) icon = 'fa-file-pdf';
-
-                        const citationData = {
-                            source: sourcePath,
-                            sourceName: sourceName,
-                            page: page || 'N/A',
-                            preview: usedDoc?.content || '',
-                            type: isUrl ? 'url' : isTable ? 'table' : isPdf ? 'pdf' : 'document',
-                            icon: icon
-                        };
-
-                        return `<span class="citation-link" data-citation='${JSON.stringify(citationData).replace(/'/g, "&apos;")}' onclick="window.openCitation(this)"><i class="fas ${icon}"></i>${sourceName}${page ? ', Page ' + page : ''}</span>`;
-                    });
-                }
-
-                // Global function to handle citation clicks
-                window.openCitation = function (element) {
-                    try {
-                        const citationData = JSON.parse(element.getAttribute('data-citation').replace(/&apos;/g, "'"));
-
-                        // Handle all source types via modal first for context preview
-                        showCitationModal(citationData);
-                    } catch (e) {
-                        console.error('Error opening citation:', e);
-                    }
-                }
-
-
-                async function showIndexPreview(sourceName) {
-                    try {
-                        const response = await fetch(`${API_BASE}/index/preview?source=${encodeURIComponent(sourceName)}`);
-                        const chunks = await response.json();
-
-                        const modal = document.createElement('div');
-                        modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
-                        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-
-                        const content = document.createElement('div');
-                        content.className = 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col';
-
-                        const chunksHtml = chunks.map((chunk, idx) => `
-                            <div class="p-4 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <span class="text-xs font-bold text-blue-600 dark:text-blue-400">Chunk #${idx + 1}</span>
-                                    ${chunk.page !== 'N/A' ? `<span class="text-xs text-gray-500">Page ${chunk.page}</span>` : ''}
-                                </div>
-                                <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">${chunk.content}</div>
-                            </div>
-                        `).join('');
-
-                        content.innerHTML = `
-                            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-                                <h3 class="text-xl font-bold text-gray-900 dark:text-white">Index Preview</h3>
-                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                    <i class="fas fa-database mr-2"></i>${sourceName} - ${chunks.length} chunks
-                                </p>
-                            </div>
-                            <div class="overflow-y-auto flex-1">
-                                ${chunksHtml || '<p class="p-6 text-center text-gray-500">No chunks found</p>'}
-                            </div>
-                            <div class="p-6 border-t border-gray-200 dark:border-gray-700">
-                                <button onclick="this.closest('.fixed').remove()" 
-                                    class="w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white py-3 px-4 rounded-xl font-semibold transition-colors">
-                                    Close
-                                </button>
-                            </div>
-                        `;
-
-                        modal.appendChild(content);
-                        document.body.appendChild(modal);
-                    } catch (e) {
-                        console.error('Error loading index preview:', e);
-                        alert('Failed to load index preview');
-                    }
-                }
-
-                function showCitationModal(citationData) {
-                    const modal = document.createElement('div');
-                    modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4';
-                    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-
-                    const content = document.createElement('div');
-                    content.className = 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col';
-
-                    const fileUrl = citationData.source;
-                    const isUrl = citationData.type === 'url';
-
-                    // Customize UI based on type
-                    const title = isUrl ? 'Website Context' : 'Document Context';
-                    const buttonText = isUrl ? 'Open Website' : 'Open Document';
-                    const buttonIcon = isUrl ? 'fa-external-link-alt' : 'fa-file-pdf';
-
-                    // Ensure we have some preview text
-                    const previewText = citationData.preview || 'No context preview available.';
-
-                    content.innerHTML = `
-                        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-                            <h3 class="text-xl font-bold text-gray-900 dark:text-white">${title}</h3>
-                            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                <i class="fas ${citationData.icon} mr-2"></i>${citationData.sourceName}${citationData.page !== 'N/A' ? ' - Page ' + citationData.page : ''}
-                            </p>
-                        </div>
-                        <div class="p-6 overflow-y-auto flex-1">
-                            <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">
-                                ${previewText}
-                            </div>
-                        </div>
-                        <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
-                            <button onclick="window.open('${fileUrl}', '_blank')" 
-                                class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-semibold transition-colors">
-                                <i class="fas ${buttonIcon} mr-2"></i>${buttonText}
-                            </button>
-                            <button onclick="this.closest('.fixed').remove()" 
-                                class="flex-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white py-3 px-4 rounded-xl font-semibold transition-colors">
-                                Close
-                            </button>
-                        </div>
-                    `;
-
-                    modal.appendChild(content);
-                    document.body.appendChild(modal);
                 }
 
                 function handleFileUpload(e) {
@@ -2042,6 +2030,8 @@
                     summaryFile, summaryProgress, chunkSummaries, finalSummary,
                     offlineIngestStatus, offlineIngestStreamRunning,
                     toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, startCrawl, startCrawlAndIngest, startOfflineIngest, startOfflineIngestStream, startNewChat, handleSummaryFileUpload,
+                    // Modal Helpers
+                    showModal, selectedModalData, openLogicModal, openContextModal, getHeaderClass, getIconBgClass, getIconClass, getBadgeClass,
                     // Login State
                     isAuthenticated, showLoginModal, loginUsername, loginPassword, handleLogin, logout
                 };

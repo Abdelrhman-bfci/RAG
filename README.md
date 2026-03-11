@@ -38,9 +38,8 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
 2. **Install Dependencies**:
    ```bash
    pip3 install -r requirements.txt
-   # For Gemini support:
-   pip3 install langchain-google-genai
    ```
+   *Note: This includes advanced RAG components like `sentence-transformers`, `lancedb`, and `langchain-huggingface`.*
 
 3. **Environment Setup**:
    Create a `.env` file in the root directory (see `.env.example` or the template below):
@@ -80,6 +79,29 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
    - Switch between providers (OpenAI, Gemini, Ollama, vLLM).
    - Enter API keys or Base URLs on the fly.
    - Select your preferred LLM and Embedding models.
+
+## 🔄 Chatbot Migration (octopiai -> AI MODLE REG)
+
+The system has been upgraded to align with the high-accuracy architecture of `octopiai/chatbot`.
+
+### Key Enhancements:
+- **Cross-Encoder Re-ranking**: Integrates `BAAI/bge-reranker-v2-m3` for semantic scoring of retrieved chunks.
+- **LanceDB Session History**: Ephemeral vector search for past conversation context.
+- **Query Rephrasing**: Automatically expands follow-up questions (e.g., "what is it?") into standalone queries.
+- **Nomic Alignment**: Strict embedding prefixing (`search_document:` / `search_query:`) for vector compatibility.
+- **Unified Crawler DB**: Migrated from JSON to SQLite (`crawler_data.db`) for robust URL/download tracking.
+
+### 📜 Migration Script
+A specialized migration script is provided to reset the database and perform a fresh ingestion using the new architectural parameters.
+
+**To run the migration:**
+```bash
+python3 scripts/run_migration.py
+```
+This script will:
+1. Clear the current vector store.
+2. Reset file ingestion tracking.
+3. Reprocess all documents in the `RESOURCE/` folder using the new `CHUNK_SIZE` (2000) and `CHUNK_OVERLAP` (200).
 
 ## 📂 Project Structure
 
