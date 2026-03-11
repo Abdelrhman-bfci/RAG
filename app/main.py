@@ -624,8 +624,13 @@ async def reset_all_resources():
                 print(f"Deleted crawler database file: {Config.CRAWLER_DB}")
             except Exception as db_e:
                 print(f"Could not delete database file: {db_e}")
+                
+        # 6. Clear Chat Sessions
+        from app.services.chat_session import clear_all_sessions
+        clear_all_sessions()
+        
     except Exception as e:
-        print(f"Error resetting crawled status: {e}")
+        print(f"Error resetting crawled status or sessions: {e}")
         
     return {
         "status": "success", 

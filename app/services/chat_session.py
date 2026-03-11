@@ -62,6 +62,12 @@ def delete_session(session_id: str):
     if session_id in _sessions:
         del _sessions[session_id]
 
+def clear_all_sessions():
+    """Clear all active sessions (wipes chat history)."""
+    global _sessions
+    _sessions.clear()
+    print("All chat sessions cleared.")
+
 def get_all_sessions() -> List[Dict]:
     """Get all chat sessions with metadata."""
     sessions = []

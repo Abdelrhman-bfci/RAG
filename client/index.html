@@ -460,27 +460,31 @@
                                 </div>
                                 <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
                             </div>
-                            
+
                             <!-- OCTOPIAI STYLE METADATA BUTTONS -->
-                            <div v-if="msg.role === 'assistant' && msg.metadata" class="mt-3 flex flex-wrap gap-2 items-center animate-fade-in px-4">
-                                <button @click="openLogicModal(msg.metadata)" 
-                                        class="inline-flex items-center gap-1.5 bg-purple-50 dark:bg-purple-900/40 hover:bg-purple-100 dark:hover:bg-purple-900/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[11px] px-2 py-1 rounded-full transition-all cursor-pointer shadow-sm hover:shadow"
-                                        title="View Logic & History">
+                            <div v-if="msg.role === 'assistant' && msg.metadata"
+                                class="mt-3 flex flex-wrap gap-2 items-center animate-fade-in px-4">
+                                <button @click="openLogicModal(msg.metadata)"
+                                    class="inline-flex items-center gap-1.5 bg-purple-50 dark:bg-purple-900/40 hover:bg-purple-100 dark:hover:bg-purple-900/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[11px] px-2 py-1 rounded-full transition-all cursor-pointer shadow-sm hover:shadow"
+                                    title="View Logic & History">
                                     <i class="fa-solid fa-microchip"></i>
                                     <span class="font-medium">Logic</span>
                                 </button>
 
-                                <button @click="openContextModal(msg.metadata.chunks)" 
-                                        class="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-900/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] px-2 py-1 rounded-full transition-all cursor-pointer shadow-sm hover:shadow"
-                                        title="View Retrieved Context">
+                                <button @click="openContextModal(msg.metadata.chunks)"
+                                    class="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-900/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] px-2 py-1 rounded-full transition-all cursor-pointer shadow-sm hover:shadow"
+                                    title="View Retrieved Context">
                                     <i class="fa-solid fa-layer-group"></i>
                                     <span class="font-medium">Context</span>
-                                    <span class="ml-0.5 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 text-[9px] px-1.5 py-0.5 rounded-full">{{ msg.metadata.chunks?.length || 0 }}</span>
+                                    <span
+                                        class="ml-0.5 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 text-[9px] px-1.5 py-0.5 rounded-full">{{
+                                        msg.metadata.chunks?.length || 0 }}</span>
                                 </button>
 
                                 <div class="w-px h-3 bg-gray-300 dark:bg-gray-600 mx-1"></div>
 
-                                <span class="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-[11px] font-semibold px-2 py-1 rounded-full border border-gray-200 dark:border-gray-600">
+                                <span
+                                    class="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-[11px] font-semibold px-2 py-1 rounded-full border border-gray-200 dark:border-gray-600">
                                     <i class="fa-regular fa-clock"></i> {{ msg.metadata.performance?.total }}
                                 </span>
                             </div>
@@ -506,90 +510,114 @@
                 </div>
 
                 <!-- OCTOPIAI STYLE MODAL -->
-                <div v-if="showModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" @click.self="showModal = false">
-                    <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-700 transform transition-all scale-100">
-                        
+                <div v-if="showModal"
+                    class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
+                    @click.self="showModal = false">
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-700 transform transition-all scale-100">
+
                         <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start rounded-t-xl"
-                             :class="getHeaderClass(selectedModalData?.type)">
+                            :class="getHeaderClass(selectedModalData?.type)">
                             <div class="flex gap-4">
                                 <div class="w-10 h-10 rounded-lg flex items-center justify-center shadow-sm"
-                                     :class="getIconBgClass(selectedModalData?.type)">
+                                    :class="getIconBgClass(selectedModalData?.type)">
                                     <i class="text-lg" :class="getIconClass(selectedModalData?.type)"></i>
                                 </div>
                                 <div>
-                                    <h3 class="font-bold text-base text-gray-800 dark:text-gray-100">{{ selectedModalData?.title }}</h3>
+                                    <h3 class="font-bold text-base text-gray-800 dark:text-gray-100">{{
+                                        selectedModalData?.title }}</h3>
                                     <div class="flex items-center gap-2 mt-1">
                                         <span class="text-xs px-2 py-0.5 rounded uppercase font-semibold"
-                                              :class="getBadgeClass(selectedModalData?.type)">
+                                            :class="getBadgeClass(selectedModalData?.type)">
                                             {{ selectedModalData?.type || 'CONTENT' }}
                                         </span>
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="flex items-center gap-2">
-                                <button @click="showModal = false" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500 transition-colors">
+                                <button @click="showModal = false"
+                                    class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500 transition-colors">
                                     <i class="fa-solid fa-times"></i>
                                 </button>
                             </div>
                         </div>
 
                         <div class="flex-1 overflow-y-auto p-6 bg-white dark:bg-gray-900">
-                            
+
                             <div v-if="selectedModalData?.type === 'LOGIC'" class="space-y-6">
                                 <div>
-                                    <h4 class="text-xs font-bold text-purple-500 uppercase mb-2 tracking-wider"><i class="fa-solid fa-magnifying-glass"></i> Rephrased Query</h4>
-                                    <div class="bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-800 font-medium text-gray-700 dark:text-gray-200">
+                                    <h4 class="text-xs font-bold text-purple-500 uppercase mb-2 tracking-wider"><i
+                                            class="fa-solid fa-magnifying-glass"></i> Rephrased Query</h4>
+                                    <div
+                                        class="bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-800 font-medium text-gray-700 dark:text-gray-200">
                                         {{ selectedModalData.query || "No rephrasing performed (Direct Query)" }}
                                     </div>
                                 </div>
 
                                 <div>
-                                    <h4 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider flex items-center justify-between">
+                                    <h4
+                                        class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider flex items-center justify-between">
                                         <span><i class="fa-solid fa-history"></i> Relevant Conversation History</span>
-                                        <span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 rounded-full">{{ selectedModalData.history?.length || 0 }} turns</span>
+                                        <span class="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 rounded-full">{{
+                                            selectedModalData.history?.length || 0 }} turns</span>
                                     </h4>
-                                    
-                                    <div v-if="!selectedModalData.history || selectedModalData.history.length === 0" class="text-gray-400 italic text-sm text-center py-4 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+
+                                    <div v-if="!selectedModalData.history || selectedModalData.history.length === 0"
+                                        class="text-gray-400 italic text-sm text-center py-4 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
                                         No relevant history found.
                                     </div>
 
                                     <div v-else class="space-y-3">
-                                        <div v-for="(turn, idx) in selectedModalData.history" :key="idx" class="text-sm border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden">
-                                            <div class="bg-gray-50 dark:bg-gray-800 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 flex justify-between">
+                                        <div v-for="(turn, idx) in selectedModalData.history" :key="idx"
+                                            class="text-sm border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden">
+                                            <div
+                                                class="bg-gray-50 dark:bg-gray-800 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 flex justify-between">
                                                 <span>Turn {{ idx + 1 }}</span>
                                             </div>
-                                            <div class="p-3 bg-white dark:bg-gray-900 whitespace-pre-wrap font-mono text-xs text-gray-600 dark:text-gray-400">{{ turn.content }}</div>
+                                            <div
+                                                class="p-3 bg-white dark:bg-gray-900 whitespace-pre-wrap font-mono text-xs text-gray-600 dark:text-gray-400">
+                                                {{ turn.content }}</div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             <div v-else-if="selectedModalData?.type === 'CONTEXT'" class="space-y-6">
-                                 <div v-for="(chunk, idx) in selectedModalData.items" :key="idx" class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm">
-                                    <div class="bg-blue-50/50 dark:bg-blue-900/20 px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                <div v-for="(chunk, idx) in selectedModalData.items" :key="idx"
+                                    class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm">
+                                    <div
+                                        class="bg-blue-50/50 dark:bg-blue-900/20 px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                                         <div class="flex items-center gap-2">
                                             <i class="fa-regular fa-file-lines text-blue-500"></i>
-                                            <span class="font-bold text-sm text-gray-700 dark:text-gray-200">{{ chunk.source }}</span>
-                                            
-                                            <span v-if="chunk.score !== undefined" class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-200 dark:border-green-800 flex items-center gap-1">
+                                            <span class="font-bold text-sm text-gray-700 dark:text-gray-200">{{
+                                                chunk.source }}</span>
+
+                                            <span v-if="chunk.score !== undefined"
+                                                class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-200 dark:border-green-800 flex items-center gap-1">
                                                 <i class="fa-solid fa-bullseye text-[9px]"></i>
-                                                {{ typeof chunk.score === 'number' ? chunk.score.toFixed(2) : chunk.score }}
+                                                {{ typeof chunk.score === 'number' ? chunk.score.toFixed(2) :
+                                                chunk.score }}
                                             </span>
                                         </div>
-                                        <span class="text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded text-gray-500">Page {{ chunk.page || 'N/A' }}</span>
+                                        <span
+                                            class="text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded text-gray-500">Page
+                                            {{ chunk.page || 'N/A' }}</span>
                                     </div>
                                     <div class="p-3 bg-white dark:bg-gray-900">
-                                         <div class="markdown-body font-mono text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                                        <div
+                                            class="markdown-body font-mono text-xs leading-relaxed text-gray-600 dark:text-gray-400">
                                             {{ chunk.content }}
                                         </div>
                                     </div>
-                                 </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="p-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end items-center">
-                            <button @click="showModal = false" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-xs font-bold text-gray-600 dark:text-gray-300 transition-colors">Close</button>
+                        <div
+                            class="p-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-end items-center">
+                            <button @click="showModal = false"
+                                class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-xs font-bold text-gray-600 dark:text-gray-300 transition-colors">Close</button>
                         </div>
                     </div>
                 </div>
@@ -723,9 +751,9 @@
                             </div>
                             <div class="flex gap-3">
                                 <button @click="startCrawl"
-                                    class="flex-1 bg-asu-blue text-white py-3 rounded-xl font-bold hover:bg-blue-900 transition-all">Crawl Only</button>
-                                <button @click="startCrawlAndIngest"
-                                    :disabled="crawlAndIngestRunning"
+                                    class="flex-1 bg-asu-blue text-white py-3 rounded-xl font-bold hover:bg-blue-900 transition-all">Crawl
+                                    Only</button>
+                                <button @click="startCrawlAndIngest" :disabled="crawlAndIngestRunning"
                                     :class="crawlAndIngestRunning ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'"
                                     class="flex-1 text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
                                     <i v-if="crawlAndIngestRunning" class="fas fa-circle-notch fa-spin"></i>
@@ -749,7 +777,8 @@
                             </span>
                         </h3>
                         <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Ingest downloaded files from the
-                            downloads folder into the RAG system. Use <strong>Crawl & Ingest</strong> above to crawl a URL and ingest in one step, or crawl first then click here.</p>
+                            downloads folder into the RAG system. Use <strong>Crawl & Ingest</strong> above to crawl a
+                            URL and ingest in one step, or crawl first then click here.</p>
 
                         <div v-if="offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running'"
                             class="mb-4">
@@ -775,8 +804,7 @@
                             {{ offlineIngestStatus.status === 'processing' || offlineIngestStatus.status === 'running' ?
                             'Ingesting...' : 'Ingest Downloaded Files' }}
                         </button>
-                        <button @click="startOfflineIngestStream"
-                            :disabled="offlineIngestStreamRunning"
+                        <button @click="startOfflineIngestStream" :disabled="offlineIngestStreamRunning"
                             :class="offlineIngestStreamRunning ? 'bg-gray-400' : 'bg-gray-600 hover:bg-gray-700'"
                             class="w-full text-white py-2 rounded-xl font-medium transition-all flex items-center justify-center gap-2 mt-2">
                             <i v-if="offlineIngestStreamRunning" class="fas fa-circle-notch fa-spin"></i>
@@ -786,7 +814,8 @@
                     <div
                         class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
                         <div v-for="log in ingestionLogs.crawler" class="py-0.5">> {{ log }}</div>
-                        <div v-if="ingestionLogs.crawler.length === 0">> Crawl, offline web ingest, and crawl-and-ingest logs appear here.</div>
+                        <div v-if="ingestionLogs.crawler.length === 0">> Crawl, offline web ingest, and crawl-and-ingest
+                            logs appear here.</div>
                     </div>
                 </div>
             </div>
@@ -2000,8 +2029,30 @@
 
                 async function wipeAllData() {
                     if (await requestConfirm("Wipe All Data?", "This will permanently delete ALL indexed data and reset the system. This cannot be undone.")) {
-                        await fetch(`${API_BASE}/resources/reset`, { method: 'POST' });
-                        location.reload();
+                        try {
+                            await fetch(`${API_BASE}/resources/reset`, { method: 'POST' });
+
+                            // Soft Reset: Clear Vue State instead of location.reload()
+                            messages.value = [];
+                            currentSessionId.value = null;
+                            pendingFiles.value = [];
+                            resourceList.value = [];
+                            indexStats.value = { total_chunks: 0, sources_count: 0, last_updated: null };
+                            ingestionLogs.pdf = [];
+                            ingestionLogs.web = [];
+                            ingestionLogs.crawler = [];
+                            offlineIngestStatus.value = { status: 'idle', current_batch: 0, total_batches: 0, message: '' };
+
+                            // Re-fetch clean data
+                            await loadCurrentConfig();
+                            await fetchResources();
+                            if (currentView.value === 'view-db') await fetchSchemas();
+
+                            showNotification("System reset successfully!");
+                        } catch (e) {
+                            console.error("Reset failed:", e);
+                            showNotification("Reset failed. Please check server logs.", "error");
+                        }
                     }
                 }
 
