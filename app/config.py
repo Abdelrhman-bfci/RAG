@@ -182,10 +182,16 @@ class Config:
                     else:
                         setattr(Config, key, value)
                     
-        with open(env_path, "w") as f:
-            f.writelines(new_lines)
-            
-        return True
+        try:
+            with open(env_path, "w") as f:
+                f.writelines(new_lines)
+            return True
+        except PermissionError:
+            print(f"WARNING: Permission denied when writing to {env_path}. Settings not saved to disk.")
+            return False
+        except Exception as e:
+            print(f"ERROR: Failed to update {env_path}: {e}")
+            return False
 
     @classmethod
     def update_model(cls, model_name: str):
