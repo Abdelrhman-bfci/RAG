@@ -14,6 +14,7 @@ from app.config import Config
 from app.vectorstore.factory import VectorStoreFactory
 import pymupdf4llm
 STATUS_FILE = "web_ingestion_status.json"
+TRACKING_FILE = "web_ingested_links.json" # Legacy tracking file for main.py compatibility
 DOWNLOAD_FOLDER = Config.DOWNLOAD_FOLDER
 
 import sqlite3
