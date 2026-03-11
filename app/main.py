@@ -551,17 +551,19 @@ async def reset_all_resources():
     Wipe all ingested data and reset the system.
     """
     # 1. Clear PDFs and uploaded resources recursively
-    if os.path.exists(Config.RESOURCE_DIR):
-        print(f"Clearing resource directory: {Config.RESOURCE_DIR}")
-        for item in os.listdir(Config.RESOURCE_DIR):
-            item_path = os.path.join(Config.RESOURCE_DIR, item)
-            try:
-                if os.path.isfile(item_path) or os.path.islink(item_path):
-                    os.unlink(item_path)
-                elif os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-            except Exception as e:
-                print(f"Error deleting {item_path}: {e}")
+    dirs_to_clear = [Config.RESOURCE_DIR, Config.DOWNLOAD_FOLDER]
+    for target_dir in dirs_to_clear:
+        if target_dir and os.path.exists(target_dir):
+            print(f"Clearing directory: {target_dir}")
+            for item in os.listdir(target_dir):
+                item_path = os.path.join(target_dir, item)
+                try:
+                    if os.path.isfile(item_path) or os.path.islink(item_path):
+                        os.unlink(item_path)
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                except Exception as e:
+                    print(f"Error deleting {item_path}: {e}")
     
     # 2. Clear Tracking JSON Files (including /tmp)
     tracking_files = [
@@ -609,11 +611,19 @@ async def reset_all_resources():
     except Exception as e:
         print(f"Error during folder purging: {e}")
     
-    # 5. Reset Ingested Files SQL Table (Offline Ingestion)
+    # 5. Reset Ingested Files SQL Table & Delete Crawler DB
     try:
         from app.ingestion.offline_web_ingest import reset_crawled_ingestion_status
         reset_crawled_ingestion_status(full_wipe=True)
-        print("Wiped ingested_files tracking table.")
+        print("Wiped ingested_files tracking table via SQL.")
+        
+        # Hard wipe of the database file itself to clear schema/WAL files
+        if os.path.exists(Config.CRAWLER_DB):
+            try:
+                os.remove(Config.CRAWLER_DB)
+                print(f"Deleted crawler database file: {Config.CRAWLER_DB}")
+            except Exception as db_e:
+                print(f"Could not delete database file: {db_e}")
     except Exception as e:
         print(f"Error resetting crawled status: {e}")
         
