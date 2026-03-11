@@ -527,6 +527,12 @@ def reset_crawled_ingestion_status(full_wipe: bool = True):
     
     if full_wipe:
         cursor.execute('DELETE FROM ingested_files')
+        cursor.execute('DELETE FROM ingestion_status')
+        # Re-initialize default status
+        cursor.execute('''
+            INSERT OR IGNORE INTO ingestion_status (id, status, current_batch, total_batches, message, timestamp, eta_seconds)
+            VALUES (1, 'idle', 0, 0, '', 0, NULL)
+        ''')
         resources = [] # No specific resources to return if wiped
     else:
         # 1. Get resources and chunks count > 0

@@ -550,24 +550,31 @@ async def reset_all_resources():
     """
     Wipe all ingested data and reset the system.
     """
-    # 1. Clear PDFs and uploaded resources
+    # 1. Clear PDFs and uploaded resources recursively
     if os.path.exists(Config.RESOURCE_DIR):
-        for f in os.listdir(Config.RESOURCE_DIR):
-            path = os.path.join(Config.RESOURCE_DIR, f)
-            if os.path.isfile(path):
-                try:
-                    os.remove(path)
-                except: pass
+        print(f"Clearing resource directory: {Config.RESOURCE_DIR}")
+        for item in os.listdir(Config.RESOURCE_DIR):
+            item_path = os.path.join(Config.RESOURCE_DIR, item)
+            try:
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    os.unlink(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+            except Exception as e:
+                print(f"Error deleting {item_path}: {e}")
     
-    # 2. Clear Tracking JSON Files
+    # 2. Clear Tracking JSON Files (including /tmp)
     tracking_files = [
         DOC_TRACKING, WEB_TRACKING, DB_TRACKING, 
-        "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json"
+        "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json",
+        "/tmp/ingested_files_v2.json", "/tmp/ingestion_status_v2.json",
+        "web_ingested_links.json"
     ]
     for tracking in tracking_files:
         if os.path.exists(tracking):
             try:
                 os.remove(tracking)
+                print(f"Removed tracking file: {tracking}")
             except: pass
             
     # 3. Reset Config Tables
@@ -576,24 +583,31 @@ async def reset_all_resources():
     # 4. Clear Vector Store (Thorough cleanup)
     from app.vectorstore.factory import VectorStoreFactory
     try:
-        # Wipe current used store
+        # Wipe current used store instance
         store = VectorStoreFactory.get_instance()
         store.clear_all()
-        print("Cleared current vector store.")
+        print("Cleared current vector store via provider.")
     except Exception as e:
         print(f"Error clearing current vector store: {e}")
 
-    # Wipe ALL potential physical storage folders to be sure
-    storage_folders = [
-        "chroma_db", "faiss_index", "faiss_index_v2", "faiss_index_v3"
-    ]
-    for folder in storage_folders:
-        if os.path.exists(folder):
-            try:
-                shutil.rmtree(folder)
-                print(f"Purged: {folder}")
-            except Exception as e:
-                print(f"Failed to purge {folder}: {e}")
+    # Wipe ALL potential physical storage folders dynamically
+    # We look for prefixes 'faiss_index' and 'chroma_db' in the current directory
+    try:
+        current_dirs = [d for d in os.listdir('.') if os.path.isdir(d)]
+        for folder in current_dirs:
+            if folder.startswith(("faiss_index", "chroma_db")):
+                try:
+                    shutil.rmtree(folder)
+                    print(f"Purged storage folder: {folder}")
+                except Exception as e:
+                    print(f"Failed to purge {folder}: {e}")
+        
+        # Also check the VECTOR_DB_PATH specifically if it's not in the current dir list
+        if os.path.exists(Config.VECTOR_DB_PATH) and os.path.isdir(Config.VECTOR_DB_PATH):
+             shutil.rmtree(Config.VECTOR_DB_PATH)
+             print(f"Purged VECTOR_DB_PATH: {Config.VECTOR_DB_PATH}")
+    except Exception as e:
+        print(f"Error during folder purging: {e}")
     
     # 5. Reset Ingested Files SQL Table (Offline Ingestion)
     try:
