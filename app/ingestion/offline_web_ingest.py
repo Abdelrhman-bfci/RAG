@@ -495,10 +495,14 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                         if msg: yield msg
                     else:
                         store.delete_source(source_url)
-                        if vectorstore:
-                            vectorstore.add_documents(chunks)
-                        else:
-                            vectorstore = store.add_documents(chunks)
+                        # Batch implementation for Chroma compatibility
+                        batch_size = 100
+                        for j in range(0, len(chunks), batch_size):
+                            batch = chunks[j:j + batch_size]
+                            if vectorstore:
+                                vectorstore.add_documents(batch)
+                            else:
+                                vectorstore = store.add_documents(batch)
                         bulk_data_buffer.append((source_url, filename, len(chunks)))
                         processed_count += 1
                         msg = _log(f"  -> Indexed {len(chunks)} chunks.\n")

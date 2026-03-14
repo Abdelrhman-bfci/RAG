@@ -364,10 +364,14 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                             # Clean old chunks first
                             store_vs.delete_source(current_url)
                             
-                            if vectorstore:
-                                vectorstore.add_documents(chunks)
-                            else:
-                                vectorstore = store_vs.add_documents(chunks)
+                            # Batch to avoid ChromaDB size limits
+                            batch_size = 100
+                            for j in range(0, len(chunks), batch_size):
+                                batch = chunks[j:j + batch_size]
+                                if vectorstore:
+                                    vectorstore.add_documents(batch)
+                                else:
+                                    vectorstore = store_vs.add_documents(batch)
                             
                             # Update chunk count
                             meta = store.get_page(current_url)
@@ -397,10 +401,14 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                                 yield f"  -> Indexing {len(chunks)} PDF chunks...\n"
                                 store_vs.delete_source(current_url)
                                 
-                                if vectorstore:
-                                    vectorstore.add_documents(chunks)
-                                else:
-                                    vectorstore = store_vs.add_documents(chunks)
+                                # Batch to avoid ChromaDB size limits
+                                batch_size = 100
+                                for j in range(0, len(chunks), batch_size):
+                                    batch = chunks[j:j + batch_size]
+                                    if vectorstore:
+                                        vectorstore.add_documents(batch)
+                                    else:
+                                        vectorstore = store_vs.add_documents(batch)
                                 
                                 # Update chunk count
                                 meta = store.get_page(current_url)
