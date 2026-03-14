@@ -551,19 +551,19 @@ async def reset_all_resources():
     Wipe all ingested data and reset the system.
     """
     # 1. Clear PDFs and uploaded resources recursively
-    dirs_to_clear = [Config.RESOURCE_DIR, Config.DOWNLOAD_FOLDER]
-    for target_dir in dirs_to_clear:
-        if target_dir and os.path.exists(target_dir):
-            print(f"Clearing directory: {target_dir}")
-            for item in os.listdir(target_dir):
-                item_path = os.path.join(target_dir, item)
-                try:
-                    if os.path.isfile(item_path) or os.path.islink(item_path):
-                        os.unlink(item_path)
-                    elif os.path.isdir(item_path):
-                        shutil.rmtree(item_path)
-                except Exception as e:
-                    print(f"Error deleting {item_path}: {e}")
+    # dirs_to_clear = [Config.RESOURCE_DIR, Config.DOWNLOAD_FOLDER]
+    # for target_dir in dirs_to_clear:
+    #     if target_dir and os.path.exists(target_dir):
+    #         print(f"Clearing directory: {target_dir}")
+    #         for item in os.listdir(target_dir):
+    #             item_path = os.path.join(target_dir, item)
+    #             try:
+    #                 if os.path.isfile(item_path) or os.path.islink(item_path):
+    #                     os.unlink(item_path)
+    #                 elif os.path.isdir(item_path):
+    #                     shutil.rmtree(item_path)
+    #             except Exception as e:
+    #                 print(f"Error deleting {item_path}: {e}")
     
     # 2. Clear Tracking JSON Files (including /tmp)
     tracking_files = [
