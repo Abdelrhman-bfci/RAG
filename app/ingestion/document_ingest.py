@@ -9,7 +9,10 @@ from langchain_community.document_loaders import (
     CSVLoader, 
     UnstructuredExcelLoader
 )
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import (
+    RecursiveCharacterTextSplitter,
+    MarkdownHeaderTextSplitter
+)
 from app.config import Config
 from app.vectorstore.factory import VectorStoreFactory
 from langchain_core.documents import Document
@@ -26,6 +29,26 @@ def enrich_chunks_with_metadata(chunks):
         by_source[src] = idx + 1
         if "page" not in doc.metadata or doc.metadata["page"] is None:
             doc.metadata["page"] = 0
+            
+    # Grounding: Inject metadata into page_content to help LLM
+    for doc in chunks:
+        source = doc.metadata.get("source", "Unknown")
+        basename = os.path.basename(source)
+        page = doc.metadata.get("page", 0)
+        
+        # Build section path if headers exist (from MD splitting)
+        h1 = doc.metadata.get("Header 1", "")
+        h2 = doc.metadata.get("Header 2", "")
+        h3 = doc.metadata.get("Header 3", "")
+        sections = " > ".join(filter(None, [h1, h2, h3]))
+        
+        header = f"--- Source: {basename} (Page {page}) ---\n"
+        if sections:
+            header += f"Section: {sections}\n"
+        header += "---\n\n"
+        
+        doc.page_content = header + doc.page_content
+        
     return chunks
 
 # File paths for saving ingestion status
@@ -168,16 +191,32 @@ def ingest_documents(force_fresh: bool = False):
 
     yield f"Splitting {len(new_documents)} items into chunks...\n"
     update_status("running", message="Splitting documents...")
-    text_splitter = RecursiveCharacterTextSplitter(
+    
+    # Advanced splitting logic inspired by chatbot/rag.py
+    headers_to_split_on = [("#", "Header 1"), ("##", "Header 2"), ("###", "Header 3")]
+    markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+    recursive_splitter = RecursiveCharacterTextSplitter(
         chunk_size=Config.CHUNK_SIZE,
         chunk_overlap=Config.CHUNK_OVERLAP,
         separators=["\n\n", "\n", " ", "", "---", "##", "#"] 
     )
     
-    splitted_docs = text_splitter.split_documents(new_documents)
+    splitted_docs = []
+    for doc in new_documents:
+        source = doc.metadata.get("source", "").lower()
+        if source.endswith(('.md', '.markdown')):
+            # First split by headers
+            header_splits = markdown_splitter.split_text(doc.page_content)
+            # Then sub-split large sections recursively 
+            for split in header_splits:
+                split.metadata.update(doc.metadata)
+                splitted_docs.extend(recursive_splitter.split_documents([split]))
+        else:
+            splitted_docs.extend(recursive_splitter.split_documents([doc]))
+
     splitted_docs = enrich_chunks_with_metadata(splitted_docs)
     total_chunks = len(splitted_docs)
-    yield f"Generated {total_chunks} new chunks. Starting vectorization...\n"
+    yield f"Generated {total_chunks} new chunks (with metadata grounding). Starting vectorization...\n"
 
     # Create/Load vectorstore
     vectorstore_instance = VectorStoreFactory.get_instance()

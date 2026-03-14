@@ -122,3 +122,6 @@ yarl>=1.9.4
 zstandard>=0.23.0
 chromadb
 langchain-chroma
+sentence-transformers
+lancedb
+langchain-huggingface

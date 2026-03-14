@@ -48,7 +48,7 @@ class ChromaStore:
         
         if is_nomic:
             self.embeddings = NomicPrefixWrapper(base_embeddings)
-            print("DEBUG: Using NomicPrefixWrapper for Chroma")
+            print("DEBUG: Using NomicPrefixWrapper for Chroma (search_document/query prefixes)")
         else:
             self.embeddings = base_embeddings
         

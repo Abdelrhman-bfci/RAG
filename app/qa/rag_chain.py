@@ -192,6 +192,17 @@ Standalone Question:
     else:
         print(f"DEBUG: LLM successfully initialized as {type(llm).__name__}")
 
+    # 3. Initialize Shared Re-Ranker if enabled
+    global _shared_reranker
+    if Config.USE_RERANKER and _shared_reranker is None:
+        try:
+            from sentence_transformers import CrossEncoder
+            print(f"DEBUG: Loading Shared Re-Ranker '{Config.RERANKER_MODEL}'...")
+            _shared_reranker = CrossEncoder(Config.RERANKER_MODEL, max_length=512)
+        except Exception as e:
+            print(f"DEBUG: Failed to load reranker: {e}")
+            _shared_reranker = None
+
     # 3. Initialize Retriever
     # Advanced Hybrid Retrieval matching Octopiai exactly
     class AdvancedHybridRetriever:
@@ -213,12 +224,19 @@ Standalone Question:
                 if not isinstance(query, str):
                     query = str(query)
                 
-                # 1. Broad vector search
-                k_search = 50 if Config.USE_RERANKER else 100
-                initial_docs = self.vectorstore.similarity_search(query, k=k_search)
+                # 1. Broad MMR search (Initial pool) - matching chatbot's diversity strategy
+                k_search = 100 if Config.USE_RERANKER else 50
+                try:
+                    initial_docs = self.vectorstore.max_marginal_relevance_search(
+                        query, k=k_search, fetch_k=k_search*2, lambda_mult=0.5
+                    )
+                except Exception as e:
+                    print(f"DEBUG: Vector store does not support MMR, falling back to similarity search: {e}")
+                    initial_docs = self.vectorstore.similarity_search(query, k=k_search)
                 
                 # Merge in session history if available
                 if self.history_retriever:
+                    # History retrieval uses simple similarity usually
                     hist_docs = self.history_retriever.invoke(query)
                     if hist_docs:
                         for d in hist_docs:
@@ -255,7 +273,10 @@ Standalone Question:
                 
                 # Sort by highest score - add defensive check for metadata existence
                 ranked_candidates.sort(key=lambda x: x.metadata.get("score", 0) if isinstance(x.metadata, dict) else 0, reverse=True)
-                return ranked_candidates[:Config.LLM_K_FINAL]
+                
+                # Filter by threshold after retrieval as well to ensure quality
+                final_docs = [d for d in ranked_candidates if d.metadata.get("score", 0) >= Config.RERANKER_THRESHOLD]
+                return final_docs[:Config.LLM_K_FINAL]
             else:
                 # 2b. Fallback: Extract priority terms exactly like old logic
                 keywords = [w.lower() for w in query.split() if len(w) > 3]
@@ -296,14 +317,43 @@ Standalone Question:
 
     # 4. Construct the Chain (Matching Octopiai entirely)
     def format_docs(docs):
-        # Simply return docs as ranked by retriever
-        sorted_docs = docs
-        
+        # Master formatter matching chatbot/_format_documents
+        import sqlite3
+        conn = None
+        if os.path.exists(Config.CRAWLER_DB):
+            try:
+                conn = sqlite3.connect(Config.CRAWLER_DB)
+            except:
+                pass
+
+        def get_url(source):
+            if not conn: return "#"
+            try:
+                cursor = conn.cursor()
+                # Try absolute path matching or basename matching
+                basename = os.path.basename(source)
+                cursor.execute("SELECT url FROM pages WHERE filename = ? OR filename = ? LIMIT 1", (source, basename))
+                row = cursor.fetchone()
+                return row[0] if row else "#"
+            except:
+                return "#"
+
         context_parts = []
-        for i, doc in enumerate(sorted_docs):
-            context_parts.append(f"--- Document Chunk {i+1} ---\n{doc.page_content}")
+        for doc in docs:
+            source = doc.metadata.get("source", "Unknown")
+            page = doc.metadata.get("page", "?")
+            url = get_url(source) if source != "Chat History" else "#"
+            
+            # Clean "search_document:" prefix if using NomicWrapper
+            content = doc.page_content.replace("search_document: ", "")
+            
+            context_parts.append(
+                f"CONTENT: {content}\n"
+                f"METADATA: Source: {os.path.basename(source)}, Page: {page}, URL: {url}"
+            )
         
-        return "\n\n".join(context_parts)
+        if conn: conn.close()
+        return "\n\n---\n\n".join(context_parts)
 
     def process_history():
         # Octopiai passes history as a distinct variable block rather than prepending 
@@ -496,7 +546,9 @@ def stream_answer(question: str, deep_thinking: bool = False, is_continuation: b
             "performance": performance,
             "tokens": estimated_tokens,
             "model": current_model,
-            "used_docs": used_docs
+            "chunks": used_docs, # Renamed to match frontend
+            "search_query": question, # Standalone query
+            "history": conversation_history or [] # Raw history for trace
         }) + "\n"
         
         yield json.dumps({"type": "done"}) + "\n"

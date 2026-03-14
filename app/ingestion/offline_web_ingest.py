@@ -9,12 +9,9 @@ import trafilatura
 from bs4 import BeautifulSoup
 import pymupdf4llm
 from langchain_community.document_loaders import (
-    CSVLoader,
-    UnstructuredExcelLoader,
-    PyMuPDFLoader,
-    Docx2txtLoader,
     TextLoader,
 )
+from langchain_community.document_transformers import Html2TextTransformer
 
 METADATA_DB = Config.CRAWLER_DB
 DOWNLOAD_FOLDER = Config.DOWNLOAD_FOLDER
@@ -376,32 +373,72 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
             docs = []
             ext = os.path.splitext(file_path)[1].lower()
             
-            # --- HTML Processing ---
+            # --- HTML Processing (Matched with chatbot/loaders/html_loader.py) ---
             if ext == ".html":
-                with open(file_path, "rb") as f:
-                    content = f.read()
-                
-                # HTML Parse Logic (Reusing web_ingest)
-                soup = BeautifulSoup(content, 'html.parser')
-                title = soup.title.string if soup.title else "Untitled Page"
-                text_content = trafilatura.extract(content, output_format='markdown', include_tables=True)
-                if not text_content:
-                    text_content = soup.get_text(separator='\n\n')
-                
-                if text_content and len(text_content.strip()) > MIN_HTML_CONTENT_LENGTH:
-                    readme_content = f"# {title}\n\n"
-                    readme_content += f"**Source:** {source_url}\n"
-                    readme_content += f"**Ingestion Date:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                    readme_content += "---\n\n"
+                try:
+                    loader = TextLoader(file_path, encoding='utf-8')
+                    raw_docs = loader.load()
                     
-                    # Add Slider Content if found
-                    slider_text = extract_slider_text(soup)
-                    if slider_text:
-                        readme_content += "## Slider Content\n"
-                        readme_content += slider_text + "\n\n---\n\n"
-                    
-                    readme_content += text_content
-                    docs = [Document(page_content=readme_content, metadata={"source": source_url})]
+                    filtered_docs = []
+                    for doc in raw_docs:
+                        soup = BeautifulSoup(doc.page_content, 'html.parser')
+                        
+                        # 1. Extract Global Context
+                        browser_title = soup.title.get_text(strip=True) if soup.title else ""
+                        
+                        page_header = ""
+                        header_div = soup.find(class_="page-title-heading")
+                        if header_div:
+                            page_header = header_div.get_text(strip=True)
+                            
+                        breadcrumbs = ""
+                        bread_div = soup.find(class_="breadcrumb-wrapper")
+                        if bread_div:
+                            crumbs = [t.get_text(strip=True) for t in bread_div.find_all('a')] + \
+                                     [t.get_text(strip=True) for t in bread_div.find_all('span', class_='current')]
+                            breadcrumbs = " > ".join(crumbs)
+
+                        context_header = (
+                            f"### Document Context\n"
+                            f"**Source Page:** {browser_title}\n"
+                            f"**Section/Department:** {page_header}\n"
+                            f"**Path:** {breadcrumbs}\n"
+                            f"---\n"
+                        )
+
+                        # 2. Isolate Main Content
+                        target_tag = soup.find(attrs={"id": "site-main"}) or soup.find(class_="site-main") or soup.find(class_="main-content")
+
+                        if target_tag:
+                            doc.page_content = str(target_tag)
+                            doc.metadata["context_header"] = context_header
+                            doc.metadata["page_title"] = page_header or browser_title
+                            filtered_docs.append(doc)
+                        else:
+                            # Fallback to trafilatura if specific tags aren't found
+                            text_content = trafilatura.extract(doc.page_content, output_format='markdown', include_tables=True)
+                            if text_content:
+                                doc.page_content = text_content
+                                doc.metadata["context_header"] = context_header
+                                filtered_docs.append(doc)
+
+                    if filtered_docs:
+                        # 3. Convert to Markdown
+                        html2text = Html2TextTransformer()
+                        transformed_docs = html2text.transform_documents(filtered_docs)
+                        
+                        # 4. Final Metadata Cleanup & Grounding
+                        for d in transformed_docs:
+                            # Prepend the context header for better LLM grounding
+                            grounded_content = d.metadata.get("context_header", "") + d.page_content
+                            d.page_content = grounded_content
+                            d.metadata["source"] = source_url
+                            d.metadata["page"] = "Web"
+                            d.metadata["title"] = d.metadata.get("page_title", filename)
+                            docs.append(d)
+                except Exception as e:
+                    msg = _log(f"  -> HTML Loader Error: {e}. Falling back to basic...\n")
+                    if msg: yield msg
 
             # --- PDF Processing ---
             elif ext == ".pdf":
