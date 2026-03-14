@@ -589,6 +589,7 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                     else:
                         # Remove old chunks for this source before adding new ones
                         store.delete_source(source_url)
+<<<<<<< HEAD
                         
                         # Batch implementation for Chroma compatibility
                         batch_size = 100
@@ -618,6 +619,20 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                 else:
                     msg = _log(f"  -> Skipped: No chunks generated after quality filtering ({filename})\n")
                     if msg: yield msg
+=======
+                        # Batch implementation for Chroma compatibility
+                        batch_size = 100
+                        for j in range(0, len(chunks), batch_size):
+                            batch = chunks[j:j + batch_size]
+                            if vectorstore:
+                                vectorstore.add_documents(batch)
+                            else:
+                                vectorstore = store.add_documents(batch)
+                        bulk_data_buffer.append((source_url, filename, len(chunks)))
+                        processed_count += 1
+                        msg = _log(f"  -> Indexed {len(chunks)} chunks.\n")
+                        if msg: yield msg
+>>>>>>> f7f3252 (fix: Batch document additions to the vector store to avoid ChromaDB size limits and improve compatibility.)
             
             # Periodically commit status, file tracking, and FAISS checkpoint
             if (i + 1) % 10 == 0 or (i + 1) == total_files:
