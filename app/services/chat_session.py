@@ -102,6 +102,8 @@ def format_history_for_prompt(history: List[Dict[str, str]]) -> str:
         role_raw = msg.get("role", "user")
         role = "User" if role_raw == "user" else "Assistant"
         content = msg.get("content", "")
+        if not content:
+            continue
         formatted += f"{role}: {content}\n\n"
     
     return formatted

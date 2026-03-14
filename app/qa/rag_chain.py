@@ -229,6 +229,12 @@ Standalone Question:
                 print(f"Retrieval error: {e}")
                 return []
             
+            # Defensive check: ensure all docs have dictionary metadata
+            for doc in initial_docs:
+                if not isinstance(doc.metadata, dict):
+                    print(f"DEBUG: Repairing malformed metadata for document: {getattr(doc, 'metadata', 'N/A')}")
+                    doc.metadata = {"source": "Unknown", "repair_flag": True}
+            
             if not initial_docs:
                 return []
                 
@@ -242,11 +248,13 @@ Standalone Question:
                     score = float(scores[i])
                     if score < Config.RERANKER_THRESHOLD:
                         continue
-                    doc.metadata["score"] = score
+                    
+                    if isinstance(doc.metadata, dict):
+                        doc.metadata["score"] = score
                     ranked_candidates.append(doc)
                 
-                # Sort by highest score
-                ranked_candidates.sort(key=lambda x: x.metadata["score"], reverse=True)
+                # Sort by highest score - add defensive check for metadata existence
+                ranked_candidates.sort(key=lambda x: x.metadata.get("score", 0) if isinstance(x.metadata, dict) else 0, reverse=True)
                 return ranked_candidates[:Config.LLM_K_FINAL]
             else:
                 # 2b. Fallback: Extract priority terms exactly like old logic
@@ -263,6 +271,9 @@ Standalone Question:
                         continue
                     seen_chunk_ids.add(chunk_id)
                     
+                    if not isinstance(d.metadata, dict):
+                        d.metadata = {"source": "Unknown"}
+                        
                     content_lower = d.page_content.lower()
                     source = d.metadata.get("source", "").lower()
                     
