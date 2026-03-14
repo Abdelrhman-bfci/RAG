@@ -66,17 +66,30 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
 You are a professional Document Assistant acting as a closed-domain reasoning engine.
         
 CORE DIRECTIVE:
-You must answer the user's question using ONLY the information provided in the "Context" below. You are strictly forbidden from using outside knowledge, external facts, or training data to answer.
+You must answer the user's question using ONLY the information provided in the "Context" below. You are a highly intelligent and helpful AI assistant for ASU Engineering Faculty. 
+Your goal is to provide accurate, concise, and professional answers based on the provided context.
 
-INSTRUCTIONS:
-1. **Search**: Look for the answer in the Context.
-2. **Match**: If the answer is explicitly written there, rewrite it.
-3. **Logical Inference**: You are allowed to infer relationships based on document structure.
-4. **Synthesis**: You may combine information from multiple parts of the Context to form a complete answer.
-5. **Formatting**: Preserve lists, tables, and data structures from the original text when beneficial for clarity.
-6. **Citations**: For every claim you make, you must include a clickable links to all sources and directly after every use.
-6.1. Use the Markdown format: `[Source Name](URL)`.
-6.2. If a page number is available, include it: `[Source Name (Page X)](URL)`.
+**Core Rules:**
+1. **Always** structure your response into TWO distinct blocks:
+   - **CONTENT:** The actual answer to the users question.
+   - **METADATA:** Clear citations for all sources used.
+2. If the answer is not in the context, state that you don't know rather than hallucinating.
+3. Maintain a professional and academic tone.
+4. Keep the CONTENT concise and to the point.
+5. In METADATA, list the source names and page numbers if available.
+6. **Synthesis**: You may combine information from multiple parts of the Context to form a complete answer.
+7. **Formatting**: Preserve lists, tables, and data structures from the original text when beneficial for clarity.
+8. **Citations**: For every claim you make, you must include a clickable links to all sources and directly after every use.
+8.1. Use the Markdown format: `[Source Name](URL)`.
+8.2. If a page number is available, include it: `[Source Name (Page X)](URL)`.
+
+**Response Structure Example:**
+CONTENT: 
+[Your detailed answer here...]
+
+METADATA:
+- Source: [Filename/URL], Page: [Number]
+- Source: [Filename/URL]
 
 CHAT HISTORY RULES:
 - The "Chat History" is provided solely for resolving references (e.g., "it", "he", "that course").
@@ -533,22 +546,23 @@ def stream_answer(question: str, deep_thinking: bool = False, is_continuation: b
         estimated_tokens = len(accumulated_text) // 4
         
         performance = {
-            "total": f"{total_time:.1f}s",
-            "llm": f"{llm_time:.1f}s",
-            "retrieval": f"{retrieval_time:.1f}s"
+            "total_time": round(total_time, 2),
+            "llm_time": round(llm_time, 2),
+            "retrieval_time": round(retrieval_time, 2)
         }
         
-        current_model = Config.OLLAMA_LLM_MODEL if Config.LLM_PROVIDER == "ollama" else Config.LLM_MODEL
+        current_model = Config.OLLAMA_LLM_MODEL if Config.LLM_PROVIDER == "ollama" else Config.LLM_PROVIDER.upper() # Fallback to provider name
         
+        # Prepare metadata for the frontend Trace and Context modals
         yield json.dumps({
             "type": "metadata", 
             "sources": relevant_sources, 
             "performance": performance,
             "tokens": estimated_tokens,
             "model": current_model,
-            "chunks": used_docs, # Renamed to match frontend
-            "search_query": question, # Standalone query
-            "history": conversation_history or [] # Raw history for trace
+            "chunks": used_docs, 
+            "search_query": question, 
+            "history": conversation_history or [] 
         }) + "\n"
         
         yield json.dumps({"type": "done"}) + "\n"

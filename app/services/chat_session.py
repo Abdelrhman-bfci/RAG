@@ -40,6 +40,9 @@ def add_message(session_id: str, role: str, content: str):
     
     timestamp = time.time()
     
+    if not isinstance(content, str):
+        content = str(content)
+        
     _sessions[session_id]["messages"].append({
         "role": role,
         "content": content,
