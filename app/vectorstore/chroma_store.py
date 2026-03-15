@@ -1,7 +1,6 @@
 import os
 import shutil
 import chromadb
-from chromadb.config import Settings
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
@@ -58,14 +57,9 @@ class ChromaStore:
         self.collection_name = Config.CHROMA_COLLECTION_NAME
 
     def get_vectorstore(self):
-        """Initialize and return the Chroma vector store using explicit Settings to bypass tenant validation issues."""
+        """Initialize and return the Chroma vector store using PersistentClient (chromadb>=0.5)."""
         os.makedirs(self.persist_directory, exist_ok=True)
-        client_settings = Settings(
-            is_persistent=True,
-            persist_directory=self.persist_directory,
-            anonymized_telemetry=False,
-        )
-        client = chromadb.Client(client_settings)
+        client = chromadb.PersistentClient(path=self.persist_directory)
         return Chroma(
             client=client,
             collection_name=self.collection_name,
