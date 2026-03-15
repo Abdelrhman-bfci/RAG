@@ -2,9 +2,9 @@ import os
 import time
 import sqlite3
 from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import Config
 from app.vectorstore.factory import VectorStoreFactory
+from app.ingestion.ingestion import process_documents
 import trafilatura
 from bs4 import BeautifulSoup
 import pymupdf4llm
@@ -270,13 +270,12 @@ def load_text_file_with_encoding_fallback(file_path: str, source_url: str):
     return []
 
 
-def enrich_chunks_metadata(chunks, default_page=0):
-    """Add chunk index and page to each chunk for citations and context expansion."""
-    for i, doc in enumerate(chunks):
-        doc.metadata["chunk"] = i
-        if "page" not in doc.metadata or doc.metadata["page"] is None:
-            doc.metadata["page"] = default_page
-    return chunks
+def _ensure_gold_metadata(doc: Document, source_url: str, filename: str, page_title: str = None):
+    """Ensure document has metadata required by gold-standard process_documents pipeline."""
+    doc.metadata.setdefault("source", source_url)
+    doc.metadata.setdefault("page_title", page_title or filename)
+    if "page" not in doc.metadata or doc.metadata["page"] is None:
+        doc.metadata["page"] = 0
 
 def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
     """
@@ -335,12 +334,6 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
     total_files = len(all_files)
     start_time = time.time()
     
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=Config.CHUNK_SIZE,
-        chunk_overlap=Config.CHUNK_OVERLAP,
-        separators=["\n\n", "\n", " ", "", "---", "##", "#"]
-    )
-
     conn = sqlite3.connect(METADATA_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
     # Enable WAL mode
     conn.execute('PRAGMA journal_mode=WAL')
@@ -427,14 +420,12 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                         html2text = Html2TextTransformer()
                         transformed_docs = html2text.transform_documents(filtered_docs)
                         
-                        # 4. Final Metadata Cleanup & Grounding
+                        # 4. Final Metadata (gold-standard: process_documents will inject context from metadata)
                         for d in transformed_docs:
-                            # Prepend the context header for better LLM grounding
-                            grounded_content = d.metadata.get("context_header", "") + d.page_content
-                            d.page_content = grounded_content
                             d.metadata["source"] = source_url
                             d.metadata["page"] = "Web"
-                            d.metadata["title"] = d.metadata.get("page_title", filename)
+                            d.metadata["page_title"] = d.metadata.get("page_title", page_header or browser_title or filename)
+                            d.metadata["context_header"] = d.metadata.get("context_header") or context_header
                             docs.append(d)
                 except Exception as e:
                     msg = _log(f"  -> HTML Loader Error: {e}. Falling back to basic...\n")
@@ -484,10 +475,12 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                         if msg: yield msg
                         continue
 
-            # --- Vectorization ---
+            # --- Vectorization (gold-standard: process_documents = header split + recursive + context injection) ---
             if docs:
-                chunks = text_splitter.split_documents(docs)
-                chunks = enrich_chunks_metadata(chunks, default_page=0)
+                # Ensure metadata for process_documents (page_title for citations)
+                for d in docs:
+                    _ensure_gold_metadata(d, source_url, filename)
+                chunks = process_documents(docs)
                 if chunks:
                     # Skip empty or too-short single-chunk content
                     if len(chunks) == 1 and len(chunks[0].page_content.strip()) < MIN_TEXT_CONTENT_LENGTH:

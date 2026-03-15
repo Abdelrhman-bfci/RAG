@@ -18,7 +18,13 @@ from app.services.crawler_service import CrawlerService
 from app.qa.rag_chain import answer_question, stream_answer
 from app.config import Config # Assuming Config is needed for RESOURCE_DIR
 
+# Gold-standard client API router (v2 endpoints with structured citations)
+from app.client_api import router as client_api_router
+
 app = FastAPI(title="RAG System API", description="PDF & SQL RAG with Strict Context Control")
+
+# Mount the gold-standard client API at /v2 alongside existing endpoints
+app.include_router(client_api_router, prefix="/v2")
 
 # --- CORS Configuration ---
 app.add_middleware(

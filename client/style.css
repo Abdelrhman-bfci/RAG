@@ -2131,3 +2131,17 @@ header {
     border-radius: 50%;
     box-shadow: 0 0 8px var(--primary);
 }
+
+.citation-ref-badge {
+    transition: all 0.3s ease;
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
+.citation-ref-badge:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.citation-ref-badge.ring-2 {
+    background: rgba(99, 102, 241, 0.12);
+}

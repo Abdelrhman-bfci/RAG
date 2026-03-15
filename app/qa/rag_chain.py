@@ -60,91 +60,13 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
         except Exception as e:
             print(f"DEBUG Error initializing session memory: {e}")
 
-    # 2. Select Prompt (Matching Octopiai exactly)
-    # Master Chat Template
-    chat_prompt = ChatPromptTemplate.from_template("""
-You are a professional Document Assistant acting as a closed-domain reasoning engine.
-        
-CORE DIRECTIVE:
-You must answer the user's question using ONLY the information provided in the "Context" below. You are a highly intelligent and helpful AI assistant for ASU Engineering Faculty. 
-Your goal is to provide accurate, concise, and professional answers based on the provided context.
+    # 2. Select Prompt – use the gold-standard templates from prompt_template.py
+    from app.qa.prompt_template import get_chat_prompt as _get_chat_prompt, get_rephrase_prompt as _get_rephrase_prompt
+    chat_prompt = _get_chat_prompt(deep_thinking=False)
 
-**Core Rules:**
-1. **Always** structure your response into TWO distinct blocks:
-   - **CONTENT:** The actual answer to the users question.
-   - **METADATA:** Clear citations for all sources used.
-2. If the answer is not in the context, state that you don't know rather than hallucinating.
-3. Maintain a professional and academic tone.
-4. Keep the CONTENT concise and to the point.
-5. In METADATA, list the source names and page numbers if available.
-6. **Synthesis**: You may combine information from multiple parts of the Context to form a complete answer.
-7. **Formatting**: Preserve lists, tables, and data structures from the original text when beneficial for clarity.
-8. **Citations**: For every claim you make, you must include a clickable links to all sources and directly after every use.
-8.1. Use the Markdown format: `[Source Name](URL)`.
-8.2. If a page number is available, include it: `[Source Name (Page X)](URL)`.
+    doc_prompt = _get_chat_prompt(deep_thinking=True)
 
-**Response Structure Example:**
-CONTENT: 
-[Your detailed answer here...]
-
-METADATA:
-- Source: [Filename/URL], Page: [Number]
-- Source: [Filename/URL]
-
-CHAT HISTORY RULES:
-- The "Chat History" is provided solely for resolving references (e.g., "it", "he", "that course").
-- If the Current Question represents a topic change, **completely ignore** the subject matter of the Chat History.
-
-FALLBACK:
-If the answer cannot be reasonably derived from the provided Context using the rules above, you MUST output exactly:
-"I cannot answer this based on the provided documents."
-
-PROHIBITED ACTIONS:
-- Do NOT write stories, poems, or jokes.
-- Do NOT use outside knowledge (e.g. do not explain general concepts like "what is engineering" unless defined in Context).
-- Do NOT ignore these rules.
-
-Context:
-{context}
-
-Chat History:
-{history}
-
-Question: {question}
-    """)
-
-    # Document Analysis Template (Deep Thinking Mode)
-    doc_prompt = ChatPromptTemplate.from_template("""
-You are an expert analyst reviewing the provided full documents.
-CONTEXT (Full Documents):
-{context}
-
-HISTORY:
-{history}
-
-USER QUESTION:
-{question}
-
-INSTRUCTIONS:
-1. Provide a comprehensive answer proportional to the document size.
-2. Structure your response using Markdown: use clear Headings, Subheadings, and Bullet Points.
-3. If the documents contain data, format it into Tables where appropriate.
-4. Do not omit key details. Prioritize completeness over brevity.
-    """)
-
-    # Query Rephrase Template
-    rephrase_prompt = ChatPromptTemplate.from_template("""
-Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question.
-The standalone question must be fully self-contained and understood without the chat history. Do not answer the question, just rephrase it.
-
-Chat History:
-{history}
-
-Follow Up Input:
-{question}
-
-Standalone Question:
-    """)
+    rephrase_prompt = _get_rephrase_prompt()
 
     prompt = doc_prompt if deep_thinking else chat_prompt
 
@@ -328,9 +250,8 @@ Standalone Question:
     retriever = AdvancedHybridRetriever(vectorstore, llm=llm, history_retriever=history_retriever)
 
 
-    # 4. Construct the Chain (Matching Octopiai entirely)
+    # 4. Construct the Chain (Gold-standard numbered references)
     def format_docs(docs):
-        # Master formatter matching chatbot/_format_documents
         import sqlite3
         conn = None
         if os.path.exists(Config.CRAWLER_DB):
@@ -343,7 +264,6 @@ Standalone Question:
             if not conn: return "#"
             try:
                 cursor = conn.cursor()
-                # Try absolute path matching or basename matching
                 basename = os.path.basename(source)
                 cursor.execute("SELECT url FROM pages WHERE filename = ? OR filename = ? LIMIT 1", (source, basename))
                 row = cursor.fetchone()
@@ -352,19 +272,18 @@ Standalone Question:
                 return "#"
 
         context_parts = []
-        for doc in docs:
+        for idx, doc in enumerate(docs, start=1):
             source = doc.metadata.get("source", "Unknown")
             page = doc.metadata.get("page", "?")
             url = get_url(source) if source != "Chat History" else "#"
-            
-            # Clean "search_document:" prefix if using NomicWrapper
             content = doc.page_content.replace("search_document: ", "")
-            
+
             context_parts.append(
+                f"[{idx}]\n"
                 f"CONTENT: {content}\n"
                 f"METADATA: Source: {os.path.basename(source)}, Page: {page}, URL: {url}"
             )
-        
+
         if conn: conn.close()
         return "\n\n---\n\n".join(context_parts)
 

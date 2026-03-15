@@ -453,7 +453,7 @@
                                     <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></div>
                                     <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></div>
                                 </div>
-                                <div v-else-if="msg.role === 'assistant'" class="markdown-body">
+                                <div v-else-if="msg.role === 'assistant'" class="markdown-body" :id="'msg-' + index">
                                     <div class="inline" v-html="renderMarkdown(msg.content)"></div>
                                     <span v-if="(isStreaming || isProcessingStream) && index === messages.length - 1"
                                         class="typing-cursor"></span>
@@ -498,11 +498,52 @@
                                     @click="sendMessage(true)" class="text-[10px] text-asu-blue hover:underline"><i
                                         class="fas fa-play mr-1"></i>Continue</button>
                             </div>
+
+                            <!-- Numbered Sources Reference Panel -->
+                            <div v-if="msg.role === 'assistant' && msg.metadata && msg.metadata.chunks && msg.metadata.chunks.length > 0"
+                                class="mt-3 px-4">
+                                <div class="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <i class="fa-solid fa-book-open text-indigo-500 text-xs"></i>
+                                        <span class="text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Sources</span>
+                                    </div>
+                                    <div class="flex flex-col gap-1.5">
+                                        <div v-for="(chunk, ci) in msg.metadata.chunks" :key="ci"
+                                            class="citation-ref-badge flex items-start gap-2 text-[11px] leading-snug group/src"
+                                            :data-ref-num="ci + 1">
+                                            <span class="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-[10px] font-bold border border-indigo-200 dark:border-indigo-800 mt-0.5">
+                                                {{ ci + 1 }}
+                                            </span>
+                                            <div class="flex-1 min-w-0">
+                                                <span class="font-semibold text-gray-700 dark:text-gray-200 truncate block">
+                                                    {{ chunk.source || chunk.metadata?.source || 'Document' }}
+                                                </span>
+                                                <span v-if="chunk.page || chunk.metadata?.page_number" class="text-gray-400 dark:text-gray-500 ml-1">
+                                                    p.{{ chunk.page || chunk.metadata?.page_number }}
+                                                </span>
+                                                <p class="text-gray-500 dark:text-gray-400 text-[10px] line-clamp-2 mt-0.5">
+                                                    {{ (chunk.content || chunk.page_content || '').substring(0, 150) }}{{ (chunk.content || chunk.page_content || '').length > 150 ? '...' : '' }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="absolute -bottom-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
                                 :class="msg.role === 'user' ? 'right-0' : 'left-0'">
-                                <button @click="copyText(msg.content)"
-                                    class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i
-                                        class="fa-regular fa-copy"></i> Copy</button>
+                                <button @click="copyMessage(index)"
+                                    class="text-xs text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors flex items-center gap-1"
+                                    title="Copy Formatted Text">
+                                    <i :class="msg.isCopied ? 'fa-solid fa-check text-green-500' : 'fa-regular fa-copy'"></i>
+                                    <span v-if="msg.isCopied" class="text-green-500 font-bold">Copied!</span>
+                                    <span v-else>Copy</span>
+                                </button>
+                                <button v-if="msg.role === 'assistant'" @click="printMessage(msg.content)"
+                                    class="text-xs text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
+                                    title="Print Message">
+                                    <i class="fa-solid fa-print"></i> Print
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1229,6 +1270,20 @@
         const { createApp, ref, onMounted, nextTick, watch, computed } = Vue;
         const API_BASE = window.location.origin;
 
+        window.scrollToCitation = function(num) {
+            const badges = document.querySelectorAll('.citation-ref-badge');
+            for (const badge of badges) {
+                if (badge.dataset.refNum === String(num)) {
+                    badge.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    badge.classList.add('ring-2', 'ring-indigo-400', 'ring-offset-1');
+                    setTimeout(() => badge.classList.remove('ring-2', 'ring-indigo-400', 'ring-offset-1'), 2000);
+                    return;
+                }
+            }
+            const contextBtns = document.querySelectorAll('[title="View Retrieved Context"]');
+            if (contextBtns.length > 0) contextBtns[contextBtns.length - 1].click();
+        };
+
         createApp({
             setup() {
                 const currentView = ref('view-chat');
@@ -1435,26 +1490,26 @@
                 function renderMarkdown(text) {
                     if (!text) return "";
 
-                    // 1. Standard markdown parsing
                     let html = marked.parse(text);
 
-                    // 2. ADOPT OCTOPIAI BEAUTIFUL CITATION STYLE
-                    // Standard markdown links [label](url) inside content
+                    // Style markdown links as citation pills
                     html = html.replace(/<a href="(.*?)">(.*?)<\/a>/g, (match, url, label) => {
                         const isDoc = url.includes('/files/') || url.endsWith('.pdf') || url.endsWith('.docx');
                         const icon = isDoc ? 'fa-file-pdf' : 'fa-arrow-up-right-from-square';
-
-                        return `<a href="${url}" 
-                                   target="_blank" 
-                                   rel="noopener noreferrer" 
+                        return `<a href="${url}" target="_blank" rel="noopener noreferrer"
                                    class="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded-md text-xs font-semibold border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all mx-1 shadow-sm"
-                                   title="Open Source Link">
+                                   title="${label}">
                                     <i class="fa-solid ${icon} text-[10px]"></i>
                                     ${label}
                                 </a>`;
                     });
 
-                    // 3. Keep existing LLM-style raw citations [[Source: filename]] if they arrive
+                    // Style inline numbered references [1], [2][3] as badges
+                    html = html.replace(/\[(\d+)\](?!\()/g, (match, num) => {
+                        return `<span class="citation-link" title="Reference ${num}" onclick="scrollToCitation(${num})">[${num}]</span>`;
+                    });
+
+                    // Legacy LLM-style [[Source: filename]]
                     html = html.replace(/\[\[Source: (.*?)\]\]/g, (match, path) => {
                         const filename = path.split('/').pop();
                         const url = `/files/${path.startsWith('./') ? path.substring(2) : path}`;
@@ -1584,39 +1639,46 @@
                     await nextTick();
                     scrollToBottom();
 
-                    const uploaded = [];
-                    for (const f of files) {
-                        const fd = new FormData(); fd.append('file', f);
-                        const r = await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
-                        const d = await r.json(); uploaded.push(d.url);
-                    }
-
                     isStreaming.value = true;
                     const botMsg = { role: 'assistant', content: "", metadata: null };
                     messages.value.push(botMsg);
-
                     await nextTick();
                     scrollToBottom();
 
                     try {
-                        // Build URL with session_id if available
-                        let url;
-                        if (isContinuation) {
-                            url = `${API_BASE}/ask/stream?question=${encodeURIComponent(messages.value[messages.value.length - 2].content)}&is_continuation=true&last_answer=${encodeURIComponent(messages.value[messages.value.length - 2].content)}`;
+                        let response;
+
+                        if (files.length > 0) {
+                            // Gold-standard: upload files + message in a single multipart request
+                            // Files are ingested server-side before the question is answered
+                            if (!currentSessionId.value) {
+                                const sessionRes = await fetch(`${API_BASE}/v2/session/new`, { method: 'POST' });
+                                const sessionData = await sessionRes.json();
+                                currentSessionId.value = sessionData.session_id;
+                            }
+                            const formData = new FormData();
+                            formData.append('session_id', currentSessionId.value);
+                            formData.append('message', text);
+                            files.forEach(f => formData.append('files', f));
+                            response = await fetch(`${API_BASE}/v2/chat`, { method: 'POST', body: formData });
                         } else {
-                            url = `${API_BASE}/ask/stream?question=${encodeURIComponent(text)}&deep_thinking=${settings.value.deepThinking}`;
+                            // Standard streaming via GET (gold-standard query_engine)
+                            let url;
+                            if (isContinuation) {
+                                const prevContent = messages.value[messages.value.length - 3]?.content || text;
+                                url = `${API_BASE}/v2/ask/stream?question=${encodeURIComponent(prevContent)}&is_continuation=true&last_answer=${encodeURIComponent(prevContent)}`;
+                            } else {
+                                url = `${API_BASE}/v2/ask/stream?question=${encodeURIComponent(text)}&deep_thinking=${settings.value.deepThinking}`;
+                            }
+                            if (currentSessionId.value) {
+                                url += `&session_id=${encodeURIComponent(currentSessionId.value)}`;
+                            }
+                            response = await fetch(url);
                         }
 
-                        // Add session_id if exists
-                        if (currentSessionId.value) {
-                            url += `&session_id=${encodeURIComponent(currentSessionId.value)}`;
-                        }
-
-                        const response = await fetch(url);
-
-                        // Extract session ID from response header
+                        // Capture session ID from response header
                         const sessionId = response.headers.get('X-Session-ID');
-                        if (sessionId && !currentSessionId.value) {
+                        if (sessionId) {
                             currentSessionId.value = sessionId;
                         }
 
@@ -1630,11 +1692,10 @@
 
                             buffer += decoder.decode(value, { stream: true });
                             const lines = buffer.split('\n');
-                            buffer = lines.pop(); // Keep incomplete line
+                            buffer = lines.pop();
 
                             for (const line of lines) {
                                 if (!line.trim()) continue;
-
                                 try {
                                     const data = JSON.parse(line);
 
@@ -1652,10 +1713,7 @@
 
                                     if (data.type === 'metadata') {
                                         botMsg.metadata = data;
-                                        currentUsedDocs.value = data.used_docs || [];
-
-                                        // Enhance citations with smart handling
-                                        // botMsg.content = enhanceCitations(botMsg.content, data.sources, data.used_docs); // Removed, handled by renderMarkdown
+                                        currentUsedDocs.value = data.chunks || data.used_docs || [];
                                         await nextTick();
                                         scrollToBottom();
                                     }
@@ -1674,14 +1732,11 @@
                             }
                         }
 
-                        // Process remaining buffer
                         if (buffer.trim()) {
                             try {
                                 const data = JSON.parse(buffer);
                                 if (data.type === 'done') isStreaming.value = false;
-                            } catch (e) {
-                                console.warn("Error parsing final buffer:", e);
-                            }
+                            } catch (e) { /* ignore */ }
                         }
                     } catch (e) {
                         botMsg.content = "Error: " + e.message;
@@ -2071,6 +2126,64 @@
                     } else { fallback(); }
                 }
 
+                function copyMessage(index) {
+                    const el = document.getElementById('msg-' + index);
+                    if (!el) return;
+                    const selection = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(el);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    try {
+                        document.execCommand('copy');
+                        showCopyFeedback(index);
+                    } catch (err) {
+                        console.error('Rich copy failed:', err);
+                    }
+                    selection.removeAllRanges();
+                }
+
+                function showCopyFeedback(index) {
+                    if (messages.value[index]) {
+                        messages.value[index].isCopied = true;
+                        setTimeout(() => {
+                            if (messages.value[index]) messages.value[index].isCopied = false;
+                        }, 2000);
+                    }
+                }
+
+                function printMessage(content) {
+                    const printWindow = window.open('', '_blank');
+                    const rendered = renderMarkdown(content);
+                    printWindow.document.write(`
+                        <html>
+                        <head>
+                            <title>Print Message</title>
+                            <style>
+                                body { font-family: system-ui, -apple-system, sans-serif; padding: 2rem; line-height: 1.6; color: #111; max-width: 800px; margin: 0 auto; }
+                                img { max-width: 100%; }
+                                table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em; }
+                                th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
+                                th { background-color: #f3f4f6; }
+                                code { background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; }
+                                pre { background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; white-space: pre-wrap; }
+                                blockquote { border-left: 4px solid #ddd; padding-left: 1rem; color: #555; }
+                                ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1em; }
+                                ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 1em; }
+                                li { margin-bottom: 0.25em; }
+                            </style>
+                        </head>
+                        <body>
+                            ${rendered}
+                            <script>
+                                window.onload = function() { window.print(); window.close(); }
+                            <\/script>
+                        </body>
+                        </html>
+                    `);
+                    printWindow.document.close();
+                }
+
                 return {
                     currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
                     settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
@@ -2080,7 +2193,7 @@
                     crawlerUrl, crawlerDepth, crawlAndIngestRunning,
                     summaryFile, summaryProgress, chunkSummaries, finalSummary,
                     offlineIngestStatus, offlineIngestStreamRunning,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, startCrawl, startCrawlAndIngest, startOfflineIngest, startOfflineIngestStream, startNewChat, handleSummaryFileUpload,
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, copyMessage, printMessage, startCrawl, startCrawlAndIngest, startOfflineIngest, startOfflineIngestStream, startNewChat, handleSummaryFileUpload,
                     // Modal Helpers
                     showModal, selectedModalData, openLogicModal, openContextModal, getHeaderClass, getIconBgClass, getIconClass, getBadgeClass,
                     // Login State
