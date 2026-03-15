@@ -36,11 +36,25 @@ This document outlines the comprehensive enhancements made to improve answer acc
 
 ### 3. Enhanced Retrieval System ✅
 
-**Improved Reranking:**
-- **Adaptive Thresholds**: Dynamic threshold calculation based on score distribution
-- Uses 25th percentile of scores as adaptive threshold
-- Falls back to top 5 documents if threshold filters everything
-- Better handling of edge cases
+**Advanced Multi-Factor Reranking:**
+- **Combined Scoring**: Multi-factor scoring system combining:
+  - Reranker score (70% weight) - Primary relevance signal
+  - Term matching score (30% weight) - Keyword overlap
+  - Source quality boost - Prefers official sources
+  - Content length normalization - Prefers substantial content
+- **Enhanced Adaptive Thresholds**: 
+  - Uses 75th percentile (top 25%) with 80% multiplier for leniency
+  - Falls back to median if needed
+  - Ensures minimum threshold from config
+  - Better handling of edge cases
+- **Diversity Preservation**: 
+  - Limits documents per source (max 3 per source)
+  - Prevents over-representation of single sources
+  - Ensures balanced coverage
+- **Content Cleaning**: 
+  - Removes metadata headers before reranking
+  - Truncates to model max_length (512 chars)
+  - Better reranker accuracy
 
 **Better Deduplication:**
 - Content-based hashing to prevent duplicate chunks
@@ -51,6 +65,13 @@ This document outlines the comprehensive enhancements made to improve answer acc
 - Combines primary search with expanded query results
 - Merges session history retrieval
 - Better coverage of relevant information
+
+**Enhanced Fallback (Non-Reranker):**
+- Multi-factor scoring even without reranker
+- Source type prioritization
+- Keyword and term matching
+- Content quality scoring
+- Diversity preservation
 
 ### 4. Enhanced Citation System ✅
 
@@ -133,11 +154,16 @@ This document outlines the comprehensive enhancements made to improve answer acc
 All enhancements work with existing configuration. No new environment variables required.
 
 **Existing Config Used:**
-- `USE_RERANKER`: Enables/disables reranking
-- `RERANKER_THRESHOLD`: Base threshold (now adaptive)
-- `LLM_K_FINAL`: Final number of documents to use
-- `CHUNK_SIZE`: Chunk size for ingestion
-- `CHUNK_OVERLAP`: Overlap between chunks
+- `USE_RERANKER`: Enables/disables reranking (recommended: true)
+- `RERANKER_THRESHOLD`: Base threshold (now adaptive, minimum value)
+- `LLM_K_FINAL`: Final number of documents to use (default: 10)
+- `CHUNK_SIZE`: Chunk size for ingestion (default: 2000)
+- `CHUNK_OVERLAP`: Overlap between chunks (default: 200)
+
+**Reranking Behavior:**
+- When `USE_RERANKER=true`: Uses multi-factor scoring with reranker as primary signal
+- When `USE_RERANKER=false`: Uses enhanced keyword/term matching with source prioritization
+- Both paths now include diversity preservation and quality filtering
 
 ## API Changes
 

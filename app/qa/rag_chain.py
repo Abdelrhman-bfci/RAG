@@ -341,61 +341,170 @@ Alternative queries (one per line, no numbering):
                 return []
                 
             if Config.USE_RERANKER:
-                # 2a. Enhanced Re-ranking using BAAI Cross-Encoder with adaptive threshold
-                pairs = [[query, doc.page_content] for doc in initial_docs]
-                scores = self.reranker.predict(pairs)
+                # 2a. Enhanced Re-ranking with multi-factor scoring and better filtering
+                import re
+                from collections import Counter
+                
+                # Prepare query-document pairs for reranking
+                pairs = []
+                doc_contents = []
+                for doc in initial_docs:
+                    # Use a cleaned version of content for reranking (first 512 chars to match model max_length)
+                    content = doc.page_content[:512] if len(doc.page_content) > 512 else doc.page_content
+                    # Remove metadata headers that might confuse reranker
+                    content_clean = re.sub(r'^---.*?---\s*', '', content, flags=re.MULTILINE)
+                    pairs.append([query, content_clean])
+                    doc_contents.append(content)
+                
+                # Get reranker scores
+                try:
+                    rerank_scores = self.reranker.predict(pairs)
+                    rerank_scores = [float(s) for s in rerank_scores]
+                except Exception as e:
+                    print(f"DEBUG: Reranker prediction failed: {e}, falling back to similarity scores")
+                    rerank_scores = [0.5] * len(initial_docs)  # Fallback neutral score
+                
+                # Calculate additional relevance signals
+                query_terms = set(query.lower().split())
+                query_terms = {t for t in query_terms if len(t) > 2}  # Filter short terms
                 
                 ranked_candidates = []
                 all_scores = []
                 
                 for i, doc in enumerate(initial_docs):
-                    score = float(scores[i])
-                    all_scores.append(score)
+                    rerank_score = rerank_scores[i]
+                    content = doc_contents[i].lower()
+                    
+                    # Multi-factor scoring
+                    factors = {
+                        "rerank": rerank_score,
+                        "term_match": 0.0,
+                        "source_quality": 0.0,
+                        "content_length": 0.0
+                    }
+                    
+                    # 1. Term matching score (keyword overlap)
+                    if query_terms:
+                        content_words = set(re.findall(r'\b\w+\b', content))
+                        matched_terms = query_terms.intersection(content_words)
+                        term_match_ratio = len(matched_terms) / len(query_terms) if query_terms else 0
+                        factors["term_match"] = min(term_match_ratio * 0.3, 0.3)  # Cap at 0.3
+                    
+                    # 2. Source quality boost (prefer certain sources)
+                    source = doc.metadata.get("source", "").lower() if isinstance(doc.metadata, dict) else ""
+                    if source:
+                        # Boost official sources (websites, official docs)
+                        if source.startswith("http") or "official" in source or "www" in source:
+                            factors["source_quality"] = 0.1
+                        # Slight penalty for chat history (less reliable)
+                        elif "chat history" in source:
+                            factors["source_quality"] = -0.05
+                    
+                    # 3. Content length normalization (prefer substantial content)
+                    content_len = len(doc.page_content)
+                    if content_len > 100:
+                        # Normalize: longer content gets slight boost, but cap it
+                        length_score = min((content_len - 100) / 1000, 0.1)  # Max 0.1 boost
+                        factors["content_length"] = length_score
+                    
+                    # Combined score: weighted combination
+                    # Rerank score is primary (70%), other factors add/subtract
+                    combined_score = (
+                        factors["rerank"] * 0.7 +
+                        factors["term_match"] +
+                        factors["source_quality"] +
+                        factors["content_length"]
+                    )
+                    
+                    # Normalize combined score to reasonable range
+                    combined_score = max(0.0, min(1.0, combined_score))
+                    
+                    all_scores.append(combined_score)
                     
                     if isinstance(doc.metadata, dict):
-                        doc.metadata["rerank_score"] = score
-                        # Also preserve original similarity score if exists
-                        if "score" not in doc.metadata:
-                            doc.metadata["score"] = score
-                    ranked_candidates.append((doc, score))
+                        doc.metadata["rerank_score"] = rerank_score
+                        doc.metadata["combined_score"] = combined_score
+                        doc.metadata["term_match_score"] = factors["term_match"]
+                        doc.metadata["score"] = combined_score  # Use combined score as primary
+                    ranked_candidates.append((doc, combined_score, rerank_score))
                 
-                # Adaptive threshold: use median or 25th percentile if we have enough docs
-                if len(all_scores) > 5:
+                # Enhanced adaptive threshold calculation
+                if len(all_scores) > 10:
                     sorted_scores = sorted(all_scores, reverse=True)
-                    # Use 25th percentile or minimum of config threshold
+                    # Use multiple percentile strategies
+                    p75 = sorted_scores[len(sorted_scores) // 4]  # 75th percentile (top 25%)
+                    p50 = sorted_scores[len(sorted_scores) // 2]  # Median
+                    
+                    # Adaptive threshold: use 75th percentile but ensure it's reasonable
                     adaptive_threshold = max(
-                        sorted_scores[len(sorted_scores) // 4],  # 25th percentile
+                        p75 * 0.8,  # 80% of 75th percentile (more lenient)
+                        p50,  # At least median
+                        Config.RERANKER_THRESHOLD  # Never below config threshold
+                    )
+                elif len(all_scores) > 5:
+                    sorted_scores = sorted(all_scores, reverse=True)
+                    adaptive_threshold = max(
+                        sorted_scores[len(sorted_scores) // 3],  # Top third
                         Config.RERANKER_THRESHOLD
                     )
                 else:
                     adaptive_threshold = Config.RERANKER_THRESHOLD
                 
-                # Sort by highest score
-                ranked_candidates.sort(key=lambda x: x[1], reverse=True)
+                # Sort by combined score (primary), then rerank score (tiebreaker)
+                ranked_candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
                 
-                # Filter by adaptive threshold
+                # Filter by adaptive threshold with diversity preservation
                 final_docs = []
-                for doc, score in ranked_candidates:
-                    if score >= adaptive_threshold:
-                        if isinstance(doc.metadata, dict):
-                            doc.metadata["score"] = score
-                        final_docs.append(doc)
-                    else:
-                        break  # Since sorted, we can break early
+                seen_sources = Counter()
+                max_per_source = 3  # Limit docs per source for diversity
                 
-                # Ensure we return at least some docs even if threshold is high
+                for doc, combined_score, rerank_score in ranked_candidates:
+                    source = doc.metadata.get("source", "Unknown") if isinstance(doc.metadata, dict) else "Unknown"
+                    
+                    # Check threshold
+                    if combined_score >= adaptive_threshold:
+                        # Diversity check: limit docs per source
+                        if seen_sources[source] < max_per_source:
+                            if isinstance(doc.metadata, dict):
+                                doc.metadata["score"] = combined_score
+                            final_docs.append(doc)
+                            seen_sources[source] += 1
+                        elif len(final_docs) < Config.LLM_K_FINAL:
+                            # If we haven't reached target, allow more from same source
+                            if isinstance(doc.metadata, dict):
+                                doc.metadata["score"] = combined_score
+                            final_docs.append(doc)
+                            seen_sources[source] += 1
+                    
+                    # Early stopping if we have enough high-quality docs
+                    if len(final_docs) >= Config.LLM_K_FINAL and combined_score < adaptive_threshold * 1.2:
+                        break
+                
+                # Ensure we return reasonable number of docs
                 if not final_docs and ranked_candidates:
-                    # Fallback: return top 5 even if below threshold
-                    final_docs = [doc for doc, _ in ranked_candidates[:5]]
+                    # Fallback: return top docs even if below threshold
+                    # But still apply diversity
+                    for doc, combined_score, rerank_score in ranked_candidates[:Config.LLM_K_FINAL * 2]:
+                        source = doc.metadata.get("source", "Unknown") if isinstance(doc.metadata, dict) else "Unknown"
+                        if seen_sources[source] < max_per_source or len(final_docs) < Config.LLM_K_FINAL:
+                            if isinstance(doc.metadata, dict):
+                                doc.metadata["score"] = combined_score
+                            final_docs.append(doc)
+                            seen_sources[source] += 1
+                        if len(final_docs) >= Config.LLM_K_FINAL:
+                            break
                 
                 return final_docs[:Config.LLM_K_FINAL]
             else:
-                # 2b. Fallback: Extract priority terms exactly like old logic
+                # 2b. Enhanced Fallback: Multi-factor scoring without reranker
+                import re
+                from collections import Counter
+                
+                query_terms = set(query.lower().split())
+                query_terms = {t for t in query_terms if len(t) > 2}  # Filter short terms
                 keywords = [w.lower() for w in query.split() if len(w) > 3]
                 
-                website_docs = []
-                priority_docs = []
-                other_docs = []
+                scored_docs = []
                 seen_chunk_ids = set()
                 
                 for d in initial_docs:
@@ -406,23 +515,60 @@ Alternative queries (one per line, no numbering):
                     
                     if not isinstance(d.metadata, dict):
                         d.metadata = {"source": "Unknown"}
-                        
+                    
                     content_lower = d.page_content.lower()
                     source = d.metadata.get("source", "").lower()
                     
-                    # Boost website sources as they are usually more specific to recent queries
-                    is_website = source.startswith("http")
+                    # Multi-factor scoring
+                    score = 0.0
                     
+                    # 1. Source type boost
+                    is_website = source.startswith("http")
                     if is_website:
-                        website_docs.append(d)
-                    elif any(kw in content_lower for kw in keywords):
-                        priority_docs.append(d)
-                    else:
-                        other_docs.append(d)
+                        score += 0.3  # Website boost
+                    elif "chat history" in source:
+                        score += 0.1  # Slight boost for chat history
+                    
+                    # 2. Keyword matching
+                    if keywords:
+                        matched_keywords = sum(1 for kw in keywords if kw in content_lower)
+                        keyword_score = (matched_keywords / len(keywords)) * 0.4
+                        score += keyword_score
+                    
+                    # 3. Term matching (broader than keywords)
+                    if query_terms:
+                        content_words = set(re.findall(r'\b\w+\b', content_lower))
+                        matched_terms = query_terms.intersection(content_words)
+                        term_score = (len(matched_terms) / len(query_terms)) * 0.2
+                        score += term_score
+                    
+                    # 4. Content quality (length)
+                    content_len = len(d.page_content)
+                    if content_len > 100:
+                        length_score = min((content_len - 100) / 2000, 0.1)
+                        score += length_score
+                    
+                    # Store score in metadata
+                    d.metadata["score"] = score
+                    scored_docs.append((d, score))
                 
-                # Order: Websites first, then keyword matches, then others
-                combined = website_docs + priority_docs + other_docs
-                return combined[:Config.LLM_K_FINAL]
+                # Sort by score
+                scored_docs.sort(key=lambda x: x[1], reverse=True)
+                
+                # Apply diversity: limit docs per source
+                final_docs = []
+                seen_sources = Counter()
+                max_per_source = 3
+                
+                for doc, score in scored_docs:
+                    source = doc.metadata.get("source", "Unknown")
+                    if seen_sources[source] < max_per_source or len(final_docs) < Config.LLM_K_FINAL:
+                        final_docs.append(doc)
+                        seen_sources[source] += 1
+                    if len(final_docs) >= Config.LLM_K_FINAL:
+                        break
+                
+                return final_docs[:Config.LLM_K_FINAL]
 
     retriever = AdvancedHybridRetriever(vectorstore, llm=llm, history_retriever=history_retriever, expand_prompt=expand_prompt)
 
