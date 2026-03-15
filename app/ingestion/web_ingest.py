@@ -147,13 +147,44 @@ def update_status(status, current=0, total=0, message="", start_time=None):
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f)
 
+def is_high_quality_chunk(chunk_content: str, min_length: int = 50) -> bool:
+    """
+    Check if a chunk has sufficient quality for indexing.
+    Filters out very short chunks, whitespace-only chunks, etc.
+    """
+    if not chunk_content or not isinstance(chunk_content, str):
+        return False
+    
+    # Remove whitespace and check length
+    stripped = chunk_content.strip()
+    if len(stripped) < min_length:
+        return False
+    
+    # Check if it's mostly whitespace or special characters
+    alphanumeric_chars = sum(1 for c in stripped if c.isalnum())
+    if alphanumeric_chars < min_length * 0.5:  # At least 50% alphanumeric
+        return False
+    
+    return True
+
 def enrich_chunks_metadata(chunks, default_page=0):
-    """Add chunk index and page to each chunk for citations and context expansion."""
+    """Add chunk index and page to each chunk for citations and context expansion.
+    Also filters out low-quality chunks."""
+    filtered_chunks = []
     for i, doc in enumerate(chunks):
+        # Quality check
+        if not is_high_quality_chunk(doc.page_content):
+            continue
+            
         doc.metadata["chunk"] = i
         if "page" not in doc.metadata or doc.metadata["page"] is None:
             doc.metadata["page"] = default_page
-    return chunks
+        
+        # Add chunk length
+        doc.metadata["chunk_length"] = len(doc.page_content)
+        
+        filtered_chunks.append(doc)
+    return filtered_chunks
 
 def normalize_url(url: str) -> str:
     """Strip fragments and trailing slashes, but keep pagination params."""

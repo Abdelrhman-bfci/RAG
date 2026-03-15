@@ -17,10 +17,44 @@ from app.config import Config
 from app.vectorstore.factory import VectorStoreFactory
 from langchain_core.documents import Document
 
+def is_high_quality_chunk(chunk_content: str, min_length: int = 50) -> bool:
+    """
+    Check if a chunk has sufficient quality for indexing.
+    Filters out very short chunks, whitespace-only chunks, etc.
+    """
+    if not chunk_content or not isinstance(chunk_content, str):
+        return False
+    
+    # Remove whitespace and check length
+    stripped = chunk_content.strip()
+    if len(stripped) < min_length:
+        return False
+    
+    # Check if it's mostly whitespace or special characters
+    alphanumeric_chars = sum(1 for c in stripped if c.isalnum())
+    if alphanumeric_chars < min_length * 0.5:  # At least 50% alphanumeric
+        return False
+    
+    # Filter out chunks that are mostly numbers or symbols
+    if len(stripped) > 100:
+        # For longer chunks, require more diversity
+        unique_chars = len(set(stripped.lower()))
+        if unique_chars < 10:  # Too repetitive
+            return False
+    
+    return True
+
 def enrich_chunks_with_metadata(chunks):
-    """Add chunk index and page to each chunk's metadata for citations and context expansion."""
+    """Add chunk index and page to each chunk's metadata for citations and context expansion.
+    Also filters out low-quality chunks."""
     by_source = {}
+    filtered_chunks = []
+    
     for doc in chunks:
+        # Quality check
+        if not is_high_quality_chunk(doc.page_content):
+            continue
+        
         src = doc.metadata.get("source", "")
         if src not in by_source:
             by_source[src] = 0
@@ -29,9 +63,14 @@ def enrich_chunks_with_metadata(chunks):
         by_source[src] = idx + 1
         if "page" not in doc.metadata or doc.metadata["page"] is None:
             doc.metadata["page"] = 0
+        
+        # Add chunk length for potential filtering
+        doc.metadata["chunk_length"] = len(doc.page_content)
+        
+        filtered_chunks.append(doc)
             
     # Grounding: Inject metadata into page_content to help LLM
-    for doc in chunks:
+    for doc in filtered_chunks:
         source = doc.metadata.get("source", "Unknown")
         basename = os.path.basename(source)
         page = doc.metadata.get("page", 0)
@@ -49,7 +88,7 @@ def enrich_chunks_with_metadata(chunks):
         
         doc.page_content = header + doc.page_content
         
-    return chunks
+    return filtered_chunks
 
 # File paths for saving ingestion status
 TRACKING_FILE = "/tmp/ingested_files_v2.json"
@@ -216,7 +255,7 @@ def ingest_documents(force_fresh: bool = False):
 
     splitted_docs = enrich_chunks_with_metadata(splitted_docs)
     total_chunks = len(splitted_docs)
-    yield f"Generated {total_chunks} new chunks (with metadata grounding). Starting vectorization...\n"
+    yield f"Generated {total_chunks} high-quality chunks (with metadata grounding and quality filtering). Starting vectorization...\n"
 
     # Create/Load vectorstore
     vectorstore_instance = VectorStoreFactory.get_instance()

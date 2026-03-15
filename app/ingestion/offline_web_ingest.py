@@ -10,6 +10,10 @@ from bs4 import BeautifulSoup
 import pymupdf4llm
 from langchain_community.document_loaders import (
     TextLoader,
+    PyMuPDFLoader,
+    Docx2txtLoader,
+    CSVLoader,
+    UnstructuredExcelLoader,
 )
 from langchain_community.document_transformers import Html2TextTransformer
 
@@ -270,13 +274,68 @@ def load_text_file_with_encoding_fallback(file_path: str, source_url: str):
     return []
 
 
+def is_high_quality_chunk(chunk_content: str, min_length: int = 50) -> bool:
+    """
+    Check if a chunk has sufficient quality for indexing.
+    Filters out very short chunks, whitespace-only chunks, etc.
+    """
+    if not chunk_content or not isinstance(chunk_content, str):
+        return False
+    
+    # Remove whitespace and check length
+    stripped = chunk_content.strip()
+    if len(stripped) < min_length:
+        return False
+    
+    # Check if it's mostly whitespace or special characters
+    alphanumeric_chars = sum(1 for c in stripped if c.isalnum())
+    if alphanumeric_chars < min_length * 0.5:  # At least 50% alphanumeric
+        return False
+    
+    # Filter out chunks that are mostly numbers or symbols
+    if len(stripped) > 100:
+        # For longer chunks, require more diversity
+        unique_chars = len(set(stripped.lower()))
+        if unique_chars < 10:  # Too repetitive
+            return False
+    
+    # Filter out common low-quality patterns
+    low_quality_patterns = [
+        "javascript:", "function(", "var ", "const ", "let ",
+        "<!--", "<?xml", "<script", "<style"
+    ]
+    stripped_lower = stripped.lower()
+    if any(pattern in stripped_lower for pattern in low_quality_patterns):
+        # Only filter if it's mostly code (not mixed content)
+        code_ratio = sum(1 for c in stripped if c in "{}();[]") / len(stripped) if stripped else 0
+        if code_ratio > 0.3:  # More than 30% code characters
+            return False
+    
+    return True
+
 def enrich_chunks_metadata(chunks, default_page=0):
-    """Add chunk index and page to each chunk for citations and context expansion."""
+    """Add chunk index and page to each chunk for citations and context expansion.
+    Also filters out low-quality chunks."""
+    filtered_chunks = []
     for i, doc in enumerate(chunks):
+        # Quality check
+        if not is_high_quality_chunk(doc.page_content):
+            continue
+            
         doc.metadata["chunk"] = i
         if "page" not in doc.metadata or doc.metadata["page"] is None:
             doc.metadata["page"] = default_page
-    return chunks
+        
+        # Add chunk length for potential filtering
+        doc.metadata["chunk_length"] = len(doc.page_content)
+        
+        # Add source basename for easier citation
+        source = doc.metadata.get("source", "")
+        if source:
+            doc.metadata["source_basename"] = os.path.basename(source) if "/" in source or "\\" in source else source
+        
+        filtered_chunks.append(doc)
+    return filtered_chunks
 
 def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
     """
@@ -429,12 +488,25 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                         
                         # 4. Final Metadata Cleanup & Grounding
                         for d in transformed_docs:
+                            # Quality check before adding
+                            content = d.page_content.strip()
+                            if not content or len(content) < MIN_HTML_CONTENT_LENGTH:
+                                continue
+                            
                             # Prepend the context header for better LLM grounding
-                            grounded_content = d.metadata.get("context_header", "") + d.page_content
+                            context_header = d.metadata.get("context_header", "")
+                            grounded_content = context_header + content
+                            
+                            # Additional quality check on grounded content
+                            if len(grounded_content.strip()) < MIN_HTML_CONTENT_LENGTH:
+                                continue
+                            
                             d.page_content = grounded_content
                             d.metadata["source"] = source_url
                             d.metadata["page"] = "Web"
                             d.metadata["title"] = d.metadata.get("page_title", filename)
+                            d.metadata["file_type"] = "html"
+                            d.metadata["source_basename"] = filename
                             docs.append(d)
                 except Exception as e:
                     msg = _log(f"  -> HTML Loader Error: {e}. Falling back to basic...\n")
@@ -445,7 +517,16 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                  try:
                     # Primary: Convert to Markdown for better RAG
                     md_content = pymupdf4llm.to_markdown(file_path)
-                    docs = [Document(page_content=md_content, metadata={"source": source_url})]
+                    
+                    # Quality check on PDF content
+                    if md_content and len(md_content.strip()) >= MIN_TEXT_CONTENT_LENGTH:
+                        doc = Document(page_content=md_content, metadata={"source": source_url})
+                        doc.metadata["file_type"] = "pdf"
+                        doc.metadata["source_basename"] = filename
+                        docs = [doc]
+                    else:
+                        msg = _log(f"  -> Skipped: PDF content too short ({filename})\n")
+                        if msg: yield msg
                  except Exception as e:
                      msg = _log(f"  -> pymupdf4llm Error: {e}. Falling back to standard loader...\n")
                      if msg: yield msg
@@ -454,6 +535,8 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                          fallback_docs = loader.load()
                          for d in fallback_docs:
                              d.metadata["source"] = source_url
+                             d.metadata["file_type"] = "pdf"
+                             d.metadata["source_basename"] = filename
                          docs = fallback_docs
                      except Exception as e_fallback:
                          msg = _log(f"  -> CRITICAL PDF Error: {e_fallback}\n")
@@ -467,6 +550,10 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                         msg = _log(f"  -> Skipped: could not decode {filename}\n")
                         if msg: yield msg
                         continue
+                    # Add file type metadata
+                    for d in docs:
+                        d.metadata["file_type"] = ext[1:]  # Remove the dot
+                        d.metadata["source_basename"] = filename
                 else:
                     loader = get_loader(file_path)
                     if loader:
@@ -474,6 +561,8 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                             loaded = loader.load()
                             for d in loaded:
                                 d.metadata["source"] = source_url
+                                d.metadata["file_type"] = ext[1:]  # Remove the dot
+                                d.metadata["source_basename"] = filename
                             docs = loaded
                         except Exception as e_loader:
                             msg = _log(f"  -> Loader error for {ext}: {e_loader}\n")
@@ -487,26 +576,48 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
             # --- Vectorization ---
             if docs:
                 chunks = text_splitter.split_documents(docs)
+                
+                # Enrich and filter chunks (quality filtering included)
                 chunks = enrich_chunks_metadata(chunks, default_page=0)
+                
                 if chunks:
-                    # Skip empty or too-short single-chunk content
-                    if len(chunks) == 1 and len(chunks[0].page_content.strip()) < MIN_TEXT_CONTENT_LENGTH:
-                        msg = _log(f"  -> Skipped: content too short ({filename})\n")
+                    # Additional validation: Skip if all chunks were filtered out or too short
+                    total_content_length = sum(len(c.page_content.strip()) for c in chunks)
+                    if total_content_length < MIN_TEXT_CONTENT_LENGTH * len(chunks):
+                        msg = _log(f"  -> Skipped: content too short after quality filtering ({filename})\n")
                         if msg: yield msg
                     else:
+                        # Remove old chunks for this source before adding new ones
                         store.delete_source(source_url)
+                        
                         # Batch implementation for Chroma compatibility
                         batch_size = 100
+                        chunks_added = 0
                         for j in range(0, len(chunks), batch_size):
                             batch = chunks[j:j + batch_size]
-                            if vectorstore:
-                                vectorstore.add_documents(batch)
-                            else:
-                                vectorstore = store.add_documents(batch)
-                        bulk_data_buffer.append((source_url, filename, len(chunks)))
-                        processed_count += 1
-                        msg = _log(f"  -> Indexed {len(chunks)} chunks.\n")
-                        if msg: yield msg
+                            try:
+                                if vectorstore:
+                                    vectorstore.add_documents(batch)
+                                else:
+                                    vectorstore = store.add_documents(batch)
+                                chunks_added += len(batch)
+                            except Exception as batch_error:
+                                msg = _log(f"  -> Warning: Error adding batch {j//batch_size + 1}: {batch_error}\n")
+                                if msg: yield msg
+                                # Continue with next batch instead of failing completely
+                                continue
+                        
+                        if chunks_added > 0:
+                            bulk_data_buffer.append((source_url, filename, chunks_added))
+                            processed_count += 1
+                            msg = _log(f"  -> Indexed {chunks_added} high-quality chunks (filtered from {len(text_splitter.split_documents(docs))} total).\n")
+                            if msg: yield msg
+                        else:
+                            msg = _log(f"  -> Skipped: No chunks passed quality filtering ({filename})\n")
+                            if msg: yield msg
+                else:
+                    msg = _log(f"  -> Skipped: No chunks generated after quality filtering ({filename})\n")
+                    if msg: yield msg
             
             # Periodically commit status, file tracking, and FAISS checkpoint
             if (i + 1) % 10 == 0 or (i + 1) == total_files:
