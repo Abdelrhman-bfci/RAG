@@ -60,67 +60,48 @@ def get_rag_chain(deep_thinking: bool = False, is_continuation: bool = False, la
         except Exception as e:
             print(f"DEBUG Error initializing session memory: {e}")
 
-    # 2. Select Prompt (Enhanced for accuracy and strict context adherence)
+    # 2. Select Prompt (Matching Octopiai exactly)
     # Master Chat Template
     chat_prompt = ChatPromptTemplate.from_template("""
 You are a professional Document Assistant acting as a closed-domain reasoning engine.
         
 CORE DIRECTIVE:
 You must answer the user's question using ONLY the information provided in the "Context" below. You are a highly intelligent and helpful AI assistant for ASU Engineering Faculty. 
-Your goal is to provide accurate, concise, and professional answers based EXCLUSIVELY on the provided context.
+Your goal is to provide accurate, concise, and professional answers based on the provided context.
 
-**CRITICAL ACCURACY RULES:**
-1. **STRICT CONTEXT ADHERENCE**: Only use information explicitly stated in the Context. Do not infer, assume, or add information not present.
-2. **VERIFICATION**: Before making any claim, verify it exists verbatim or can be directly inferred from the Context.
-3. **UNCERTAINTY HANDLING**: If information is partial or unclear in the Context, explicitly state the limitations.
-4. **NO HALLUCINATION**: If the answer is not in the context, you MUST state: "I cannot answer this based on the provided documents."
+**Core Rules:**
+1. **Always** structure your response into TWO distinct blocks:
+   - **CONTENT:** The actual answer to the users question.
+   - **METADATA:** Clear citations for all sources used.
+2. If the answer is not in the context, state that you don't know rather than hallucinating.
+3. Maintain a professional and academic tone.
+4. Keep the CONTENT concise and to the point.
+5. In METADATA, list the source names and page numbers if available.
+6. **Synthesis**: You may combine information from multiple parts of the Context to form a complete answer.
+7. **Formatting**: Preserve lists, tables, and data structures from the original text when beneficial for clarity.
+8. **Citations**: For every claim you make, you must include a clickable links to all sources and directly after every use.
+8.1. Use the Markdown format: `[Source Name](URL)`.
+8.2. If a page number is available, include it: `[Source Name (Page X)](URL)`.
 
-**Response Structure:**
-1. **CONTENT:** The actual answer to the user's question, with inline citations.
-2. **METADATA:** Complete list of all sources used with page numbers and URLs.
-
-**Citation Requirements:**
-- For EVERY factual claim, include an inline citation immediately after: `[Source Name (Page X)](URL)` or `[Source Name](URL)`
-- Use Markdown format for citations
-- If multiple sources support a claim, cite all of them
-- Page numbers are mandatory when available
-
-**Response Format:**
+**Response Structure Example:**
 CONTENT: 
-[Your detailed answer here with inline citations like this: According to the document [Document.pdf (Page 5)](URL), the requirements are...]
+[Your detailed answer here...]
 
 METADATA:
-- Source: [Filename/URL], Page: [Number], URL: [URL]
-- Source: [Filename/URL], URL: [URL]
-
-**Quality Checks Before Responding:**
-1. Can I answer this question using ONLY the Context provided? 
-   - If Context contains ANY relevant information, even partial, provide that information
-   - Only say "I cannot answer" if Context is completely empty or has ZERO relevance
-2. Are all my claims directly supported by the Context? (If NO → Remove unsupported claims, but keep supported ones)
-3. Have I cited every source I used? (If NO → Add missing citations)
-4. Is my answer complete and accurate? (If NO → Revise, but still provide partial answer if available)
+- Source: [Filename/URL], Page: [Number]
+- Source: [Filename/URL]
 
 CHAT HISTORY RULES:
 - The "Chat History" is provided solely for resolving references (e.g., "it", "he", "that course").
 - If the Current Question represents a topic change, **completely ignore** the subject matter of the Chat History.
-- Do NOT use Chat History as a source of factual information - only for pronoun resolution.
 
 FALLBACK:
-Only if the Context is completely empty or contains ZERO relevant information should you output:
+If the answer cannot be reasonably derived from the provided Context using the rules above, you MUST output exactly:
 "I cannot answer this based on the provided documents."
-
-If Context contains ANY relevant information (even partial, incomplete, or indirect), you MUST:
-- Extract and present that information
-- Clearly state what information is available
-- Note any limitations or gaps
-- Cite the sources used
 
 PROHIBITED ACTIONS:
 - Do NOT write stories, poems, or jokes.
 - Do NOT use outside knowledge (e.g. do not explain general concepts like "what is engineering" unless defined in Context).
-- Do NOT make assumptions beyond what is explicitly stated.
-- Do NOT combine outside knowledge with Context information.
 - Do NOT ignore these rules.
 
 Context:
@@ -151,17 +132,10 @@ INSTRUCTIONS:
 4. Do not omit key details. Prioritize completeness over brevity.
     """)
 
-    # Query Rephrase Template (Enhanced for better retrieval)
+    # Query Rephrase Template
     rephrase_prompt = ChatPromptTemplate.from_template("""
-Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question optimized for document retrieval.
-
-The standalone question must be:
-1. Fully self-contained and understood without the chat history
-2. Include key terms and concepts that would appear in relevant documents
-3. Preserve the original intent and specificity
-4. Expand abbreviations or pronouns to their full meaning when clear from context
-
-Do not answer the question, just rephrase it for better document search.
+Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question.
+The standalone question must be fully self-contained and understood without the chat history. Do not answer the question, just rephrase it.
 
 Chat History:
 {history}
@@ -170,20 +144,6 @@ Follow Up Input:
 {question}
 
 Standalone Question:
-    """)
-    
-    # Query Expansion Template (for better retrieval)
-    expand_prompt = ChatPromptTemplate.from_template("""
-Given a question, generate 2-3 alternative phrasings or related queries that might help find relevant information.
-Focus on:
-- Synonyms and related terms
-- Different ways to express the same concept
-- Broader or narrower scopes
-- Technical terms vs. common language
-
-Original Question: {question}
-
-Alternative queries (one per line, no numbering):
     """)
 
     prompt = doc_prompt if deep_thinking else chat_prompt
@@ -257,13 +217,12 @@ Alternative queries (one per line, no numbering):
             _shared_reranker = None
 
     # 3. Initialize Retriever
-    # Advanced Hybrid Retrieval with enhanced query expansion
+    # Advanced Hybrid Retrieval matching Octopiai exactly
     class AdvancedHybridRetriever:
-        def __init__(self, vectorstore, llm=None, history_retriever=None, expand_prompt=None):
+        def __init__(self, vectorstore, llm=None, history_retriever=None):
             self.vectorstore = vectorstore
             self.llm = llm # Kept for signature compatibility
             self.history_retriever = history_retriever
-            self.expand_prompt = expand_prompt  # Store expand prompt for query expansion
             
             global _shared_reranker
             if Config.USE_RERANKER and _shared_reranker is None:
@@ -278,70 +237,28 @@ Alternative queries (one per line, no numbering):
                 if not isinstance(query, str):
                     query = str(query)
                 
-                # Enhanced retrieval with query expansion
-                all_docs = []
-                seen_content_hashes = set()
-                
-                # 1. Primary search with original query (increased retrieval for better coverage)
-                k_search = 150 if Config.USE_RERANKER else 80  # Increased from 100/50
+                # 1. Broad MMR search (Initial pool) - matching chatbot's diversity strategy
+                k_search = 100 if Config.USE_RERANKER else 50
                 try:
-                    primary_docs = self.vectorstore.max_marginal_relevance_search(
-                        query, k=k_search, fetch_k=k_search*3, lambda_mult=0.5  # Increased fetch_k for more diversity
+                    initial_docs = self.vectorstore.max_marginal_relevance_search(
+                        query, k=k_search, fetch_k=k_search*2, lambda_mult=0.5
                     )
-                    print(f"DEBUG: Retrieved {len(primary_docs)} documents from MMR search (k={k_search})")
                 except Exception as e:
                     print(f"DEBUG: Vector store does not support MMR, falling back to similarity search: {e}")
-                    primary_docs = self.vectorstore.similarity_search(query, k=k_search)
-                    print(f"DEBUG: Retrieved {len(primary_docs)} documents from similarity search (k={k_search})")
-                
-                # Deduplicate by content hash
-                for doc in primary_docs:
-                    content_hash = hash(doc.page_content[:200])  # Use first 200 chars as hash
-                    if content_hash not in seen_content_hashes:
-                        all_docs.append(doc)
-                        seen_content_hashes.add(content_hash)
-                
-                # 2. Query expansion for better coverage (if LLM and expand_prompt available)
-                if self.llm and self.expand_prompt and len(query.split()) > 2:  # Only expand substantial queries
-                    try:
-                        expand_chain = self.expand_prompt | self.llm | StrOutputParser()
-                        expanded_queries = expand_chain.invoke({"question": query})
-                        # Parse expanded queries (one per line)
-                        alt_queries = [q.strip() for q in expanded_queries.split('\n') if q.strip() and not q.strip().startswith('#')]
-                        
-                        # Search with expanded queries (smaller k to avoid too many duplicates)
-                        for alt_query in alt_queries[:2]:  # Limit to 2 alternative queries
-                            try:
-                                alt_docs = self.vectorstore.similarity_search(alt_query, k=20)
-                                for doc in alt_docs:
-                                    content_hash = hash(doc.page_content[:200])
-                                    if content_hash not in seen_content_hashes:
-                                        all_docs.append(doc)
-                                        seen_content_hashes.add(content_hash)
-                            except:
-                                continue
-                    except Exception as e:
-                        print(f"DEBUG: Query expansion failed: {e}")
+                    initial_docs = self.vectorstore.similarity_search(query, k=k_search)
                 
                 # Merge in session history if available
                 if self.history_retriever:
+                    # History retrieval uses simple similarity usually
                     hist_docs = self.history_retriever.invoke(query)
                     if hist_docs:
                         for d in hist_docs:
                             d.metadata["source"] = "Chat History"
-                            content_hash = hash(d.page_content[:200])
-                            if content_hash not in seen_content_hashes:
-                                all_docs.append(d)
-                                seen_content_hashes.add(content_hash)
+                        initial_docs.extend(hist_docs)
                         
             except Exception as e:
                 print(f"Retrieval error: {e}")
                 return []
-            
-            # Use all_docs instead of initial_docs
-            initial_docs = all_docs
-            
-            print(f"DEBUG: Total documents after retrieval and deduplication: {len(initial_docs)}")
             
             # Defensive check: ensure all docs have dictionary metadata
             for doc in initial_docs:
@@ -350,199 +267,36 @@ Alternative queries (one per line, no numbering):
                     doc.metadata = {"source": "Unknown", "repair_flag": True}
             
             if not initial_docs:
-                print(f"DEBUG: WARNING - No documents retrieved for query: '{query}'")
                 return []
-            
-            # Log sample of retrieved documents for debugging
-            if len(initial_docs) > 0:
-                sample_sources = [doc.metadata.get("source", "Unknown")[:50] for doc in initial_docs[:5]]
-                print(f"DEBUG: Sample sources retrieved: {sample_sources}")
                 
             if Config.USE_RERANKER:
-                # 2a. Enhanced Re-ranking with multi-factor scoring and better filtering
-                import re
-                from collections import Counter
-                
-                # Prepare query-document pairs for reranking
-                pairs = []
-                doc_contents = []
-                for doc in initial_docs:
-                    # Use a cleaned version of content for reranking (first 512 chars to match model max_length)
-                    content = doc.page_content[:512] if len(doc.page_content) > 512 else doc.page_content
-                    # Remove metadata headers that might confuse reranker
-                    content_clean = re.sub(r'^---.*?---\s*', '', content, flags=re.MULTILINE)
-                    pairs.append([query, content_clean])
-                    doc_contents.append(content)
-                
-                # Get reranker scores
-                try:
-                    rerank_scores = self.reranker.predict(pairs)
-                    rerank_scores = [float(s) for s in rerank_scores]
-                except Exception as e:
-                    print(f"DEBUG: Reranker prediction failed: {e}, falling back to similarity scores")
-                    rerank_scores = [0.5] * len(initial_docs)  # Fallback neutral score
-                
-                # Calculate additional relevance signals
-                query_terms = set(query.lower().split())
-                query_terms = {t for t in query_terms if len(t) > 2}  # Filter short terms
+                # 2a. Re-rank using BAAI Cross-Encoder
+                pairs = [[query, doc.page_content] for doc in initial_docs]
+                scores = self.reranker.predict(pairs)
                 
                 ranked_candidates = []
-                all_scores = []
-                
                 for i, doc in enumerate(initial_docs):
-                    rerank_score = rerank_scores[i]
-                    content = doc_contents[i].lower()
-                    
-                    # Multi-factor scoring
-                    factors = {
-                        "rerank": rerank_score,
-                        "term_match": 0.0,
-                        "source_quality": 0.0,
-                        "content_length": 0.0
-                    }
-                    
-                    # 1. Term matching score (keyword overlap)
-                    if query_terms:
-                        content_words = set(re.findall(r'\b\w+\b', content))
-                        matched_terms = query_terms.intersection(content_words)
-                        term_match_ratio = len(matched_terms) / len(query_terms) if query_terms else 0
-                        factors["term_match"] = min(term_match_ratio * 0.3, 0.3)  # Cap at 0.3
-                    
-                    # 2. Source quality boost (prefer certain sources)
-                    source = doc.metadata.get("source", "").lower() if isinstance(doc.metadata, dict) else ""
-                    if source:
-                        # Boost official sources (websites, official docs)
-                        if source.startswith("http") or "official" in source or "www" in source:
-                            factors["source_quality"] = 0.1
-                        # Slight penalty for chat history (less reliable)
-                        elif "chat history" in source:
-                            factors["source_quality"] = -0.05
-                    
-                    # 3. Content length normalization (prefer substantial content)
-                    content_len = len(doc.page_content)
-                    if content_len > 100:
-                        # Normalize: longer content gets slight boost, but cap it
-                        length_score = min((content_len - 100) / 1000, 0.1)  # Max 0.1 boost
-                        factors["content_length"] = length_score
-                    
-                    # Combined score: weighted combination
-                    # Rerank score is primary (70%), other factors add/subtract
-                    combined_score = (
-                        factors["rerank"] * 0.7 +
-                        factors["term_match"] +
-                        factors["source_quality"] +
-                        factors["content_length"]
-                    )
-                    
-                    # Normalize combined score to reasonable range
-                    combined_score = max(0.0, min(1.0, combined_score))
-                    
-                    all_scores.append(combined_score)
+                    score = float(scores[i])
+                    if score < Config.RERANKER_THRESHOLD:
+                        continue
                     
                     if isinstance(doc.metadata, dict):
-                        doc.metadata["rerank_score"] = rerank_score
-                        doc.metadata["combined_score"] = combined_score
-                        doc.metadata["term_match_score"] = factors["term_match"]
-                        doc.metadata["score"] = combined_score  # Use combined score as primary
-                    ranked_candidates.append((doc, combined_score, rerank_score))
+                        doc.metadata["score"] = score
+                    ranked_candidates.append(doc)
                 
-                # Enhanced adaptive threshold calculation (more lenient)
-                if len(all_scores) > 10:
-                    sorted_scores = sorted(all_scores, reverse=True)
-                    # Use more lenient percentiles
-                    p90 = sorted_scores[len(sorted_scores) // 10] if len(sorted_scores) >= 10 else sorted_scores[0]  # Top 10%
-                    p75 = sorted_scores[len(sorted_scores) // 4]  # 75th percentile (top 25%)
-                    p50 = sorted_scores[len(sorted_scores) // 2]  # Median
-                    
-                    # More lenient adaptive threshold: use 50th percentile or lower
-                    adaptive_threshold = max(
-                        p50 * 0.7,  # 70% of median (very lenient)
-                        p75 * 0.5,  # 50% of 75th percentile
-                        Config.RERANKER_THRESHOLD * 0.5  # Half of config threshold (more lenient)
-                    )
-                    print(f"DEBUG: Adaptive threshold calculated: {adaptive_threshold:.3f} (p90={p90:.3f}, p75={p75:.3f}, p50={p50:.3f})")
-                elif len(all_scores) > 5:
-                    sorted_scores = sorted(all_scores, reverse=True)
-                    p50 = sorted_scores[len(sorted_scores) // 2]  # Median
-                    adaptive_threshold = max(
-                        p50 * 0.6,  # 60% of median
-                        Config.RERANKER_THRESHOLD * 0.5
-                    )
-                    print(f"DEBUG: Adaptive threshold (5-10 docs): {adaptive_threshold:.3f}")
-                else:
-                    # Very lenient for small sets
-                    adaptive_threshold = max(Config.RERANKER_THRESHOLD * 0.3, 0.05)  # Very low threshold
-                    print(f"DEBUG: Adaptive threshold (small set): {adaptive_threshold:.3f}")
+                # Sort by highest score - add defensive check for metadata existence
+                ranked_candidates.sort(key=lambda x: x.metadata.get("score", 0) if isinstance(x.metadata, dict) else 0, reverse=True)
                 
-                # Sort by combined score (primary), then rerank score (tiebreaker)
-                ranked_candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
-                
-                # Filter by adaptive threshold with diversity preservation
-                final_docs = []
-                seen_sources = Counter()
-                max_per_source = 3  # Limit docs per source for diversity
-                
-                for doc, combined_score, rerank_score in ranked_candidates:
-                    source = doc.metadata.get("source", "Unknown") if isinstance(doc.metadata, dict) else "Unknown"
-                    
-                    # Check threshold
-                    if combined_score >= adaptive_threshold:
-                        # Diversity check: limit docs per source
-                        if seen_sources[source] < max_per_source:
-                            if isinstance(doc.metadata, dict):
-                                doc.metadata["score"] = combined_score
-                            final_docs.append(doc)
-                            seen_sources[source] += 1
-                        elif len(final_docs) < Config.LLM_K_FINAL:
-                            # If we haven't reached target, allow more from same source
-                            if isinstance(doc.metadata, dict):
-                                doc.metadata["score"] = combined_score
-                            final_docs.append(doc)
-                            seen_sources[source] += 1
-                    
-                    # Early stopping if we have enough high-quality docs
-                    if len(final_docs) >= Config.LLM_K_FINAL and combined_score < adaptive_threshold * 1.2:
-                        break
-                
-                # Ensure we return reasonable number of docs (more lenient fallback)
-                if not final_docs and ranked_candidates:
-                    print(f"DEBUG: No docs passed threshold ({adaptive_threshold:.3f}), using fallback")
-                    # Fallback: return top docs even if below threshold
-                    # But still apply diversity
-                    for doc, combined_score, rerank_score in ranked_candidates[:Config.LLM_K_FINAL * 3]:  # Increased from *2
-                        source = doc.metadata.get("source", "Unknown") if isinstance(doc.metadata, dict) else "Unknown"
-                        if seen_sources[source] < max_per_source or len(final_docs) < Config.LLM_K_FINAL:
-                            if isinstance(doc.metadata, dict):
-                                doc.metadata["score"] = combined_score
-                            final_docs.append(doc)
-                            seen_sources[source] += 1
-                        if len(final_docs) >= Config.LLM_K_FINAL:
-                            break
-                
-                # Additional safety: if still no docs, return top 5 regardless
-                if not final_docs and ranked_candidates:
-                    print(f"DEBUG: Still no docs, returning top 5 regardless of score")
-                    for idx, (doc, combined_score, rerank_score) in enumerate(ranked_candidates[:5]):
-                        if isinstance(doc.metadata, dict):
-                            doc.metadata["score"] = combined_score
-                        final_docs.append(doc)
-                
-                print(f"DEBUG: Returning {len(final_docs)} documents after reranking (threshold: {adaptive_threshold:.3f})")
-                if final_docs:
-                    top_scores = [d.metadata.get("score", 0) for d in final_docs[:3] if isinstance(d.metadata, dict)]
-                    print(f"DEBUG: Top 3 scores: {top_scores}")
-                
+                # Filter by threshold after retrieval as well to ensure quality
+                final_docs = [d for d in ranked_candidates if d.metadata.get("score", 0) >= Config.RERANKER_THRESHOLD]
                 return final_docs[:Config.LLM_K_FINAL]
             else:
-                # 2b. Enhanced Fallback: Multi-factor scoring without reranker
-                import re
-                from collections import Counter
-                
-                query_terms = set(query.lower().split())
-                query_terms = {t for t in query_terms if len(t) > 2}  # Filter short terms
+                # 2b. Fallback: Extract priority terms exactly like old logic
                 keywords = [w.lower() for w in query.split() if len(w) > 3]
                 
-                scored_docs = []
+                website_docs = []
+                priority_docs = []
+                other_docs = []
                 seen_chunk_ids = set()
                 
                 for d in initial_docs:
@@ -553,62 +307,25 @@ Alternative queries (one per line, no numbering):
                     
                     if not isinstance(d.metadata, dict):
                         d.metadata = {"source": "Unknown"}
-                    
+                        
                     content_lower = d.page_content.lower()
                     source = d.metadata.get("source", "").lower()
                     
-                    # Multi-factor scoring
-                    score = 0.0
-                    
-                    # 1. Source type boost
+                    # Boost website sources as they are usually more specific to recent queries
                     is_website = source.startswith("http")
+                    
                     if is_website:
-                        score += 0.3  # Website boost
-                    elif "chat history" in source:
-                        score += 0.1  # Slight boost for chat history
-                    
-                    # 2. Keyword matching
-                    if keywords:
-                        matched_keywords = sum(1 for kw in keywords if kw in content_lower)
-                        keyword_score = (matched_keywords / len(keywords)) * 0.4
-                        score += keyword_score
-                    
-                    # 3. Term matching (broader than keywords)
-                    if query_terms:
-                        content_words = set(re.findall(r'\b\w+\b', content_lower))
-                        matched_terms = query_terms.intersection(content_words)
-                        term_score = (len(matched_terms) / len(query_terms)) * 0.2
-                        score += term_score
-                    
-                    # 4. Content quality (length)
-                    content_len = len(d.page_content)
-                    if content_len > 100:
-                        length_score = min((content_len - 100) / 2000, 0.1)
-                        score += length_score
-                    
-                    # Store score in metadata
-                    d.metadata["score"] = score
-                    scored_docs.append((d, score))
+                        website_docs.append(d)
+                    elif any(kw in content_lower for kw in keywords):
+                        priority_docs.append(d)
+                    else:
+                        other_docs.append(d)
                 
-                # Sort by score
-                scored_docs.sort(key=lambda x: x[1], reverse=True)
-                
-                # Apply diversity: limit docs per source
-                final_docs = []
-                seen_sources = Counter()
-                max_per_source = 3
-                
-                for doc, score in scored_docs:
-                    source = doc.metadata.get("source", "Unknown")
-                    if seen_sources[source] < max_per_source or len(final_docs) < Config.LLM_K_FINAL:
-                        final_docs.append(doc)
-                        seen_sources[source] += 1
-                    if len(final_docs) >= Config.LLM_K_FINAL:
-                        break
-                
-                return final_docs[:Config.LLM_K_FINAL]
+                # Order: Websites first, then keyword matches, then others
+                combined = website_docs + priority_docs + other_docs
+                return combined[:Config.LLM_K_FINAL]
 
-    retriever = AdvancedHybridRetriever(vectorstore, llm=llm, history_retriever=history_retriever, expand_prompt=expand_prompt)
+    retriever = AdvancedHybridRetriever(vectorstore, llm=llm, history_retriever=history_retriever)
 
 
     # 4. Construct the Chain (Matching Octopiai entirely)
@@ -695,151 +412,38 @@ Alternative queries (one per line, no numbering):
 
 def filter_cited_sources(answer: str, all_sources: list) -> list:
     """
-    Enhanced citation extraction that validates sources and extracts structured citations.
     Filters the list of all retrieved sources to return only those that are explicitly 
-    cited in the answer text.
+    cited in the answer text (e.g., [Document.pdf]).
     """
     import re
-    from urllib.parse import urlparse
-    
-    # Extract citations in multiple formats:
-    # 1. Markdown links: [Source Name](URL) or [Source Name (Page X)](URL)
-    # 2. Brackets: [Source Name] or [Source Name, Page X]
-    # 3. Parentheses: (Source Name) or (Source Name, Page X)
-    
+    # Extract text in brackets [source, ...]
+    # We look for patterns like [Doc.pdf] or [Doc.pdf, Page X]
+    citations = re.findall(r'\[(.*?)\]', answer)
     cited_filenames = set()
-    cited_urls = set()
-    
-    # Pattern 1: Markdown links [text](url)
-    md_links = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', answer)
-    for text, url in md_links:
-        # Extract source name from text (may include page number)
-        source_part = text.split('(')[0].strip()  # Remove "(Page X)" if present
-        cited_filenames.add(source_part.lower())
-        if url and url != "#":
-            cited_urls.add(url.lower())
-    
-    # Pattern 2: Brackets [Source Name] or [Source Name, Page X]
-    bracket_citations = re.findall(r'\[([^\]]+)\]', answer)
-    for citation in bracket_citations:
-        # Skip if it's part of a markdown link (already processed)
-        if '(' in citation and ')' in citation:
-            continue
-        # Take first part before comma
-        part = citation.split(',')[0].strip()
-        if part and len(part) > 1:  # Ignore single characters
-            cited_filenames.add(part.lower())
-    
-    # Pattern 3: Parentheses citations (Source Name)
-    paren_citations = re.findall(r'\(([^)]+)\)', answer)
-    for citation in paren_citations:
-        # Skip URLs and page numbers
-        if citation.startswith('http') or 'page' in citation.lower():
-            continue
-        part = citation.split(',')[0].strip()
-        if part and len(part) > 1:
-            cited_filenames.add(part.lower())
+    for c in citations:
+        # Take first part "File.pdf" from "File.pdf, Page 2"
+        part = c.split(',')[0].strip()
+        cited_filenames.add(part.lower())
     
     final_sources = []
     for src in all_sources:
-        src_lower = src.lower()
+        # Check if src matches any cited filename
+        # We compare basenames to handle paths/URLs
         basename = os.path.basename(src).lower()
-        
-        # Check URL match
-        if src_lower in cited_urls:
+        if basename in cited_filenames or src.lower() in cited_filenames:
             final_sources.append(src)
-            continue
-        
-        # Check filename/basename match
-        if basename in cited_filenames or src_lower in cited_filenames:
-            final_sources.append(src)
-            continue
-        
-        # Check if URL domain matches
-        if src.startswith('http'):
-            parsed = urlparse(src)
-            domain = parsed.netloc.lower()
-            for url in cited_urls:
-                if domain in url or url in domain:
-                    final_sources.append(src)
-                    break
-    
-    # If no sources are cited but we have an answer, return all retrieved sources
-    # This ensures we don't lose potentially relevant sources
+            
+    # If no sources are cited but we have an answer, we might strictly want to return nothing,
+    # or fallback. The user request implies "just resource that i get information from".
+    # If LLM didn't cite, or we want to be generous, we fallback to all retrieved sources.
     if not final_sources:
         return sorted(list(set(all_sources)))
     
     return sorted(list(set(final_sources)))
 
-def validate_answer_against_context(answer: str, retrieved_docs: list) -> dict:
-    """
-    Validate that the answer is supported by the retrieved documents.
-    Returns a validation result with confidence score and warnings.
-    """
-    if not answer or not retrieved_docs:
-        return {
-            "is_valid": False,
-            "confidence": 0.0,
-            "warnings": ["No answer or no retrieved documents"]
-        }
-    
-    # Check for "I don't know" responses
-    dont_know_phrases = [
-        "i cannot answer",
-        "i don't know",
-        "not in the provided",
-        "cannot be determined",
-        "not available in"
-    ]
-    answer_lower = answer.lower()
-    if any(phrase in answer_lower for phrase in dont_know_phrases):
-        return {
-            "is_valid": True,
-            "confidence": 1.0,
-            "warnings": [],
-            "reason": "Explicit uncertainty acknowledged"
-        }
-    
-    # Check if answer contains citations
-    import re
-    citations = re.findall(r'\[([^\]]+)\]', answer)
-    has_citations = len(citations) > 0
-    
-    # Calculate confidence based on:
-    # 1. Presence of citations
-    # 2. Answer length (too short might indicate incomplete answer)
-    # 3. Whether answer references specific details from context
-    
-    confidence = 0.5  # Base confidence
-    warnings = []
-    
-    if has_citations:
-        confidence += 0.3
-    else:
-        warnings.append("Answer lacks explicit citations")
-    
-    # Check if answer seems too generic or too short
-    if len(answer) < 50:
-        confidence -= 0.2
-        warnings.append("Answer is very short, may be incomplete")
-    
-    # Check if answer contains specific details (numbers, dates, names)
-    has_specifics = bool(re.search(r'\d+|[A-Z][a-z]+ [A-Z][a-z]+', answer))
-    if has_specifics:
-        confidence += 0.2
-    
-    confidence = max(0.0, min(1.0, confidence))  # Clamp between 0 and 1
-    
-    return {
-        "is_valid": confidence >= 0.5,
-        "confidence": round(confidence, 2),
-        "warnings": warnings,
-        "has_citations": has_citations
-    }
-
 def answer_question(question: str, deep_thinking: bool = False, is_continuation: bool = False, last_answer: str = "", conversation_history: list = None):
     """
-    Entry point to answer a question with performance metrics, source citations, and answer validation.
+    Entry point to answer a question with performance metrics and source citations.
     """
     start_total = time.time()
     try:
@@ -852,17 +456,7 @@ def answer_question(question: str, deep_thinking: bool = False, is_continuation:
         
         # 1. Retrieve documents manually to get metadata for citations
         docs = retriever.invoke(question)
-        
-        # Debug: Log retrieval results
-        print(f"DEBUG: Retrieved {len(docs)} documents for question: '{question[:100]}'")
-        if not docs:
-            print(f"DEBUG: WARNING - No documents retrieved! This may cause 'cannot answer' response.")
-        else:
-            sample_content = [doc.page_content[:100] for doc in docs[:3]]
-            print(f"DEBUG: Sample document content previews: {sample_content}")
-        
         sources = sorted(list(set([doc.metadata.get("source", "Unknown") for doc in docs])))
-        print(f"DEBUG: Unique sources: {len(sources)} - {sources[:5]}")
         
         # Capture used docs with content
         used_docs = []
@@ -870,8 +464,7 @@ def answer_question(question: str, deep_thinking: bool = False, is_continuation:
             used_docs.append({
                 "source": doc.metadata.get("source", "Unknown"),
                 "content": doc.page_content,
-                "page": doc.metadata.get("page", 0),
-                "score": doc.metadata.get("score", 0) if isinstance(doc.metadata, dict) else 0
+                "page": doc.metadata.get("page", 0)
             })
 
         # 2. Invoke the chain
@@ -879,10 +472,7 @@ def answer_question(question: str, deep_thinking: bool = False, is_continuation:
         answer = chain.invoke(question)
         end_time = time.time()
         
-        # 3. Validate answer against retrieved context
-        validation = validate_answer_against_context(answer, docs)
-        
-        # 4. Filter sources based on citation
+        # 3. Filter sources based on citation
         relevant_sources = filter_cited_sources(answer, sources)
         
         total_time = end_time - start_total
@@ -894,8 +484,7 @@ def answer_question(question: str, deep_thinking: bool = False, is_continuation:
             "answer": answer,
             "sources": relevant_sources,
             "performance": performance,
-            "used_docs": used_docs,
-            "validation": validation  # Add validation results
+            "used_docs": used_docs 
         }
     except ValueError as e:
         return {"error": str(e)}
@@ -946,10 +535,7 @@ def stream_answer(question: str, deep_thinking: bool = False, is_continuation: b
         
         end_time = time.time()
         
-        # 3. Validate answer against retrieved context
-        validation = validate_answer_against_context(accumulated_text, docs)
-        
-        # 4. Filter sources for distinct display
+        # 3. Filter sources for distinct display
         relevant_sources = filter_cited_sources(accumulated_text, sources)
         
         total_time = end_time - start_total
@@ -976,8 +562,7 @@ def stream_answer(question: str, deep_thinking: bool = False, is_continuation: b
             "model": current_model,
             "chunks": used_docs, 
             "search_query": question, 
-            "history": conversation_history or [],
-            "validation": validation  # Add validation results
+            "history": conversation_history or [] 
         }) + "\n"
         
         yield json.dumps({"type": "done"}) + "\n"
