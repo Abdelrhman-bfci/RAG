@@ -56,15 +56,45 @@ class ChromaStore:
         self.persist_directory = Config.VECTOR_DB_PATH
         self.collection_name = Config.CHROMA_COLLECTION_NAME
 
-    def get_vectorstore(self):
-        """Initialize and return the Chroma vector store using PersistentClient (chromadb>=0.5)."""
+    def _make_client(self):
+        """Create a PersistentClient, auto-healing if the DB schema is incompatible."""
         os.makedirs(self.persist_directory, exist_ok=True)
-        client = chromadb.PersistentClient(path=self.persist_directory)
-        return Chroma(
-            client=client,
-            collection_name=self.collection_name,
-            embedding_function=self.embeddings,
-        )
+        try:
+            return chromadb.PersistentClient(path=self.persist_directory)
+        except Exception:
+            # Schema is corrupted or written by an incompatible version — wipe and recreate
+            print(f"WARNING: ChromaDB at '{self.persist_directory}' is incompatible. Wiping directory for fresh start...")
+            if os.path.exists(self.persist_directory):
+                shutil.rmtree(self.persist_directory)
+            os.makedirs(self.persist_directory, exist_ok=True)
+            return chromadb.PersistentClient(path=self.persist_directory)
+
+    def get_vectorstore(self):
+        """Initialize and return the Chroma vector store.
+        
+        Uses PersistentClient (chromadb>=0.5). If the existing DB is incompatible
+        (e.g. written by a different chromadb version), it auto-wipes and recreates.
+        """
+        client = self._make_client()
+        try:
+            vs = Chroma(
+                client=client,
+                collection_name=self.collection_name,
+                embedding_function=self.embeddings,
+            )
+            return vs
+        except (KeyError, ValueError, Exception) as e:
+            # Collection metadata is corrupted — wipe the DB and try once more
+            print(f"WARNING: ChromaDB collection init failed ({e}). Wiping and recreating...")
+            if os.path.exists(self.persist_directory):
+                shutil.rmtree(self.persist_directory)
+            os.makedirs(self.persist_directory, exist_ok=True)
+            client = chromadb.PersistentClient(path=self.persist_directory)
+            return Chroma(
+                client=client,
+                collection_name=self.collection_name,
+                embedding_function=self.embeddings,
+            )
 
     def add_documents(self, documents):
         """Add documents to ChromaDB."""
