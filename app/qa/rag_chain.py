@@ -94,10 +94,12 @@ METADATA:
 - Source: [Filename/URL], URL: [URL]
 
 **Quality Checks Before Responding:**
-1. Can I answer this question using ONLY the Context provided? (If NO → "I cannot answer this based on the provided documents.")
-2. Are all my claims directly supported by the Context? (If NO → Remove unsupported claims)
+1. Can I answer this question using ONLY the Context provided? 
+   - If Context contains ANY relevant information, even partial, provide that information
+   - Only say "I cannot answer" if Context is completely empty or has ZERO relevance
+2. Are all my claims directly supported by the Context? (If NO → Remove unsupported claims, but keep supported ones)
 3. Have I cited every source I used? (If NO → Add missing citations)
-4. Is my answer complete and accurate? (If NO → Revise)
+4. Is my answer complete and accurate? (If NO → Revise, but still provide partial answer if available)
 
 CHAT HISTORY RULES:
 - The "Chat History" is provided solely for resolving references (e.g., "it", "he", "that course").
@@ -105,8 +107,14 @@ CHAT HISTORY RULES:
 - Do NOT use Chat History as a source of factual information - only for pronoun resolution.
 
 FALLBACK:
-If the answer cannot be reasonably derived from the provided Context using the rules above, you MUST output exactly:
+Only if the Context is completely empty or contains ZERO relevant information should you output:
 "I cannot answer this based on the provided documents."
+
+If Context contains ANY relevant information (even partial, incomplete, or indirect), you MUST:
+- Extract and present that information
+- Clearly state what information is available
+- Note any limitations or gaps
+- Cite the sources used
 
 PROHIBITED ACTIONS:
 - Do NOT write stories, poems, or jokes.
@@ -274,15 +282,17 @@ Alternative queries (one per line, no numbering):
                 all_docs = []
                 seen_content_hashes = set()
                 
-                # 1. Primary search with original query
-                k_search = 100 if Config.USE_RERANKER else 50
+                # 1. Primary search with original query (increased retrieval for better coverage)
+                k_search = 150 if Config.USE_RERANKER else 80  # Increased from 100/50
                 try:
                     primary_docs = self.vectorstore.max_marginal_relevance_search(
-                        query, k=k_search, fetch_k=k_search*2, lambda_mult=0.5
+                        query, k=k_search, fetch_k=k_search*3, lambda_mult=0.5  # Increased fetch_k for more diversity
                     )
+                    print(f"DEBUG: Retrieved {len(primary_docs)} documents from MMR search (k={k_search})")
                 except Exception as e:
                     print(f"DEBUG: Vector store does not support MMR, falling back to similarity search: {e}")
                     primary_docs = self.vectorstore.similarity_search(query, k=k_search)
+                    print(f"DEBUG: Retrieved {len(primary_docs)} documents from similarity search (k={k_search})")
                 
                 # Deduplicate by content hash
                 for doc in primary_docs:
@@ -331,6 +341,8 @@ Alternative queries (one per line, no numbering):
             # Use all_docs instead of initial_docs
             initial_docs = all_docs
             
+            print(f"DEBUG: Total documents after retrieval and deduplication: {len(initial_docs)}")
+            
             # Defensive check: ensure all docs have dictionary metadata
             for doc in initial_docs:
                 if not isinstance(doc.metadata, dict):
@@ -338,7 +350,13 @@ Alternative queries (one per line, no numbering):
                     doc.metadata = {"source": "Unknown", "repair_flag": True}
             
             if not initial_docs:
+                print(f"DEBUG: WARNING - No documents retrieved for query: '{query}'")
                 return []
+            
+            # Log sample of retrieved documents for debugging
+            if len(initial_docs) > 0:
+                sample_sources = [doc.metadata.get("source", "Unknown")[:50] for doc in initial_docs[:5]]
+                print(f"DEBUG: Sample sources retrieved: {sample_sources}")
                 
             if Config.USE_RERANKER:
                 # 2a. Enhanced Re-ranking with multi-factor scoring and better filtering
@@ -428,27 +446,33 @@ Alternative queries (one per line, no numbering):
                         doc.metadata["score"] = combined_score  # Use combined score as primary
                     ranked_candidates.append((doc, combined_score, rerank_score))
                 
-                # Enhanced adaptive threshold calculation
+                # Enhanced adaptive threshold calculation (more lenient)
                 if len(all_scores) > 10:
                     sorted_scores = sorted(all_scores, reverse=True)
-                    # Use multiple percentile strategies
+                    # Use more lenient percentiles
+                    p90 = sorted_scores[len(sorted_scores) // 10] if len(sorted_scores) >= 10 else sorted_scores[0]  # Top 10%
                     p75 = sorted_scores[len(sorted_scores) // 4]  # 75th percentile (top 25%)
                     p50 = sorted_scores[len(sorted_scores) // 2]  # Median
                     
-                    # Adaptive threshold: use 75th percentile but ensure it's reasonable
+                    # More lenient adaptive threshold: use 50th percentile or lower
                     adaptive_threshold = max(
-                        p75 * 0.8,  # 80% of 75th percentile (more lenient)
-                        p50,  # At least median
-                        Config.RERANKER_THRESHOLD  # Never below config threshold
+                        p50 * 0.7,  # 70% of median (very lenient)
+                        p75 * 0.5,  # 50% of 75th percentile
+                        Config.RERANKER_THRESHOLD * 0.5  # Half of config threshold (more lenient)
                     )
+                    print(f"DEBUG: Adaptive threshold calculated: {adaptive_threshold:.3f} (p90={p90:.3f}, p75={p75:.3f}, p50={p50:.3f})")
                 elif len(all_scores) > 5:
                     sorted_scores = sorted(all_scores, reverse=True)
+                    p50 = sorted_scores[len(sorted_scores) // 2]  # Median
                     adaptive_threshold = max(
-                        sorted_scores[len(sorted_scores) // 3],  # Top third
-                        Config.RERANKER_THRESHOLD
+                        p50 * 0.6,  # 60% of median
+                        Config.RERANKER_THRESHOLD * 0.5
                     )
+                    print(f"DEBUG: Adaptive threshold (5-10 docs): {adaptive_threshold:.3f}")
                 else:
-                    adaptive_threshold = Config.RERANKER_THRESHOLD
+                    # Very lenient for small sets
+                    adaptive_threshold = max(Config.RERANKER_THRESHOLD * 0.3, 0.05)  # Very low threshold
+                    print(f"DEBUG: Adaptive threshold (small set): {adaptive_threshold:.3f}")
                 
                 # Sort by combined score (primary), then rerank score (tiebreaker)
                 ranked_candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
@@ -480,11 +504,12 @@ Alternative queries (one per line, no numbering):
                     if len(final_docs) >= Config.LLM_K_FINAL and combined_score < adaptive_threshold * 1.2:
                         break
                 
-                # Ensure we return reasonable number of docs
+                # Ensure we return reasonable number of docs (more lenient fallback)
                 if not final_docs and ranked_candidates:
+                    print(f"DEBUG: No docs passed threshold ({adaptive_threshold:.3f}), using fallback")
                     # Fallback: return top docs even if below threshold
                     # But still apply diversity
-                    for doc, combined_score, rerank_score in ranked_candidates[:Config.LLM_K_FINAL * 2]:
+                    for doc, combined_score, rerank_score in ranked_candidates[:Config.LLM_K_FINAL * 3]:  # Increased from *2
                         source = doc.metadata.get("source", "Unknown") if isinstance(doc.metadata, dict) else "Unknown"
                         if seen_sources[source] < max_per_source or len(final_docs) < Config.LLM_K_FINAL:
                             if isinstance(doc.metadata, dict):
@@ -493,6 +518,19 @@ Alternative queries (one per line, no numbering):
                             seen_sources[source] += 1
                         if len(final_docs) >= Config.LLM_K_FINAL:
                             break
+                
+                # Additional safety: if still no docs, return top 5 regardless
+                if not final_docs and ranked_candidates:
+                    print(f"DEBUG: Still no docs, returning top 5 regardless of score")
+                    for idx, (doc, combined_score, rerank_score) in enumerate(ranked_candidates[:5]):
+                        if isinstance(doc.metadata, dict):
+                            doc.metadata["score"] = combined_score
+                        final_docs.append(doc)
+                
+                print(f"DEBUG: Returning {len(final_docs)} documents after reranking (threshold: {adaptive_threshold:.3f})")
+                if final_docs:
+                    top_scores = [d.metadata.get("score", 0) for d in final_docs[:3] if isinstance(d.metadata, dict)]
+                    print(f"DEBUG: Top 3 scores: {top_scores}")
                 
                 return final_docs[:Config.LLM_K_FINAL]
             else:
@@ -814,7 +852,17 @@ def answer_question(question: str, deep_thinking: bool = False, is_continuation:
         
         # 1. Retrieve documents manually to get metadata for citations
         docs = retriever.invoke(question)
+        
+        # Debug: Log retrieval results
+        print(f"DEBUG: Retrieved {len(docs)} documents for question: '{question[:100]}'")
+        if not docs:
+            print(f"DEBUG: WARNING - No documents retrieved! This may cause 'cannot answer' response.")
+        else:
+            sample_content = [doc.page_content[:100] for doc in docs[:3]]
+            print(f"DEBUG: Sample document content previews: {sample_content}")
+        
         sources = sorted(list(set([doc.metadata.get("source", "Unknown") for doc in docs])))
+        print(f"DEBUG: Unique sources: {len(sources)} - {sources[:5]}")
         
         # Capture used docs with content
         used_docs = []
