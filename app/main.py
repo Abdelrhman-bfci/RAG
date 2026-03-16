@@ -598,8 +598,7 @@ async def reset_all_resources():
     except Exception as e:
         print(f"Error clearing current vector store: {e}")
 
-    # Wipe ALL potential physical storage folders dynamically
-    # We look for prefixes 'faiss_index' and 'chroma_db' in the current directory
+    # Wipe ALL potential physical storage folders dynamically (faiss_index*, chroma_db*)
     try:
         current_dirs = [d for d in os.listdir('.') if os.path.isdir(d)]
         for folder in current_dirs:
@@ -607,13 +606,18 @@ async def reset_all_resources():
                 try:
                     shutil.rmtree(folder)
                     print(f"Purged storage folder: {folder}")
+                except PermissionError as pe:
+                    print(f"Skipping locked folder '{folder}' (PermissionError — owned by another user): {pe}")
                 except Exception as e:
                     print(f"Failed to purge {folder}: {e}")
         
-        # Also check the VECTOR_DB_PATH specifically if it's not in the current dir list
+        # Also check the VECTOR_DB_PATH specifically
         if os.path.exists(Config.VECTOR_DB_PATH) and os.path.isdir(Config.VECTOR_DB_PATH):
-             shutil.rmtree(Config.VECTOR_DB_PATH)
-             print(f"Purged VECTOR_DB_PATH: {Config.VECTOR_DB_PATH}")
+            try:
+                shutil.rmtree(Config.VECTOR_DB_PATH)
+                print(f"Purged VECTOR_DB_PATH: {Config.VECTOR_DB_PATH}")
+            except PermissionError as pe:
+                print(f"Skipping locked VECTOR_DB_PATH '{Config.VECTOR_DB_PATH}' (PermissionError): {pe}")
     except Exception as e:
         print(f"Error during folder purging: {e}")
     

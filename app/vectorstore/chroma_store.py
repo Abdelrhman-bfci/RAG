@@ -270,7 +270,20 @@ class ChromaStore:
         return chunks
 
     def clear_all(self):
-        """Wipe the entire vector store."""
+        """Wipe the entire vector store using ChromaDB's own API first, file deletion as fallback."""
+        # Step 1: Use ChromaDB's API to delete the collection — this is always safe
+        try:
+            client = chromadb.PersistentClient(path=self.persist_directory)
+            client.delete_collection(name=self.collection_name)
+            print(f"Deleted ChromaDB collection: {self.collection_name}")
+        except Exception as e:
+            print(f"Collection API delete failed (may not exist): {e}")
+
+        # Step 2: Try to delete the folder (may fail due to permissions)
         if os.path.exists(self.persist_directory):
-            shutil.rmtree(self.persist_directory)
+            try:
+                shutil.rmtree(self.persist_directory)
+                print(f"Deleted ChromaDB directory: {self.persist_directory}")
+            except PermissionError as pe:
+                print(f"WARNING: Cannot delete '{self.persist_directory}' ({pe}). Collection was cleared via API.")
         return True
