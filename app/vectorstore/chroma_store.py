@@ -57,39 +57,46 @@ class ChromaStore:
         self.collection_name = Config.CHROMA_COLLECTION_NAME
 
     def _make_client(self):
-        """Create a PersistentClient, auto-healing if the DB schema is incompatible."""
+        """Create a PersistentClient. If the directory is locked/incompatible, use an alternate path."""
         os.makedirs(self.persist_directory, exist_ok=True)
         try:
             return chromadb.PersistentClient(path=self.persist_directory)
-        except Exception:
-            # Schema is corrupted or written by an incompatible version — wipe and recreate
-            print(f"WARNING: ChromaDB at '{self.persist_directory}' is incompatible. Wiping directory for fresh start...")
+        except Exception as e:
+            print(f"WARNING: ChromaDB at '{self.persist_directory}' failed to init ({type(e).__name__}). Trying clean path...")
+            return self._make_client_clean()
+
+    def _make_client_clean(self):
+        """Try to wipe and recreate the DB directory. Fall back to an alternate path if permission denied."""
+        try:
             if os.path.exists(self.persist_directory):
                 shutil.rmtree(self.persist_directory)
             os.makedirs(self.persist_directory, exist_ok=True)
             return chromadb.PersistentClient(path=self.persist_directory)
+        except PermissionError:
+            # Can't delete old files (different owner) — use a fresh alternate directory
+            alt_dir = self.persist_directory + "_fresh"
+            print(f"WARNING: Cannot delete '{self.persist_directory}' (Permission denied). Using alternate directory: '{alt_dir}'")
+            os.makedirs(alt_dir, exist_ok=True)
+            self.persist_directory = alt_dir  # remap for entire session
+            return chromadb.PersistentClient(path=alt_dir)
 
     def get_vectorstore(self):
         """Initialize and return the Chroma vector store.
         
-        Uses PersistentClient (chromadb>=0.5). If the existing DB is incompatible
-        (e.g. written by a different chromadb version), it auto-wipes and recreates.
+        Uses PersistentClient (chromadb>=0.5). If the existing DB is incompatible or
+        locked (e.g. written by a different user/version), it auto-heals to a clean directory.
         """
         client = self._make_client()
         try:
-            vs = Chroma(
+            return Chroma(
                 client=client,
                 collection_name=self.collection_name,
                 embedding_function=self.embeddings,
             )
-            return vs
         except (KeyError, ValueError, Exception) as e:
-            # Collection metadata is corrupted — wipe the DB and try once more
-            print(f"WARNING: ChromaDB collection init failed ({e}). Wiping and recreating...")
-            if os.path.exists(self.persist_directory):
-                shutil.rmtree(self.persist_directory)
-            os.makedirs(self.persist_directory, exist_ok=True)
-            client = chromadb.PersistentClient(path=self.persist_directory)
+            # Collection metadata is corrupted — clean and retry
+            print(f"WARNING: ChromaDB Chroma() init failed ({e}). Attempting clean recovery...")
+            client = self._make_client_clean()
             return Chroma(
                 client=client,
                 collection_name=self.collection_name,
