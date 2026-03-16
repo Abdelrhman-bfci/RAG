@@ -777,9 +777,23 @@ async def stream_crawl_then_ingest(url: str, depth: int = 2, fresh: bool = False
 async def stream_offline_ingestion(fresh: bool = False):
     """
     Stream offline ingestion progress from downloads folder.
+    Wraps the generator in a safe handler so the stream always closes cleanly,
+    preventing ERR_INCOMPLETE_CHUNKED_ENCODING on client crashes.
     """
+    def safe_stream():
+        try:
+            for chunk in ingest_offline_downloads(force_fresh=fresh):
+                yield chunk
+        except Exception as e:
+            import traceback
+            err_msg = f"\nFATAL ERROR during ingestion: {e}\n{traceback.format_exc()}\n"
+            print(err_msg)
+            yield err_msg
+        finally:
+            yield "\n[STREAM COMPLETE]\n"
+
     return StreamingResponse(
-        ingest_offline_downloads(force_fresh=fresh), 
+        safe_stream(), 
         media_type="text/plain",
         headers={
             "Cache-Control": "no-cache",
