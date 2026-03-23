@@ -12,7 +12,6 @@ import asyncio
 
 from app.ingestion.document_ingest import ingest_documents, TRACKING_FILE as DOC_TRACKING
 from app.ingestion.db_ingest import ingest_database, DB_TRACKING_FILE as DB_TRACKING
-from app.ingestion.web_ingest import ingest_websites, TRACKING_FILE as WEB_TRACKING
 from app.ingestion.offline_web_ingest import ingest_offline_downloads
 from app.services.crawler_service import CrawlerService
 from app.config import Config # Assuming Config is needed for RESOURCE_DIR
@@ -427,8 +426,22 @@ async def get_current_config():
         },
         "vector_store_provider": Config.VECTOR_STORE_PROVIDER,
         "vector_search_weight": Config.VECTOR_SEARCH_WEIGHT,
-        "show_summary_chunks": Config.SHOW_SUMMARY_CHUNKS
+        "show_summary_chunks": Config.SHOW_SUMMARY_CHUNKS,
+        "qa_prompt_template": Config.CHAT_TEMPLATE,
+        "document_template": Config.DOCUMENT_TEMPLATE
     }
+
+@app.get("/config/all")
+async def get_all_config():
+    """Get all database-backed configurations dynamically."""
+    from app.config import Config
+    all_configs = {}
+    for k in dir(Config):
+        if k.isupper() and not k.startswith('_'):
+            val = getattr(Config, k)
+            if isinstance(val, (str, int, float, bool)):
+                all_configs[k] = val
+    return all_configs
 
 @app.post("/config/update")
 async def update_configuration(updates: dict):
@@ -561,14 +574,6 @@ async def list_resources():
             elif "." in src: # Likely a file if it has an extension
                 resources["documents"].append(src)
     
-    # Websites
-    if os.path.exists(WEB_TRACKING):
-        try:
-            with open(WEB_TRACKING, "r") as f:
-                tracking = json.load(f)
-                resources["websites"] = list(tracking.keys())
-        except: pass
-    
     # Fallback for websites from index
     for src in index_sources:
         if src.startswith("http") and src not in resources["websites"]:
@@ -652,21 +657,6 @@ async def delete_resource(res_type: str, name: str):
         else:
              raise HTTPException(status_code=404, detail="Table not found in tracking")
             
-    elif res_type == "websites":
-        tracking = {}
-        if os.path.exists(WEB_TRACKING):
-            with open(WEB_TRACKING, "r") as f:
-                tracking = json.load(f)
-            
-            if name in tracking:
-                del tracking[name]
-                with open(WEB_TRACKING, "w") as f:
-                    json.dump(tracking, f, indent=4)
-                
-                # Remove from Vector Store
-                store.delete_source(name)
-                return {"status": "success", "message": f"Deleted website {name}"}
-
     elif res_type == "databases":
         if name in Config.INGEST_TABLES:
             new_tables = [t for t in Config.INGEST_TABLES if t != name]
@@ -700,8 +690,8 @@ async def reset_all_resources():
     
     # 2. Clear Tracking JSON Files (including /tmp)
     tracking_files = [
-        DOC_TRACKING, WEB_TRACKING, DB_TRACKING, 
-        "ingestion_status.json", "web_ingestion_status.json", "db_ingestion_status.json",
+        DOC_TRACKING, DB_TRACKING, 
+        "ingestion_status.json", "db_ingestion_status.json",
         "/tmp/ingested_files_v2.json", "/tmp/ingestion_status_v2.json",
         "web_ingested_links.json"
     ]

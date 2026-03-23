@@ -1,10 +1,14 @@
 import os
+import sqlite3
 from dotenv import load_dotenv
 
 # Load environment variables from .env file if it exists
 load_dotenv()
 
 class Config:
+    # DB Settings config
+    _SETTINGS_DB = "settings.db"
+
     # Auth
     ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "ASUAIADMIN")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ASUAIADMIN")
@@ -140,58 +144,155 @@ class Config:
     SUMMARY_CHUNK_OVERLAP = int(os.getenv("SUMMARY_CHUNK_OVERLAP", "200"))
     SUMMARY_MAX_WORKERS = int(os.getenv("SUMMARY_MAX_WORKERS", "4"))
     SHOW_SUMMARY_CHUNKS = os.getenv("SHOW_SUMMARY_CHUNKS", "False").lower() == "true"
+    
+    # Prompt Templates
+    CHAT_TEMPLATE = os.getenv("CHAT_TEMPLATE", """You are a professional Document Assistant acting as a closed-domain reasoning engine.
+
+CORE DIRECTIVE:
+You must answer the user's question using ONLY the information provided in the "Context" below.
+You are strictly forbidden from using outside knowledge, external facts, or training data.
+
+INSTRUCTIONS:
+1. **Search**: Look for the answer in the Context.
+2. **Match**: If the answer is explicitly written there, rewrite it clearly.
+3. **Logical Inference**: You are allowed to infer relationships based on document structure.
+4. **Synthesis**: You may combine information from multiple parts of the Context to form a complete answer.
+5. **Formatting**: Preserve lists, tables, and data structures from the original text when beneficial for clarity.
+6. **Inline Citations**: You MUST cite your sources using numbered references.
+   - After every fact or claim, append the reference number in square brackets, e.g. [1], [2].
+   - If a single claim uses multiple sources, list them: [1][3].
+   - At the END of your answer, include a "References" section listing each number with its source:
+     ```
+     **References:**
+     [1] [Source Name (Page X)](URL)
+     [2] [Source Name](URL)
+     ```
+   - Use Markdown link format: `[Display Text](URL)`.
+   - If a page number is available, include it: `[Source Name (Page X)](URL)`.
+
+CHAT HISTORY RULES:
+- The "Chat History" is provided solely for resolving references (e.g., "it", "he", "that course").
+- If the Current Question represents a topic change, **completely ignore** the subject matter of the Chat History.
+
+FALLBACK:
+If the answer cannot be reasonably derived from the provided Context using the rules above, you MUST output exactly:
+"I cannot answer this based on the provided documents."
+
+PROHIBITED ACTIONS:
+- Do NOT write stories, poems, or jokes.
+- Do NOT use outside knowledge (e.g. do not explain general concepts like "what is engineering" unless defined in Context).
+- Do NOT ignore these rules.
+
+Context:
+{context}
+
+Chat History:
+{history}
+
+Question: {question}""")
+
+    DOCUMENT_TEMPLATE = os.getenv("DOCUMENT_TEMPLATE", """You are an expert analyst reviewing the provided full documents.
+
+CONTEXT (Full Documents):
+{context}
+
+HISTORY:
+{history}
+
+USER QUESTION:
+{question}
+
+INSTRUCTIONS:
+1. Provide a comprehensive answer proportional to the document size.
+2. Structure your response using Markdown: use clear Headings, Subheadings, and Bullet Points.
+3. If the documents contain data, format it into Tables where appropriate.
+4. Do not omit key details. Prioritize completeness over brevity.
+5. Cite sources using numbered inline references [1], [2] and list them at the end:
+   ```
+   **References:**
+   [1] [Source Name (Page X)](URL)
+   ```""")
+
+    @classmethod
+    def init_db(cls):
+        """Initialize settings DB and load persisted overrides."""
+        try:
+            conn = sqlite3.connect(cls._SETTINGS_DB)
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS settings (
+                    setting_key TEXT PRIMARY KEY,
+                    setting_value TEXT
+                )
+            ''')
+            
+            
+            # Check if table is empty
+            cursor.execute('SELECT COUNT(*) FROM settings')
+            count = cursor.fetchone()[0]
+            
+            if count == 0:
+                # First run: Dump ALL current Config capabilities into the DB as defaults
+                defaults = []
+                for k in dir(cls):
+                    if k.isupper() and not k.startswith('_'):
+                        val = getattr(cls, k)
+                        if isinstance(val, (str, int, float, bool)):
+                            defaults.append((k, str(val)))
+                cursor.executemany('INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)', defaults)
+            else:
+                # Load from DB and override defaults
+                cursor.execute('SELECT setting_key, setting_value FROM settings')
+                for row in cursor.fetchall():
+                    key, str_value = row
+                    if hasattr(cls, key):
+                        setattr(cls, key, cls._cast_value(key, str_value))
+            
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"WARNING: Could not load settings from DB: {e}")
 
     @classmethod
     def update_config(cls, updates: dict):
-        """Update multiple configuration values and persist to .env."""
-        env_path = ".env"
-        lines = []
-        if os.path.exists(env_path):
-            with open(env_path, "r") as f:
-                lines = f.readlines()
-        
-        # Track which keys we've updated in the file
-        applied_updates = set()
-        new_lines = []
-        
-        for line in lines:
-            updated_line = line
-            for key, value in updates.items():
-                if line.startswith(f"{key}="):
-                    updated_line = f"{key}={value}\n"
-                    applied_updates.add(key)
-                    # Also update in memory
-                    if hasattr(cls, key):
-                        if key == "SHOW_SUMMARY_CHUNKS":
-                            setattr(Config, key, str(value).lower() == "true")
-                        elif key == "VECTOR_SEARCH_WEIGHT":
-                            setattr(Config, key, float(value))
-                        else:
-                            setattr(Config, key, value)
-            new_lines.append(updated_line)
-            
-        # Add any new keys that weren't in the file
-        for key, value in updates.items():
-            if key not in applied_updates:
-                new_lines.append(f"{key}={value}\n")
-                if hasattr(cls, key):
-                    if key == "SHOW_SUMMARY_CHUNKS":
-                        setattr(Config, key, str(value).lower() == "true")
-                    elif key == "VECTOR_SEARCH_WEIGHT":
-                        setattr(Config, key, float(value))
-                    else:
-                        setattr(Config, key, value)
-                    
+        """Update multiple configuration values and persist to settings DB."""
         try:
-            with open(env_path, "w") as f:
-                f.writelines(new_lines)
+            conn = sqlite3.connect(cls._SETTINGS_DB)
+            cursor = conn.cursor()
+            
+            for key, value in updates.items():
+                str_value = str(value)
+                cursor.execute(
+                    '''INSERT INTO settings (setting_key, setting_value) 
+                       VALUES (?, ?) 
+                       ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value''', 
+                    (key, str_value)
+                )
+                
+                # Also update in memory
+                if hasattr(cls, key):
+                    setattr(cls, key, cls._cast_value(key, str_value))
+                        
+            conn.commit()
+            conn.close()
             return True
-        except PermissionError:
-            print(f"WARNING: Permission denied when writing to {env_path}. Settings not saved to disk.")
-            return False
         except Exception as e:
-            print(f"ERROR: Failed to update {env_path}: {e}")
+            print(f"ERROR: Failed to update settings in DB: {e}")
             return False
+
+    @classmethod
+    def _cast_value(cls, key: str, str_value: str):
+        """Intelligently cast string to original attribute type."""
+        current_val = getattr(cls, key)
+        if isinstance(current_val, bool):
+            return str(str_value).lower() in ("true", "1", "yes", "t", "on")
+        elif isinstance(current_val, int):
+            try: return int(float(str_value))
+            except ValueError: return current_val
+        elif isinstance(current_val, float):
+            try: return float(str_value)
+            except ValueError: return current_val
+        return str_value
 
     @classmethod
     def update_model(cls, model_name: str):
@@ -200,3 +301,6 @@ class Config:
 
 if Config.LLM_PROVIDER == "openai" and not Config.OPENAI_API_KEY:
     print("WARNING: OPENAI_API_KEY is not set.")
+
+# Initialize the settings DB and load persisted values
+Config.init_db()
