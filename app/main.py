@@ -15,11 +15,311 @@ from app.ingestion.db_ingest import ingest_database, DB_TRACKING_FILE as DB_TRAC
 from app.ingestion.web_ingest import ingest_websites, TRACKING_FILE as WEB_TRACKING
 from app.ingestion.offline_web_ingest import ingest_offline_downloads
 from app.services.crawler_service import CrawlerService
-from app.qa.rag_chain import answer_question, stream_answer
 from app.config import Config # Assuming Config is needed for RESOURCE_DIR
 
 # Gold-standard client API router (v2 endpoints with structured citations)
-from app.client_api import router as client_api_router
+
+from typing import List, Optional
+from fastapi import APIRouter, Form
+from app.qa.query_engine import answer_question, stream_answer
+from app.services.chat_session import (
+    create_session,
+    get_session_history,
+    add_message,
+    session_exists,
+    get_all_sessions,
+    delete_session as delete_session_svc,
+    clear_all_sessions,
+)
+
+
+client_api_router = APIRouter(tags=["Client API – Gold Standard"])
+
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./static/uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+# ======================================================================
+# Pydantic schemas
+# ======================================================================
+
+class AskRequest(BaseModel):
+    question: str
+    deep_thinking: bool = False
+    is_continuation: bool = False
+    last_answer: str = ""
+    session_id: Optional[str] = None
+
+
+class SourceRef(BaseModel):
+    """A single structured source reference returned to the client."""
+    name: str
+    url: str = "#"
+    page: Optional[str] = None
+    score: Optional[float] = None
+    content_preview: str = ""
+
+
+class AskResponse(BaseModel):
+    question: str
+    answer: str
+    sources: List[SourceRef]
+    performance: str
+    session_id: str
+
+
+# ======================================================================
+# 1. SYNCHRONOUS ASK  (returns full answer + structured sources array)
+# ======================================================================
+
+@client_api_router.post("/ask", response_model=AskResponse)
+async def ask_endpoint(request: AskRequest):
+    """
+    Non-streaming answer endpoint.
+    Returns the answer text plus a structured `sources` array with name,
+    URL, page, relevance score, and a content preview for each reference.
+    """
+    if not request.question.strip():
+        raise HTTPException(400, "Question cannot be empty")
+
+    session_id = request.session_id
+    if not session_id or not session_exists(session_id):
+        session_id = create_session()
+
+    history = get_session_history(session_id, limit=10)
+    add_message(session_id, "user", request.question)
+
+    result = answer_question(
+        request.question,
+        deep_thinking=request.deep_thinking,
+        is_continuation=request.is_continuation,
+        last_answer=request.last_answer,
+        conversation_history=history,
+    )
+
+    if "error" in result:
+        raise HTTPException(500, result["error"])
+
+    add_message(session_id, "assistant", result["answer"])
+
+    structured_sources = _build_source_refs(result.get("used_docs", []))
+
+    return AskResponse(
+        question=request.question,
+        answer=result["answer"],
+        sources=structured_sources,
+        performance=result.get("performance", ""),
+        session_id=session_id,
+    )
+
+
+# ======================================================================
+# 2. STREAMING ASK  (SSE: sources → chunks → metadata → done)
+# ======================================================================
+
+@client_api_router.get("/ask/stream")
+async def ask_stream_endpoint(
+    question: str,
+    deep_thinking: bool = False,
+    is_continuation: bool = False,
+    last_answer: str = "",
+    session_id: Optional[str] = None,
+):
+    """
+    Server-Sent Events streaming endpoint.
+    Protocol (newline-delimited JSON):
+      {"type":"sources",  "sources": [...]}
+      {"type":"chunk",    "content": "..."}
+      {"type":"metadata", "sources":[...], "performance":{...}, ...}
+      {"type":"done"}
+    """
+    if not question.strip():
+        raise HTTPException(400, "Question cannot be empty")
+
+    if not session_id or not session_exists(session_id):
+        session_id = create_session()
+
+    history = get_session_history(session_id, limit=10)
+    add_message(session_id, "user", question)
+
+    async def _generate():
+        accumulated = ""
+        for chunk_json in stream_answer(
+            question,
+            deep_thinking=deep_thinking,
+            is_continuation=is_continuation,
+            last_answer=last_answer,
+            conversation_history=history,
+        ):
+            try:
+                data = json.loads(chunk_json)
+                if data.get("type") == "chunk":
+                    accumulated += data.get("content", "")
+            except Exception:
+                pass
+            yield chunk_json
+
+        if accumulated:
+            add_message(session_id, "assistant", accumulated)
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-Session-ID": session_id,
+        },
+    )
+
+
+# ======================================================================
+# 3. CHAT WITH FILE UPLOAD  (mirrors chatbot/api.py /api/chat)
+# ======================================================================
+
+@client_api_router.post("/chat")
+async def chat_with_files(
+    session_id: str = Form(...),
+    message: str = Form(...),
+    files: List[UploadFile] = File(None),
+):
+    """
+    Multipart chat endpoint that accepts file uploads.
+    Files are immediately ingested into the session RAG context before
+    the query is answered.  Streams the response back.
+    """
+    if not session_exists(session_id):
+        raise HTTPException(404, "Session not found")
+
+    history = get_session_history(session_id, limit=10)
+    add_message(session_id, "user", message)
+
+    file_paths: list[str] = []
+    if files:
+        from app.ingestion.ingestion import process_documents
+        from app.vectorstore.factory import VectorStoreFactory
+
+        store = VectorStoreFactory.get_instance()
+
+        for f in files:
+            try:
+                safe_name = f"{session_id}_{f.filename.replace(' ', '_')}"
+                fpath = os.path.join(UPLOAD_DIR, safe_name)
+                with open(fpath, "wb") as buf:
+                    shutil.copyfileobj(f.file, buf)
+
+                from app.ingestion.ingestion import get_loader
+
+                loader = get_loader(fpath)
+                if loader:
+                    raw = loader.load()
+                    enriched = process_documents(raw)
+                    store.add_documents(enriched)
+                    file_paths.append(fpath)
+            except Exception as e:
+                print(f"File upload error ({f.filename}): {e}")
+
+    async def _generate():
+        accumulated = ""
+        for chunk_json in stream_answer(
+            message,
+            conversation_history=history,
+        ):
+            try:
+                data = json.loads(chunk_json)
+                if data.get("type") == "chunk":
+                    accumulated += data.get("content", "")
+            except Exception:
+                pass
+            yield chunk_json
+
+        if accumulated:
+            add_message(session_id, "assistant", accumulated)
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Session-ID": session_id,
+        },
+    )
+
+
+# ======================================================================
+# 4. SESSION MANAGEMENT  (mirrors chatbot/api.py session endpoints)
+# ======================================================================
+
+@client_api_router.post("/session/new")
+async def create_new_session_endpoint():
+    sid = create_session()
+    return {"session_id": sid}
+
+
+@client_api_router.get("/session/{session_id}/history")
+async def get_history_endpoint(session_id: str, limit: int = 50):
+    if not session_exists(session_id):
+        raise HTTPException(404, "Session not found")
+    return {
+        "session_id": session_id,
+        "history": get_session_history(session_id, limit=limit),
+    }
+
+
+@client_api_router.get("/sessions")
+async def list_sessions_endpoint():
+    return {"sessions": get_all_sessions()}
+
+
+@client_api_router.delete("/session/{session_id}")
+async def delete_session_endpoint(session_id: str):
+    if not session_exists(session_id):
+        raise HTTPException(404, "Session not found")
+    delete_session_svc(session_id)
+    return {"status": "deleted"}
+
+
+@client_api_router.post("/sessions/clear")
+async def clear_all_sessions_endpoint():
+    clear_all_sessions()
+    return {"status": "all sessions cleared"}
+
+
+# ======================================================================
+# Helpers
+# ======================================================================
+
+def _build_source_refs(used_docs: list) -> List[SourceRef]:
+    """
+    Convert raw used_docs dicts into structured SourceRef objects,
+    resolving URLs from the crawler DB.
+    """
+    from app.qa.query_engine import _get_url_from_source
+
+    seen: set[str] = set()
+    refs: list[SourceRef] = []
+
+    for doc in used_docs:
+        src = doc.get("source", "Unknown")
+        basename = os.path.basename(src)
+        if basename in seen:
+            continue
+        seen.add(basename)
+
+        url = _get_url_from_source(src) if not src.startswith("http") else src
+        refs.append(
+            SourceRef(
+                name=basename,
+                url=url if url and url != "#" else f"/files/{basename}",
+                page=str(doc.get("page", "")),
+                score=doc.get("score"),
+                content_preview=doc.get("content", "")[:200],
+            )
+        )
+
+    return refs
 
 app = FastAPI(title="RAG System API", description="PDF & SQL RAG with Strict Context Control")
 
@@ -143,179 +443,6 @@ async def update_llm_model(request: ModelUpdateRequest):
     from app.config import Config
     Config.update_model(request.model)
     return {"status": "success", "model": Config.OLLAMA_LLM_MODEL}
-
-@app.post("/ask")
-async def ask_question(request: QuestionRequest):
-    """
-    Answer a question using the RAG system.
-    """
-    if not request.question.strip():
-        raise HTTPException(status_code=400, detail="Question cannot be empty")
-    
-    # Check ingestion status
-    status_msg = ""
-    if os.path.exists("ingestion_status.json"):
-        try:
-            with open("ingestion_status.json", "r") as f:
-                status = json.load(f)
-                if status.get("status") == "running":
-                    current = status.get("current_batch", 0)
-                    total = status.get("total_batches", 1)
-                    eta = status.get("eta_seconds")
-                    
-                    percent = int((current / total) * 100) if total > 0 else 0
-                    eta_str = f"{eta}s" if eta else "calculating..."
-                    
-                    status_msg = f"\n\n[⚠️ Indexing in progress: {percent}% complete. ETA: {eta_str}. Answer may be incomplete.]"
-        except:
-            pass
-
-    from app.services.chat_session import (
-        create_session, 
-        get_session_history, 
-        add_message, 
-        session_exists
-    )
-    
-    # Create or validate session
-    session_id = request.session_id
-    if not session_id or not session_exists(session_id):
-        session_id = create_session()
-    
-    # Get conversation history
-    history = get_session_history(session_id, limit=10)
-    
-    # Save user question to session
-    add_message(session_id, "user", request.question)
-
-    result = answer_question(
-        request.question, 
-        deep_thinking=request.deep_thinking,
-        is_continuation=request.is_continuation,
-        last_answer=request.last_answer,
-        conversation_history=history
-    )
-    
-    # Save assistant response
-    if "answer" in result:
-        add_message(session_id, "assistant", result["answer"])
-    
-    if "error" in result:
-        return {"question": request.question, "answer": result["error"] + status_msg}
-
-    return {
-        "question": request.question, 
-        "answer": result["answer"] + status_msg,
-        "sources": result["sources"],
-        "performance": result["performance"],
-        "session_id": session_id
-    }
-
-@app.get("/ask/stream")
-async def ask_question_stream(
-    question: str, 
-    deep_thinking: bool = False, 
-    is_continuation: bool = False, 
-    last_answer: str = "",
-    session_id: str = None
-):
-    """
-    Answer a question using the RAG system with streaming and conversation history.
-    """
-    if not question.strip():
-        raise HTTPException(status_code=400, detail="Question cannot be empty")
-    
-    from app.services.chat_session import (
-        create_session, 
-        get_session_history, 
-        add_message, 
-        session_exists
-    )
-    
-    # Create or validate session
-    if not session_id or not session_exists(session_id):
-        session_id = create_session()
-    
-    # Get conversation history (exclude current question)
-    history = get_session_history(session_id, limit=10)
-    
-    # Save user question to session
-    add_message(session_id, "user", question)
-    
-    async def generate_with_session():
-        """Generator that streams response and saves to session."""
-        accumulated_answer = ""
-        
-        # Stream the answer with conversation history
-        for chunk_data in stream_answer(
-            question, 
-            deep_thinking=deep_thinking,
-            is_continuation=is_continuation,
-            last_answer=last_answer,
-            conversation_history=history
-        ):
-            # Accumulate answer chunks
-            try:
-                data = json.loads(chunk_data)
-                if data.get("type") == "chunk":
-                    accumulated_answer += data.get("content", "")
-            except:
-                pass
-            
-            yield chunk_data
-        
-        # Save assistant response to session
-        if accumulated_answer:
-            add_message(session_id, "assistant", accumulated_answer)
-    
-    return StreamingResponse(
-        generate_with_session(), 
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-            "X-Session-ID": session_id  # Return session ID in header
-        }
-    )
-
-# --- Chat Session Management Endpoints ---
-
-@app.post("/chat/session/new")
-async def create_new_session():
-    """Create a new chat session."""
-    from app.services.chat_session import create_session
-    session_id = create_session()
-    return {"session_id": session_id}
-
-@app.get("/chat/session/{session_id}/history")
-async def get_session_history_endpoint(session_id: str, limit: int = 50):
-    """Get conversation history for a session."""
-    from app.services.chat_session import get_session_history, session_exists
-    
-    if not session_exists(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    history = get_session_history(session_id, limit=limit)
-    return {"session_id": session_id, "history": history}
-
-@app.delete("/chat/session/{session_id}")
-async def delete_session_endpoint(session_id: str):
-    """Delete a chat session and all its messages."""
-    from app.services.chat_session import delete_session, session_exists
-    
-    if not session_exists(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    delete_session(session_id)
-    return {"status": "success", "message": f"Session {session_id} deleted"}
-
-@app.get("/chat/sessions")
-async def list_sessions():
-    """List all chat sessions."""
-    from app.services.chat_session import get_all_sessions
-    sessions = get_all_sessions()
-    return {"sessions": sessions}
 
 # --- Document Summarization Endpoint ---
 
@@ -598,11 +725,11 @@ async def reset_all_resources():
     except Exception as e:
         print(f"Error clearing current vector store: {e}")
 
-    # Wipe ALL potential physical storage folders dynamically (faiss_index*, chroma_db*)
+    # Wipe ALL potential physical storage folders dynamically (chroma_db*)
     try:
         current_dirs = [d for d in os.listdir('.') if os.path.isdir(d)]
         for folder in current_dirs:
-            if folder.startswith(("faiss_index", "chroma_db")):
+            if folder.startswith(("chroma_db")):
                 try:
                     shutil.rmtree(folder)
                     print(f"Purged storage folder: {folder}")
@@ -849,7 +976,7 @@ async def upload_file(file: UploadFile = File(...)):
 @app.get("/index/stats")
 async def get_index_statistics():
     """
-    Get statistics about the FAISS or Chroma index content.
+    Get statistics about the Chroma index content.
     """
     try:
         from app.vectorstore.factory import VectorStoreFactory

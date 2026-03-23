@@ -16,7 +16,7 @@ class Config:
     # Vector Database Settings
     VECTOR_DB_PATH = os.getenv("VECTOR_DB_PATH", "faiss_index_v4")
     CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "rag_collection")
-    VECTOR_STORE_PROVIDER = os.getenv("VECTOR_STORE_PROVIDER", "faiss") # 'chroma' or 'faiss'
+    VECTOR_STORE_PROVIDER = os.getenv("VECTOR_STORE_PROVIDER", "chroma") # 'chroma'
     VECTOR_SEARCH_WEIGHT = float(os.getenv("VECTOR_SEARCH_WEIGHT", "0.7")) # 0.0 to 1.0 (Vector vs Keyword)
     
     # Resource Directory for PDFs

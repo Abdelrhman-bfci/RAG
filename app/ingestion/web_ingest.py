@@ -409,9 +409,7 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                             meta["chunk_count"] = len(chunks)
                             store.update_page(current_url, meta)
                             
-                            # Save periodic checkpoint (FAISS only)
-                            if processed_pages % 5 == 0 and Config.VECTOR_STORE_PROVIDER.lower() == "faiss" and hasattr(store_vs, "save_index"):
-                                store_vs.save_index(vectorstore)
+                            # Removed FAISS checkpoint logic
 
                     elif 'application/pdf' in content_type or filename.endswith('.pdf'):
                         yield f"  -> Processing PDF with pymupdf4llm...\n"
@@ -481,9 +479,7 @@ def ingest_websites(urls: list = None, force_fresh: bool = False, **kwargs):
                 except Exception as e:
                     yield f"  -> Link extraction error: {e}\n"
 
-    # Final Save (FAISS: persist index; Chroma: already persistent)
-    if vectorstore and Config.VECTOR_STORE_PROVIDER.lower() == "faiss" and hasattr(store_vs, "save_index"):
-        store_vs.save_index(vectorstore)
+    # Final Save (Chroma: already persistent)
     
     msg = f"SUCCESS: Ingested {processed_pages} pages."
     update_status("completed", message=msg)

@@ -199,7 +199,7 @@ def ingest_documents(force_fresh: bool = False):
             # Ensure we remove old versions of this file from the index before adding new ones
             try:
                 # Clear existing entries for this source
-                # No need to explicitly save as Chroma/FAISS wrappers handle it or use VectorStoreFactory
+                # No need to explicitly save as Chroma wrappers handle it or use VectorStoreFactory
                 store = VectorStoreFactory.get_instance()
                 store.delete_source(file_path)
             except Exception as e:

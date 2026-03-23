@@ -5,7 +5,7 @@ Key improvements over the original document_ingest.py:
   1. Markdown-header-aware splitting BEFORE recursive chunking (preserves H1>H2>H3).
   2. Rich context injection into every chunk's page_content so the LLM can cite accurately.
   3. Full metadata schema: source, page, page_title, context_header, Header 1/2/3, chunk index.
-  4. Works with the existing VectorStoreFactory (FAISS or Chroma).
+  4. Works with the existing VectorStoreFactory (Chroma).
 """
 
 import os

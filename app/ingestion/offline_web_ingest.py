@@ -501,7 +501,7 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                         msg = _log(f"  -> Indexed {len(chunks)} chunks.\n")
                         if msg: yield msg
             
-            # Periodically commit status, file tracking, and FAISS checkpoint
+            # Periodically commit status and file tracking 
             if (i + 1) % 10 == 0 or (i + 1) == total_files:
                 if bulk_data_buffer:
                     save_ingested_files_bulk(bulk_data_buffer, conn=conn)
@@ -514,15 +514,6 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
                     start_time=start_time,
                     conn=conn,
                 )
-                if (
-                    vectorstore
-                    and getattr(Config, "VECTOR_STORE_PROVIDER", "chroma").lower() == "faiss"
-                    and hasattr(store, "save_index")
-                ):
-                    try:
-                        store.save_index(vectorstore)
-                    except Exception:
-                        pass
 
         except Exception as e:
             error_msg = str(e)
@@ -537,12 +528,7 @@ def ingest_offline_downloads(force_fresh: bool = False, silent: bool = False):
             if msg: yield msg
             continue
 
-    # Final persistence (Chroma is auto-persisted; FAISS needs explicit save)
-    if vectorstore and getattr(Config, "VECTOR_STORE_PROVIDER", "chroma").lower() == "faiss" and hasattr(store, "save_index"):
-        try:
-            store.save_index(vectorstore)
-        except Exception:
-            pass
+    # Final persistence (Chroma is auto-persisted)
 
     msg = f"SUCCESS: Ingested {processed_count} files from downloads."
     update_status("completed", message=msg, conn=conn)
