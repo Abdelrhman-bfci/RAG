@@ -13,6 +13,7 @@ import gc
 import glob
 import json
 import time
+import sqlite3
 import traceback
 from typing import List, Generator
 
@@ -55,6 +56,26 @@ def get_loader(file_path: str):
     }
     factory = loaders.get(ext)
     return factory() if factory else None
+
+
+def get_url_from_pages(file_path: str) -> str:
+    """Resolve original URL for a file from the crawler's pages table."""
+    if not os.path.exists(Config.CRAWLER_DB):
+        return file_path
+    try:
+        conn = sqlite3.connect(Config.CRAWLER_DB, timeout=Config.DB_TIMEOUT, check_same_thread=False)
+        cursor = conn.cursor()
+        basename = os.path.basename(file_path)
+        # Search by full path or just filename
+        cursor.execute(
+            "SELECT url FROM pages WHERE filename = ? OR filename = ? LIMIT 1",
+            (file_path, basename)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else file_path
+    except Exception:
+        return file_path
 
 
 # ======================================================================
@@ -131,7 +152,8 @@ def inject_context_to_chunks(chunks: List[Document]) -> List[Document]:
         if section_path:
             header_parts.append(f"**Current Section:** {section_path}")
         if source:
-            header_parts.append(f"**Source:** {os.path.basename(source)}")
+            source_display = source if source.startswith("http") else os.path.basename(source)
+            header_parts.append(f"**Source:** {source_display}")
         if header_parts:
             header_parts.append("---")
         if context_header:
@@ -276,6 +298,11 @@ def ingest_documents(force_fresh: bool = False) -> Generator[str, None, None]:
             loader = get_loader(file_path)
             if loader:
                 docs = loader.load()
+                # Resolve URL from pages table if possible
+                resolved_source = get_url_from_pages(file_path)
+                for d in docs:
+                    d.metadata["source"] = resolved_source
+                
                 new_documents.extend(docs)
                 processed_meta.append((file_path, file_id))
             else:

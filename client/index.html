@@ -510,12 +510,22 @@
                                                 {{ ci + 1 }}
                                             </span>
                                             <div class="flex-1 min-w-0">
-                                                <span class="font-semibold text-gray-700 dark:text-gray-200 truncate block">
-                                                    {{ chunk.source || chunk.metadata?.source || 'Document' }}
-                                                </span>
-                                                <span v-if="chunk.page || chunk.metadata?.page_number" class="text-gray-400 dark:text-gray-500 ml-1">
-                                                    p.{{ chunk.page || chunk.metadata?.page_number }}
-                                                </span>
+                                                <div class="flex items-center flex-wrap gap-x-2">
+                                                    <template v-if="(chunk.source || chunk.metadata?.source || '').startsWith('http')">
+                                                        <a :href="chunk.source || chunk.metadata?.source" target="_blank"
+                                                            class="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline truncate">
+                                                            <i class="fa-solid fa-link text-[9px] mr-1"></i>
+                                                            {{ chunk.source || chunk.metadata?.source }}
+                                                        </a>
+                                                    </template>
+                                                    <span v-else class="font-semibold text-gray-700 dark:text-gray-200 truncate">
+                                                        {{ chunk.source || chunk.metadata?.source || 'Document' }}
+                                                    </span>
+                                                    
+                                                    <span v-if="chunk.page || chunk.metadata?.page_number" class="text-gray-400 dark:text-gray-500 text-[10px]">
+                                                        p.{{ chunk.page || chunk.metadata?.page_number }}
+                                                    </span>
+                                                </div>
                                                 <p class="text-gray-500 dark:text-gray-400 text-[10px] line-clamp-2 mt-0.5">
                                                     {{ (chunk.content || chunk.page_content || '').substring(0, 150) }}{{ (chunk.content || chunk.page_content || '').length > 150 ? '...' : '' }}
                                                 </p>
@@ -1116,14 +1126,7 @@
                                     <option value="vllm">vLLM (Local)</option>
                                 </select>
                             </div>
-                            <div>
-                                <label class="block text-sm font-bold mb-2">Vector Store Provider</label>
-                                <select v-model="settings.vectorStoreProvider"
-                                    class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3">
-                                    <option value="chroma">ChromaDB (Persistent)</option>
-                                    <option value="faiss">FAISS (Local Index)</option>
-                                </select>
-                            </div>
+
 
                             <div>
                                 <label class="flex justify-between text-sm font-bold mb-2">
