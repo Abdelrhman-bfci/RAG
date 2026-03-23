@@ -332,11 +332,6 @@
                             <i class="fa-solid fa-file-alt"></i>
                             <span class="font-medium">Documents</span>
                         </div>
-                        <div @click="currentView = 'view-web'"
-                            :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-web' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
-                            <i class="fa-solid fa-globe"></i>
-                            <span class="font-medium">Web Content</span>
-                        </div>
                         <div @click="currentView = 'view-crawler'"
                             :class="['flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all', currentView === 'view-crawler' ? 'bg-asu-blue text-white shadow-md shadow-blue-200 dark:shadow-none' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300']">
                             <i class="fa-solid fa-spider"></i>
@@ -746,28 +741,6 @@
                         class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
                         <div v-for="log in ingestionLogs.pdf" class="py-0.5">> {{ log }}</div>
                         <div v-if="ingestionLogs.pdf.length === 0">> Document synchronization updates appear here.</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- View: Web Content -->
-            <div v-if="currentView === 'view-web'" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                <div class="max-w-4xl mx-auto space-y-6">
-                    <div
-                        class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i
-                                class="fas fa-globe text-asu-blue"></i> Web Ingestion</h3>
-                        <div class="flex gap-2">
-                            <input v-model="webUrl" type="text" placeholder="https://example.com/about"
-                                class="flex-1 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm">
-                            <button @click="startWebIngest"
-                                class="bg-asu-blue text-white px-6 rounded-lg font-medium hover:bg-blue-900 transition-colors">Crawl
-                                & Ingest</button>
-                        </div>
-                    </div>
-                    <div
-                        class="bg-black/90 text-green-500 rounded-xl p-4 font-mono text-xs h-64 overflow-y-auto shadow-inner">
-                        <div v-for="log in ingestionLogs.web" class="py-0.5">> {{ log }}</div>
                     </div>
                 </div>
             </div>
@@ -1363,7 +1336,7 @@
                 const modelLists = ref({ llm: [], embed: [] });
                 const resourceList = ref({ documents: [], websites: [], databases: [], crawled: [] });
                 const indexStats = ref({ total_documents: 0, total_chunks: 0, sources: {} });
-                const ingestionLogs = ref({ pdf: [], web: [], db: [], crawler: [] });
+                const ingestionLogs = ref({ pdf: [], db: [], crawler: [] });
                 const resourceSearch = ref("");
                 const filteredResourceList = computed(() => {
                     if (!resourceSearch.value) return resourceList.value;
@@ -1375,7 +1348,6 @@
                     return filtered;
                 });
 
-                const webUrl = ref("");
                 const dbSchemas = ref([]);
                 const dbTables = ref([]);
                 const selectedSchema = ref("");
@@ -1814,20 +1786,6 @@
                     fetchResources();
                 }
 
-                async function startWebIngest() {
-                    const url = `${API_BASE}/ingest/web/stream?url=${encodeURIComponent(webUrl.value)}`;
-                    ingestionLogs.value.web = [];
-                    const res = await fetch(url);
-                    const reader = res.body.getReader();
-                    const decoder = new TextDecoder();
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const lines = decoder.decode(value).split('\n');
-                        lines.forEach(l => { if (l.trim()) ingestionLogs.value.web.push(l); });
-                    }
-                    fetchResources();
-                }
 
                 async function fetchSchemas() {
                     const res = await fetch(`${API_BASE}/ingest/db/schemas`);
@@ -2186,14 +2144,14 @@
 
                 return {
                     currentView, messages, inputMessage, sidebarOpen, isDark, isStreaming, messagesContainer, fileInput, pendingFiles, chatMode, isRecording,
-                    settings, modelLists, resourceList, indexStats, ingestionLogs, webUrl, dbSchemas, dbTables, selectedSchema, selectedTables,
+                    settings, modelLists, resourceList, indexStats, ingestionLogs, dbSchemas, dbTables, selectedSchema, selectedTables,
                     previewSourceState, isUploading, uploadProgress, notification, confirmState,
                     streamBuffer, isProcessingStream,
                     resourceSearch, filteredResourceList,
                     crawlerUrl, crawlerDepth, crawlAndIngestRunning,
                     summaryFile, summaryProgress, chunkSummaries, finalSummary,
                     offlineIngestStatus, offlineIngestStreamRunning,
-                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, startWebIngest, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, copyMessage, printMessage, startCrawl, startCrawlAndIngest, startOfflineIngest, startOfflineIngestStream, startNewChat, handleSummaryFileUpload,
+                    toggleTheme, renderMarkdown, handleFileUpload, removeFile, uploadFiles, startIngestion, fetchTables, startDbIngest, sendMessage, toggleRecording, deleteResource, wipeAllData, openPreview, loadModels, fetchSchemas, saveSettings, toggleAllTables, tableSearch, filteredTables, syncIndex: () => startIngestion('quick'), copyText, copyMessage, printMessage, startCrawl, startCrawlAndIngest, startOfflineIngest, startOfflineIngestStream, startNewChat, handleSummaryFileUpload,
                     // Modal Helpers
                     showModal, selectedModalData, openLogicModal, openContextModal, getHeaderClass, getIconBgClass, getIconClass, getBadgeClass,
                     // Login State

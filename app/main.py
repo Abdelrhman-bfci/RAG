@@ -774,33 +774,6 @@ async def reset_all_resources():
         "message": "All resources reset successfully. You can now re-ingest data fresh."
     }
 
-@app.get("/ingest/web/stream")
-async def stream_web_ingestion(url: str, depth: int = 10, max_pages: int = -1):
-    """
-    Stream web ingestion progress for a single URL in real-time.
-    Defaults to depth 10 and unlimited pages (-1).
-    """
-    return StreamingResponse(
-        ingest_websites(urls=[url] if url else None, depth=depth, max_pages=max_pages), 
-        media_type="text/plain",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"
-        }
-    )
-
-@app.post("/ingest/web")
-async def trigger_web_ingestion(background_tasks: BackgroundTasks):
-    """
-    Trigger Website ingestion in the background.
-    """
-    def run_ingest():
-        for _ in ingest_websites():
-            pass
-            
-    background_tasks.add_task(run_ingest)
-    return {"status": "accepted", "message": "Website ingestion started in background"}
-
 @app.get("/ingest/db/schemas")
 async def list_database_schemas():
     """
