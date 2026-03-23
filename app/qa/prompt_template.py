@@ -13,16 +13,7 @@ from app.config import Config
 # ---------------------------------------------------------------------------
 # 3. QUERY REPHRASE PROMPT  (Context-aware query rewriting)
 # ---------------------------------------------------------------------------
-REPHRASE_TEMPLATE = """Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question.
-The standalone question must be fully self-contained and understood without the chat history. Do not answer the question, just rephrase it.
-
-Chat History:
-{history}
-
-Follow Up Input:
-{question}
-
-Standalone Question:"""
+# REPHRASE_TEMPLATE is now managed via Config.REPHRASE_TEMPLATE and stored in SQLite.
 
 
 # ---------------------------------------------------------------------------
@@ -35,4 +26,4 @@ def get_chat_prompt(deep_thinking: bool = False) -> ChatPromptTemplate:
 
 
 def get_rephrase_prompt() -> ChatPromptTemplate:
-    return ChatPromptTemplate.from_template(REPHRASE_TEMPLATE)
+    return ChatPromptTemplate.from_template(Config.REPHRASE_TEMPLATE)

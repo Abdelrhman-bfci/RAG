@@ -213,6 +213,18 @@ INSTRUCTIONS:
    [1] [Source Name (Page X)](URL)
    ```""")
 
+    REPHRASE_TEMPLATE = os.getenv("REPHRASE_TEMPLATE", """Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question.
+The standalone question must be fully self-contained and understood without the chat history. Do not answer the question, just rephrase it.
+
+Chat History:
+{history}
+
+Follow Up Input:
+{question}
+
+Standalone Question:""")
+
+
     @classmethod
     def init_db(cls):
         """Initialize settings DB and load persisted overrides."""

@@ -1193,6 +1193,15 @@
                                     <textarea v-model="settings.documentTemplate" rows="10"
                                         class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3 font-mono text-xs"></textarea>
                                 </div>
+
+                                <div>
+                                    <label class="block text-sm font-bold mb-2 text-indigo-600 dark:text-indigo-400">
+                                        <i class="fa-solid fa-code"></i> Query Rephrase Template
+                                    </label>
+                                    <p class="text-[10px] text-gray-500 mb-2">Variables available: {history}, {question}</p>
+                                    <textarea v-model="settings.rephrasePromptTemplate" rows="5"
+                                        class="w-full bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 rounded-xl p-3 font-mono text-xs"></textarea>
+                                </div>
                             </div>
 
 
@@ -1355,7 +1364,8 @@
                     deepThinking: false,
                     showSummaryChunks: false,
                     qaPromptTemplate: '',
-                    documentTemplate: ''
+                    documentTemplate: '',
+                    rephrasePromptTemplate: ''
                 });
                 const modelLists = ref({ llm: [], embed: [] });
                 const resourceList = ref({ documents: [], websites: [], databases: [], crawled: [] });
@@ -1583,6 +1593,7 @@
                         settings.value.showSummaryChunks = data.show_summary_chunks;
                         settings.value.qaPromptTemplate = data.qa_prompt_template || '';
                         settings.value.documentTemplate = data.document_template || '';
+                        settings.value.rephrasePromptTemplate = data.rephrase_prompt_template || '';
 
                         if (settings.value.provider) await loadModels('llm');
                         if (settings.value.embedProvider) await loadModels('embed');
@@ -1608,7 +1619,8 @@
                         "VECTOR_SEARCH_WEIGHT": settings.value.vectorSearchWeight,
                         "SHOW_SUMMARY_CHUNKS": settings.value.showSummaryChunks,
                         "CHAT_TEMPLATE": settings.value.qaPromptTemplate,
-                        "DOCUMENT_TEMPLATE": settings.value.documentTemplate
+                        "DOCUMENT_TEMPLATE": settings.value.documentTemplate,
+                        "REPHRASE_TEMPLATE": settings.value.rephrasePromptTemplate
                     };
                     if (settings.value.provider === 'openai') updates["OPENAI_LLM_MODEL"] = settings.value.llmModel;
                     if (settings.value.provider === 'gemini') updates["GEMINI_MODEL"] = settings.value.llmModel;

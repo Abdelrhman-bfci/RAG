@@ -426,9 +426,9 @@ async def get_current_config():
         },
         "vector_store_provider": Config.VECTOR_STORE_PROVIDER,
         "vector_search_weight": Config.VECTOR_SEARCH_WEIGHT,
-        "show_summary_chunks": Config.SHOW_SUMMARY_CHUNKS,
         "qa_prompt_template": Config.CHAT_TEMPLATE,
-        "document_template": Config.DOCUMENT_TEMPLATE
+        "document_template": Config.DOCUMENT_TEMPLATE,
+        "rephrase_prompt_template": Config.REPHRASE_TEMPLATE
     }
 
 @app.get("/config/all")
